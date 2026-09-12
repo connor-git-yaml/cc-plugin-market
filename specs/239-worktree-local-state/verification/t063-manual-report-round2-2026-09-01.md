@@ -3,7 +3,7 @@
 - 观测时间：2026-09-01 ~11:46 CST；执行方：Codex 桌面 App 新建 managed worktree `696d` 内的 Codex 会话（只读）；本文由用户转交、主线程转录入库
 - 前置：主仓探针 `AGENTS.override.md`（AGENTS.md 副本 + 第 313 行 `<!-- T063-OVERRIDE-MARKER-20260831 -->`，24356B，gitignored）由主线程于第一轮后预置
 - 环境：codex-cli 0.151.0；worktree `/Users/connorlu/.codex/worktrees/696d/cc-plugin-market`；HEAD `e01611b2`
-- **桌面客户端版本号：【待用户补填】**
+- **桌面客户端版本号：ChatGPT.app 26.908.40834（build 8881，BundleId com.openai.codex，Info.plist 读取）+ Codex Desktop 运行时 0.151.0（hooks/list userAgent）**（2026-09-12 主线程从本机读取回填）
 
 ## 原始输出（用户转交，逐字）
 
@@ -34,4 +34,4 @@ turn setup 项目指令块标题逐字：`# AGENTS.md instructions for /Users/co
 
 - (a) `.worktreeinclude` copy-if-absent：PASS（第一轮）
 - (b) `AGENTS.override.md` 创建时复制 + 同层取代：**PASS（本轮）**
-- 完成判据剩余缺口：**桌面客户端版本号待用户补填**——补齐即勾 T039
+- 完成判据：**已全部满足（2026-09-12 版本号回填，T039 已勾）**

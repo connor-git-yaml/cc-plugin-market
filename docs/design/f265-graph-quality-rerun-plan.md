@@ -286,3 +286,15 @@ census 脚本与 M-1 是**互补**关系，不是替代关系：census 给分母
 | 同上 | 数字落账；若发现口径缺陷，在**报告**里追加「口径缺陷」一节，**不回改本文件** | `milestone-next` 循环 |
 
 **F265 本卡的验收终点是：本文件存在、参数钉死、局限如实、模板可用。数字不是本卡的验收项。**
+
+---
+
+## 口径缺陷（追加节；按 §0 冻结规则只允许追加不允许回改定义）
+
+### 缺陷 1（2026-09-12 首次取数时发现）：`label-only` 归一化不认 `Class.method` 标签形态
+
+- **现象**：首次按 §2.2 冻结命令取数（builder = HEAD `37b1f814`，语料 SHA 按 §2.1）：GORM `callPrecision 0.496 / callRecall 0.273`（hits 63 / graphCallees 127 / truth 231）；HikariCP **`0 / 0`**（hits 0 / graphCallees 31 / truth 819），且 HikariCP 的 `sampleFalsePositives` 全部是 `HikariDataSource.isClosed`、`PoolStats.update` 这类 **`Class.method`** 形态，GORM 亦有 `Association.Replace`。
+- **根因**：`scripts/graph-accuracy.mjs` 的 `normalizeName()` 只处理 `#` 分段与 `.py/.ts` 后缀，写于 F147（2026-05）；F214 canonical ID + F260 实例方法调用边之后，method 节点 label 为 `Class.method`，而 truth-set 的 callee 名是裸方法名（`Replace` / `isClosed`）——**同一调用在两侧的书写形态不同，尺子把命中记成假阳性**。Java 语料 graph 侧 callee 全为方法形态，故 0 命中是尺子伪影而非图精度。
+- **处置**：冻结口径的原始读数**照记不改**（上表）；同时以 scratchpad 副本（仅在 `normalizeName` 末尾追加「取最后一个 `.` 段」）产出**对照读数**，两组并列落账，均不得单独引用。修尺子立独立小卡（`normalizeName` 显式支持 `Class.method`，并给 F150 时代的 truth-set 提取加同形态测试），修完后按本协议**重新取一次原始读数**作为 M10 收官对照组。
+- **不构成本缺陷的部分**：GORM `sampleMissed` 里 `ValueOf / Indirect / len / make / Kind` 属标准库 / 内建（外部边界），图按设计不出这类边——这是 recall 的结构性上限（M10 P0-C「诚实的零」三分里的「外部边界」），不是漏检；报 recall 时须附「truth 含外部边界调用」说明。
+

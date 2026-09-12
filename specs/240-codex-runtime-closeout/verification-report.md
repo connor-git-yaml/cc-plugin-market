@@ -52,13 +52,13 @@ F275（`specs/275-fix-codex-doctor-hook-trust/`）已落地 doctor hook-trust �
 | (a) `.worktreeinclude` copy-if-absent | **PASS**——`.env.local` 在 worktree 为常规文件（非 symlink）、与主仓逐字节一致；只读限定下未测"目标已存在不覆盖"生命周期，与语义一致 |
 | (b) `AGENTS.override.md` 同层取代 | **UNEXPECTED = fixture 缺席观察无效**——观测时主仓根本没有探针文件（只有 .gitignore:51 规则），worktree 无从复制；会话加载 AGENTS.md 与"override 缺席时回退"语义一致，**既不能判 PASS 也不能判 FAIL** |
 | (c) 0.149+ 指令文件沙箱可读 | PASS（限定）——AGENTS.md 可读、turn setup 无报错；#39653 的 override 形态因缺席未覆盖 |
-| (d) 环境记录 | PASS——桌面客户端版本号仍待用户补填 |
+| (d) 环境记录 | PASS——桌面客户端版本号：ChatGPT.app 26.908.40834（build 8881，BundleId com.openai.codex，Info.plist 读取）+ Codex Desktop 运行时 0.151.0（hooks/list userAgent） |
 
 **第二轮已执行（2026-09-01，worktree `696d`）→ 两层 PASS**：一手记录
 [../239-worktree-local-state/verification/t063-manual-report-round2-2026-09-01.md](../239-worktree-local-state/verification/t063-manual-report-round2-2026-09-01.md)。
 创建时复制 PASS（override 在新 worktree 存在、marker 命中）；同层取代生效 PASS（turn setup 指令块内容含 override 独有 marker）。
 观察备注：指令块标题写 `AGENTS.md` 而内容实为 override——标题是装饰性标签，勿当加载证据。
-**T039 勾选仅剩：桌面客户端版本号补填。**
+**T039 已于 2026-09-12 勾选（版本号回填）——T062 + T063 全部闭合，M9 正式收官条件达成。**
 
 
 ## SC-013 复测（F275 修复后三段，2026-09-01 闭合）

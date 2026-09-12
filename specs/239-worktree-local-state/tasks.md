@@ -258,7 +258,7 @@ review_basis: reviews/codex-tasks-review-round1.md
   - 完成判据：两腿实测墙钟时间均 ≤ 60 秒；成功腿 `assessable===true` 且图节点数 `>0`；失败腿 `bootstrapSource==="none"` 且 `assessable===false`；结论（含具体秒数与 `bootstrapSource` 实际值）记录留痕
   - 依赖：T028
 
-- [ ] T039 [批5][手工验证] **Codex 桌面客户端行为人工验证**（spec Non-Goals 已声明不入自动化门禁）：在真实 Codex 桌面应用中为本仓库创建一个 managed worktree，验证 (a) `.worktreeinclude` 中列出的 copy 类文件（`.env.local`）被 Codex 原生复制（copy-if-absent 语义）；(b) 若本地存在已被 ignore 的 `AGENTS.override.md`，该文件确实取代 `AGENTS.md` 生效
+- [x] T039 [批5][手工验证] **Codex 桌面客户端行为人工验证**（spec Non-Goals 已声明不入自动化门禁）：在真实 Codex 桌面应用中为本仓库创建一个 managed worktree，验证 (a) `.worktreeinclude` 中列出的 copy 类文件（`.env.local`）被 Codex 原生复制（copy-if-absent 语义）；(b) 若本地存在已被 ignore 的 `AGENTS.override.md`，该文件确实取代 `AGENTS.md` 生效  ← **2026-09-12 完成**：(a) 第一轮 PASS、(b) 第二轮两层 PASS（verification/t063-manual-report-round{1,2}-*.md）；客户端版本：Codex 桌面 = ChatGPT.app **26.908.40834**（build 8881，BundleId `com.openai.codex`，取自 /Applications/ChatGPT.app/Contents/Info.plist）+ Codex Desktop 运行时 **0.151.0**（hooks/list userAgent 自报）
   - 文件：无（人工操作记录）
   - 完成判据：两项行为均被人工观察确认并记录结论（含 Codex 客户端版本号），若观察结果与 spec 边界声明不符需回报主编排器评估影响
   - 依赖：T033

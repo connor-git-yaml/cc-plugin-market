@@ -1,6 +1,6 @@
 ---
 title: Milestone M9 — Codex 一等支持 + 可信活图 + Spec Drift 发布
-status: planning
+status: closed（2026-09-12 正式收官：代码面 2026-08-23 + 人工验证 T062/T063 2026-09-12 全闭合）
 created: 2026-07-19
 parent_milestone: milestone-M8-trust-repair-and-drift-flagship.md (closing；F188 完成后进入 M9 实施)
 planning_horizon: M9 与 M10 共用一份连续路线图，但保持两个交付门禁
@@ -638,6 +638,14 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    specs/240-…/verification-report.md（新建），tasks.md T062 行改 `[MANUAL-EXECUTED · FAIL]`。
    **A4 达标条件因 SC-013 FAIL 不闭合：M9 正式收官前置更新为 F275 ship + SC-013 复测绿 + T063 重做**
    （T063 交回的报告为空文件、/tmp 原件不存在=测试未产出记录，需按派发 prompt 重做并记桌面版本号）。）
+
+  （2026-09-12 **🏁 M9 正式收官**：T062（2026-08-31 三段 + 2026-09-01 SC-013 复测三段全绿，F275 修复后 A4
+   达标条件闭合）与 T063（2026-08-31 第一轮 (a) copy-if-absent PASS + 2026-09-01 第二轮 (b) override 创建时
+   复制 / 同层取代两层 PASS）两项人工验证全部闭合；完成判据要求的客户端版本号已回填：Codex 桌面 =
+   ChatGPT.app **26.908.40834**（build 8881，BundleId `com.openai.codex`，Info.plist 读取）+ Codex Desktop
+   运行时 **0.151.0**。T039 已勾（specs/239 tasks.md:261）。**五轨代码面 + 七张质量收口卡 + 两项人工验证
+   = M9 完整收官**；后续修正（F264 分发前提纠偏 / F275 doctor 三态 / F276-C 判定器 fail-closed）均已
+   按 M10 卡系落地并计入 M10。frontmatter status 由 planning → **closed**。）
 
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 

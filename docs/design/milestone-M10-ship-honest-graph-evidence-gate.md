@@ -137,6 +137,22 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ## 11. 进展账（rolling）
 
+**2026-09-12（/goal 全量推进：体检 + G0-4 两基线 + M9 正式收官 + 架构审查）**：
+- **master 增量**（09-01 → 09-12）：F276-C（P0-A 残余卡 C：`!saved.ok` 反转 fail-closed + 反馈计数上界；routeNonBlock 死代码 −127 行；卡 A/B 输入在 `specs/276-…/handoff/`）、**F278**（诚实工具面四小补）、**F279**（护栏比较器 kind/label + metadata 递归 + graph.graph 四维收口）、**F277**（引擎硬化，**部分交付**：68 FR = 已实现 50 / 已核验 10 / 移交 4〔FR-010~013 审查 agent 写盘/证据契约〕/ 缺席 1〔FR-018〕/ 字面违反 2〔FR-037 两处仓内相对 import 非 `node:` 前缀、FR-040 AGENTS.md +704B 仍在预算内——均非缺陷是判据措辞〕/ 裁剪 1；合并律 fail **如实登记**而非按未裁剪口径报达成——F270 教训已生效）。
+- **门禁基线**：build 0 / lint 0 / test:plugins 0 / repo:check 0 / release:check 0 / vitest **8178 passed · 1 failed**——唯一失败 = `tests/e2e/feature-213-codex-plugin-install.e2e.test.ts`「CODEX_HOME unset → 默认 ~/.codex」场景：断言 spectra MCP `command==='spectra'` 得 `node`，姊妹场景（自定义 CODEX_HOME）通过。**归因：环境耦合非回归**——该场景对开发者**真实 `~/.codex` 执行 marketplace add / plugin add / 清理**，真实配置里另有 perplexity 等 `command=node` 的 server；且在真实 home 上做 mutation 本身是安全隐患（本次清理链已确认零残留）→ 立小卡「F213 e2e 真实 home 隔离」（见 §12）。
+- **G0-4a adoption census**（尺子 `scripts/adoption-census.mjs`，只读扫描 1003 Claude + 1331 Codex transcript）：Spectra 工具调用 **42 次 / 全部历史**（impact 33 · context 8 · graph_god_nodes 1），**17 工具 14 个零调用**（含整条"典型链路"detect_changes→view_file 从未跑过）；非 Spectra 的 232 次 MCP 调用落 unknown 桶（ccd_session/perplexity/playwright，命名空间匹配已核对无误）。⚠️ 与 08-23 交界审查的 ad-hoc 数字（70 次/月，impact 58）**口径不同不可比**（ad-hoc 含子代理逐行 grep）；census 读数作为 M10 adoption 基线，两者差异登记为尺子校准项。
+- **G0-4b 图质量复测**（冻结协议 `docs/design/f265-graph-quality-rerun-plan.md` §2.2，builder == HEAD 37b1f814，语料 SHA 钉死，输出含 `baseline{repo,commit,scope}` 溯源）：
+
+  | 语料 | 原始读数（冻结口径） | 归一化对照（scratchpad 副本，`Class.method`→method） | 图规模 |
+  |---|---|---|---|
+  | GORM (Go) | precision **0.496** / recall **0.273**（63/127/231） | precision **0.587** / recall **0.307**（71/121/231） | 1717 节点 / 1753 边 / 192 calls |
+  | HikariCP (Java) | precision **0** / recall **0**（0/31/819） | precision **1.0** / recall **0.034**（28/28/819） | 1269 节点 / 1211 边 / 53 calls |
+
+  **口径缺陷 1 已按协议追加进计划文档**：尺子 `normalizeName()` 写于 F147，不认 F214/F260 之后的 `Class.method` 标签形态 → 把命中记成假阳性，Java 原始 0/0 是尺子伪影。两组读数并列落账、均不得单独引用；修尺子立小卡（§12），修完**重新取原始读数**作为 M10 收官对照组。**实质信号**：Java 调用边 recall 3.4%（53 条 calls 边 vs 5885 次真实调用）——P1-F 多语言 parity 缺口不是纸面推测；GORM recall 上限受"外部边界"（reflect/内建）结构性压制，正是 P0-C「诚实的零」三分的外部边界项。M-1/M-3 人工协议未执行（需人工）。
+- **🏁 M9 正式收官**：T063 第二轮两层 PASS + 版本号从本机 Info.plist 读取回填（ChatGPT.app 26.908.40834 / Codex Desktop 0.151.0），T039 勾选，M9 文档 status→closed。
+- **账本**：F279 ×5 + F278 ×5 全部流转（3 分流 F277 移交卡 / 1 新卡「scripts/tests 类型门禁」/ 1 分流 P1-F / 其余记录为 P0-C 收官证据）——按推荐项处置，可翻案。
+- **架构整洁 / 坏味道审查**：三路异构子代理并行（src 侧含 08-23 待证伪池 10 条逐条 verdict / spec-driver 引擎侧 / 测试守护资产 + CI 拓扑），结果见本条目下方追加节。
+
 **2026-09-01（批次 2 体检 + 账本 20 条流转 + 发版链）**：
 - **F270（P0-A）部分交付 + 诚实更正**：账本主链落地（PostToolUse 采集器 / 判定器接账本 / `background_tasks` 在途三态 / 锚点三分修病根 iv / agent_id 归属 / US5 零落盘闸门 / 审计留痕 / 分发登记）；集成态审查（六 Phase 全 commit 后补做，五路异构三轮）再收 4 处 fail-open；**SC 诚实口径 6 真达成 / 4 部分 / 5 未达成**（vs 曾声称 13/15）。**病根 iii（GATE 暂停误判）原样存活、病根 v（状态竞态）零实现且被账本并发面加重、PENDING/长异步与 snapshot-stale 专码未做——全部移交 F276**。结构性教训入 F277：范围在 plan 阶段静默收缩且无对账点，是全部 over-claim 的根源。
 - **F275 ✅ 活体验证**：本机 doctor hook-trust 三态正确（`app-server-hooks-list:found`，untrusted → warning + grant-hook-trust 实测文案）；SC-013 第 3 段 PENDING-user（本机 5 hook 待授信）。
