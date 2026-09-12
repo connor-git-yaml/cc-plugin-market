@@ -3,6 +3,8 @@
  * 包含 BatchMode、QnAQuery、QnAAnswer、Citation、GraphContext 等所有 F5 公开类型
  */
 
+import type { LoadedGraphEvidence } from '../graph/engine-cache.js';
+
 // ============================================================
 // 轻量模式类型（Story 1）
 // ============================================================
@@ -106,6 +108,12 @@ export interface QnAAnswer {
   durationMs: number;
   /** 降级模式（如有） */
   fallbackMode?: GraphContext['fallbackMode'];
+  /**
+   * F280：产出本次回答时实际使用的那份图（引擎缓存条目的只读视图；不进序列化面）。
+   * MCP 层据此装配 F266 honesty，杜绝"答案来自图 A、标注描述图 B"的二次加载脱钩。
+   * 图加载失败（graph-insufficient 回退）时缺席。
+   */
+  graphEvidence?: LoadedGraphEvidence;
 }
 
 // ============================================================

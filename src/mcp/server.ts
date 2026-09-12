@@ -24,6 +24,7 @@ import { registerGraphTools } from './graph-tools.js';
 import { registerAgentContextTools } from './agent-context-tools.js';
 import { registerFileNavTools } from './file-nav-tools.js';
 import { buildErrorResponse } from './lib/tool-response.js';
+import { buildPanoramicQueryHonesty } from './lib/graph-honesty.js';
 import { withTelemetry } from './lib/telemetry.js';
 import { resolveBuildInfo, resolveVersionString } from '../cli/version-meta.js';
 
@@ -338,7 +339,7 @@ Use this tool when:
 
 Example:
 - Input: { operation: "natural-language", projectRoot: ".", question: "认证流程怎么走" }
-- Output: { answer, citations, tokenUsage }（其他 operation 返回各自结构，如 architecture-ir 返回 IR、overview 返回分层视图）
+- Output: { answer, citations, tokenUsage, honesty }（其他 operation 返回各自结构，如 architecture-ir 返回 IR、overview 返回分层视图）
 
 Typical chained usage:
 - batch → panoramic-query（建图后做架构级查询）`,
@@ -371,8 +372,19 @@ Typical chained usage:
         }
         return buildErrorResponse('internal-error', 'panoramic-query 内部错误');
       }
+      // F280：natural-language 走图引擎回答，结果挂 F266 诚实标注（freshness 三态 + builderMismatch；
+      // 零图证据时 resolution 以 non-caller-oriented-query 结构化缺席）。标注只绑定 QA 随结果带回的
+      // 「产出答案的那份图」，不在此二次加载（对抗复审 C-1：加载期 graph-format-stale 上抛会翻转工具成功状态；
+      // W-1：会描述另一份图）。其余三种 operation 不读 graph.json，不挂；图缺席（graph-insufficient 回退）
+      // 时 helper 返回 null → 不伪造 fresh、按原样返回。
+      const honesty =
+        operation === 'natural-language' ? buildPanoramicQueryHonesty(projectRoot, result.honestyInputs) : null;
+      const payload =
+        honesty !== null && result.data !== null && typeof result.data === 'object'
+          ? { ...(result.data as Record<string, unknown>), honesty }
+          : result.data;
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result.data) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
       };
     }),
   );

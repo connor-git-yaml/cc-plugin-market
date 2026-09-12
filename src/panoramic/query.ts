@@ -9,6 +9,7 @@ import { CrossPackageAnalyzer } from './generators/cross-package-analyzer.js';
 import { ArchitectureIRGenerator } from './generators/architecture-ir-generator.js';
 import { ArchitectureOverviewGenerator } from './generators/architecture-overview-generator.js';
 import { answerQuestion } from './qa/index.js';
+import type { LoadedGraphEvidence } from './graph/engine-cache.js';
 
 // F5：新增 natural-language operation（FR-009）
 export type PanoramicOperation = 'cross-package' | 'architecture-ir' | 'overview' | 'natural-language';
@@ -20,8 +21,19 @@ export interface PanoramicQueryOptions {
   question?: string;
 }
 
+/**
+ * F280：natural-language 分支随结果带回装配 F266 honesty 所需的两项输入（不进 `data`，不序列化）：
+ *  - graph：产出答案时实际使用的那份图（null = 图加载失败、走了 graph-insufficient 回退）
+ *  - resultsEmpty：citations 为空（三种 canned 零结果 + LLM 未引用任何图节点）。这是「零引用」而非严格的「零图证据」：
+ *    rag-only 等「图有证据但不足」形态也落此类——resolutionOmitted 的成因文案（non-caller-oriented-query）对其仍为真
+ */
+export interface NaturalLanguageHonestyInputs {
+  graph: LoadedGraphEvidence | null;
+  resultsEmpty: boolean;
+}
+
 export type PanoramicQueryResult =
-  | { ok: true; data: unknown }
+  | { ok: true; data: unknown; honestyInputs?: NaturalLanguageHonestyInputs }
   // F177：error 路径加 kind 判别（向后兼容，可选）。MCP 层据此区分
   // 预期输入失败（invalid-input，error 文案安全可回传）与内部异常
   // （internal，error 可能含绝对路径，MCP 层脱敏后不回传原文，spec C-4 + Codex CRITICAL-D）。
@@ -66,6 +78,10 @@ export async function queryPanoramic(
           tokenUsage: answer.tokenUsage,
           durationMs: answer.durationMs,
           fallbackMode: answer.fallbackMode,
+        },
+        honestyInputs: {
+          graph: answer.graphEvidence ?? null,
+          resultsEmpty: answer.citations.length === 0,
         },
       };
     }

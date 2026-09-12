@@ -1,0 +1,11 @@
+# F280 tasks
+- [x] T001 红先行用例：engine-cache 7 例 / helper 5 例 / wiring 6 例（含 delta 复审补的 rag-only）合计 18；修补前 wiring 4 红 1 绿（HEAD 副本实证）
+- [x] T002 engine-cache.ts 共享缓存
+- [x] T003 qa/index.ts 接入 + clearEngineCache 别名导出
+- [x] T004 graph-tools.ts 接入 + reloadGraph 转发
+- [x] T005 buildPanoramicQueryHonesty + server.ts natural-language 挂接
+- [x] T006 目标测试全绿 + tsc 零错误
+- [x] T007 独立子代理对抗复审 ×2（首轮 1C+2W+3I / delta 轮 0C+2W+6I，全部处置）
+- [x] T008 verify 子代理 verification-report.md（修补前 PASS + 修补后 delta 节 PASS）
+- [ ] T009 全量门禁
+- [ ] T010 rebase master → ff push origin master → 删分支

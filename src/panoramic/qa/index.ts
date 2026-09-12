@@ -15,7 +15,7 @@
  * - 结构化日志（F-015 LOW）：BFS 命中数、fallbackMode、各步耗时、总 durationMs
  */
 import { resolve } from 'node:path';
-import { GraphQueryEngine } from '../graph/graph-query.js';
+import { loadEngineCached, clearEngineCache, toGraphEvidence, type CachedEngine } from '../graph/engine-cache.js';
 import { resolveGraphJsonPath } from '../graph/graph-paths.js';
 import { retrieveGraphContext } from './graph-retriever.js';
 import { rerankWithEmbedding } from './rag-reranker.js';
@@ -36,36 +36,21 @@ const MAX_QUERY_LENGTH = 2000;
 // 引擎缓存（模块级，按 projectRoot 缓存，避免重复加载 graph.json）
 // ============================================================
 
-const engineCache = new Map<string, GraphQueryEngine>();
-
 /**
- * 获取 GraphQueryEngine 实例（按 projectRoot 缓存）
- * 图谱文件不存在时抛出 Error（明确告知用户需要先生成图谱）
+ * 获取 engine 缓存条目（F280：改走共享 `engine-cache`，mtime+size 复合失效）。
+ * 此前本模块自持零失效判据的 Map，MCP 同进程重建图后 panoramic-query 永远拿旧图。
+ * 返回整个条目而非裸 engine：条目里的文件元数据与 engine 同源，随回答带回给 MCP 层装配 honesty。
+ * 图谱文件不存在时由 loadFromFile 抛出 Error（明确告知用户需要先生成图谱）。
  */
-function getEngine(projectRoot: string, graphJsonPath?: string): GraphQueryEngine {
-  // F170e：规范化 projectRoot，并把它纳入 cache key。否则当显式 graphJsonPath 相同
-  // 但 projectRoot 不同时，会复用首次请求的 engine（projectRoot 已固化）→ 读错
-  // GRAPH_REPORT.md。
+function getEngine(projectRoot: string, graphJsonPath?: string): CachedEngine {
+  // F170e：规范化 projectRoot 并纳入 cache key（显式 graphJsonPath 相同但 root 不同时不得复用）。
   const resolvedRoot = resolve(projectRoot);
   const graphPath = graphJsonPath ?? resolveGraphJsonPath(resolvedRoot);
-  // 用 NUL（\0）作分隔符：合法文件路径不含 \0，杜绝 "graphPath::root" 拼接在
-  // 路径含 :: 时的 key 碰撞（Codex 复审 WARNING）。
-  const cacheKey = `${graphPath}\0${resolvedRoot}`;
-
-  let engine = engineCache.get(cacheKey);
-  if (!engine) {
-    engine = GraphQueryEngine.loadFromFile(graphPath, resolvedRoot);
-    engineCache.set(cacheKey, engine);
-  }
-  return engine;
+  return loadEngineCached(graphPath, resolvedRoot);
 }
 
-/**
- * 测试专用：清除引擎缓存
- */
-export function clearEngineCache(): void {
-  engineCache.clear();
-}
+/** 清除缓存（共享缓存的别名导出，保持既有测试/调用面不变） */
+export { clearEngineCache };
 
 // ============================================================
 // 主函数
@@ -114,9 +99,9 @@ export async function answerQuestion(
 
   // ── 加载图谱引擎 ──────────────────────────────────────────
 
-  let engine: GraphQueryEngine;
+  let loaded: CachedEngine;
   try {
-    engine = getEngine(projectRoot, graphJsonPath);
+    loaded = getEngine(projectRoot, graphJsonPath);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[warn] qa/index: 图谱加载失败，返回空图谱提示。原因：${message}`);
@@ -128,6 +113,10 @@ export async function answerQuestion(
       fallbackMode: 'graph-insufficient',
     };
   }
+
+  const engine = loaded.engine;
+  // 产出本次回答所用的那份图（随结果带回，供 MCP 层装配 honesty；不进序列化面）
+  const graphEvidence = toGraphEvidence(loaded);
 
   // ── Step 1-2：Graph BFS + hyperedge 扩展 ─────────────────
 
@@ -148,6 +137,7 @@ export async function answerQuestion(
       citations: [],
       tokenUsage: { input: 0, output: 0, overBudget: false },
       durationMs: Date.now() - t0,
+      graphEvidence,
       fallbackMode: graphCtx.fallbackMode,
     };
   }
@@ -200,6 +190,7 @@ export async function answerQuestion(
       citations: [],
       tokenUsage: { input: 0, output: 0, overBudget: false },
       durationMs: Date.now() - t0,
+      graphEvidence,
       fallbackMode: 'rag-only',
     };
   }
@@ -262,6 +253,7 @@ export async function answerQuestion(
     citations: finalCitations,
     tokenUsage: llmResult.tokenUsage,
     durationMs: totalMs,
+    graphEvidence,
     fallbackMode: graphCtx.fallbackMode,
   };
 }

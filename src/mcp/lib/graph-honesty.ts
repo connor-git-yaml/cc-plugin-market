@@ -20,6 +20,8 @@
 import type { GraphJSON, GraphNode } from '../../panoramic/graph/graph-types.js';
 import type { GraphFreshnessVerdict } from '../../panoramic/graph/quality/quality-types.js';
 import { evaluateFreshness } from '../../panoramic/graph/source-commit.js';
+import type { LoadedGraphEvidence } from '../../panoramic/graph/engine-cache.js';
+import type { NaturalLanguageHonestyInputs } from '../../panoramic/query.js';
 import {
   getBuilderStamp,
   parseGraphBuilderStamp,
@@ -256,13 +258,8 @@ export interface HonestyDeps {
 
 export interface HonestyAnnotationParams {
   projectRoot: string;
-  /** 直接复用 `getCachedGraphData` 的返回结构，避免第二次 stat（失效判据同源） */
-  graph: {
-    graphData: Readonly<GraphJSON>;
-    graphPath: string;
-    mtimeMs: number;
-    sizeBytes: number;
-  };
+  /** 引擎缓存条目的只读视图（`getCachedGraphData` / QA `graphEvidence` 同型）：元数据与图同源，不另行 stat */
+  graph: LoadedGraphEvidence;
   /** 被查 symbol 的 canonical id；detect_changes 无单一被查对象，传 null */
   symbolId?: string | null;
   /** 结果集是否为空 —— 只有为空时才产出 resolution */
@@ -832,4 +829,31 @@ function describeWorkingTreeState(
     default:
       return { value: null, suffix: '当前工作树是否另有未提交改动未判定（图来源版本不可知，工作树状态未检测）' };
   }
+}
+
+// ============================================================
+// F280：panoramic-query(natural-language) 装配入口
+// ============================================================
+
+/**
+ * 给 `panoramic-query(natural-language)` 装配诚实标注。
+ *
+ * 输入只来自 QA 随结果带回的 `honestyInputs`（产出答案的那份图 + 图证据是否为空），本函数**不自己加载图**：
+ * 二次加载既可能描述另一份图（对抗复审 W-1），也会把加载期 graph-format-stale 上抛成故障、翻转工具的
+ * 成功 / 失败状态（C-1 / FR-011）。图缺席（加载失败走了 graph-insufficient 回退）→ null，由调用方决定
+ * 不挂标注，而不是伪造一个 fresh。`resultsEmpty` 由 caller 按 citations 是否为空如实传入（F238：控制信号
+ * 必须由 caller 传参）；零图证据时 resolution 以 `non-caller-oriented-query` 结构化缺席（F266 D4）。
+ */
+export function buildPanoramicQueryHonesty(
+  projectRoot: string,
+  inputs: NaturalLanguageHonestyInputs | undefined,
+): GraphHonesty | null {
+  if (inputs === undefined || inputs.graph === null) return null;
+  return buildHonestyAnnotation({
+    projectRoot,
+    graph: inputs.graph,
+    symbolId: null,
+    resultsEmpty: inputs.resultsEmpty,
+    resolutionBasis: 'non-caller-oriented-query',
+  });
 }

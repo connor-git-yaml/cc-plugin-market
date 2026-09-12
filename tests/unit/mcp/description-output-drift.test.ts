@@ -145,8 +145,9 @@ const TRUTH: Record<string, readonly string[]> = {
   batch: BATCH_TYPED,
   // src/models/module-spec.ts:246(DriftReportSchema)— 运行时从 Zod schema 派生(纯 z.object,.shape 安全)
   diff: Object.keys(DriftReportSchema.shape),
-  // src/panoramic/query.ts:63(natural-language 分支:answer/citations/tokenUsage/durationMs/fallbackMode)
-  'panoramic-query': ['answer', 'citations', 'tokenUsage'],
+  // src/panoramic/query.ts(natural-language 分支:answer/citations/tokenUsage/durationMs/fallbackMode)
+  // + src/mcp/server.ts handler 运行时附加的 honesty(F280,图加载成功时挂)
+  'panoramic-query': ['answer', 'citations', 'tokenUsage', 'honesty'],
   // src/mcp/file-nav-tools.ts:255-264(data 对象字段)
   view_file: ['lines', 'startLine', 'endLine', 'totalLines', 'truncated', 'nextStepHint'],
   // src/mcp/file-nav-tools.ts:314-321(data 对象字段)

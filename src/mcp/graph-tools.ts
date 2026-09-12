@@ -4,77 +4,40 @@
  * 采用 lazy load 策略：首次调用时加载 _meta/graph.json，后续复用内存缓存
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
-import type { GraphJSON } from '../panoramic/graph/graph-types.js';
+import type { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
+import {
+  loadEngineCached,
+  clearEngineCache,
+  toGraphEvidence,
+  type LoadedGraphEvidence,
+} from '../panoramic/graph/engine-cache.js';
 import { resolveGraphJsonPath } from '../panoramic/graph/graph-paths.js';
 import { buildErrorResponse, type ToolResult } from './lib/tool-response.js';
 import { withTelemetry } from './lib/telemetry.js';
 
 // ──────────────────────────────────────────────────────────
-// 模块级缓存（按 projectRoot 多实例）
-//
-// Feature 155 T-002 升级：从 Map<projectRoot, Engine> 升级为 entry-based，
-// 携带 graphPath / mtimeMs / sizeBytes，让 getEngine 在每次调用时校验
-// graph.json 是否被外部重生成（baseline:collect 后 mtime/size 必变）。
+// engine 获取：共享 `panoramic/graph/engine-cache`（F280 收敛前本文件自持一份 entry-based Map；
+// F155 T-002 引入的 mtime+size 复合失效判据原样迁入共享模块）
 // ──────────────────────────────────────────────────────────
 
 /**
- * 缓存条目：保留 engine + graph 文件元数据，用于 stale detection。
- * mtime + size 复合校验防止"修改但 mtime 同秒"和"size 不变但 mtime 变化"两种 race。
- */
-interface CachedEngineEntry {
-  engine: GraphQueryEngine;
-  graphPath: string;
-  mtimeMs: number;
-  sizeBytes: number;
-}
-
-/** 按 projectRoot 缓存 GraphQueryEngine 实例 + graph.json stat 元数据 */
-const engineCache = new Map<string, CachedEngineEntry>();
-
-/**
- * 获取 GraphQueryEngine 实例（按 projectRoot 缓存，含 stale 检测）。
- *
- * 每次调用都 stat graph.json，与缓存条目的 mtimeMs + sizeBytes 比对：
- * - 命中 + 一致 → 复用 engine
- * - miss / stale → loadFromFile 重新构造，更新 entry
- *
- * 这样 baseline:collect 重生 graph 后无需手动 reloadGraph()，下一次 tool 调用
- * 自动加载新 graph；同时不破坏已有调用路径（getEngine signature 不变）。
+ * 获取 GraphQueryEngine 实例（F280：改走共享 `panoramic/graph/engine-cache`）。
+ * 失效判据（每次 stat graph.json，mtime + size 复合）与此前一致；此前本文件自持一份 Map，
+ * 与 panoramic/qa 的零失效 Map 并存——现在两侧共用一份。
  *
  * @param projectRoot - 目标项目根目录；未传入时使用 process.cwd()
- * @returns GraphQueryEngine 实例
  * @throws 文件不存在或格式错误时抛出 Error
  */
 function getEngine(projectRoot?: string): GraphQueryEngine {
-  // 规范化为绝对路径：避免相对路径（如 "."）作为 cache key 时随进程 cwd 漂移，
-  // 重新引入 F170e 要消除的 cwd 耦合。
+  // 规范化为绝对路径：避免相对路径（如 "."）作为 cache key 时随进程 cwd 漂移（F170e）。
   const root = resolve(projectRoot ?? process.cwd());
   const graphPath = resolveGraphJsonPath(root);
-  const stat = statSync(graphPath);
-  const cached = engineCache.get(root);
-  if (
-    cached !== undefined &&
-    cached.graphPath === graphPath &&
-    cached.mtimeMs === stat.mtimeMs &&
-    cached.sizeBytes === stat.size
-  ) {
-    return cached.engine;
-  }
-  // F170e：透传 root 作为 projectRoot，让 getCommunity 从目标项目的
-  // specs/_meta/GRAPH_REPORT.md 读 cohesion，而非 MCP server 进程的 cwd。
-  const engine = GraphQueryEngine.loadFromFile(graphPath, root);
-  engineCache.set(root, {
-    engine,
-    graphPath,
-    mtimeMs: stat.mtimeMs,
-    sizeBytes: stat.size,
-  });
-  return engine;
+  // F170e：透传 root 作为 projectRoot，让 getCommunity 从目标项目的 GRAPH_REPORT.md 读 cohesion。
+  return loadEngineCached(graphPath, root).engine;
 }
 
 /**
@@ -82,7 +45,7 @@ function getEngine(projectRoot?: string): GraphQueryEngine {
  * 供外部调用（如图谱更新后刷新缓存）
  */
 export function reloadGraph(): void {
-  engineCache.clear();
+  clearEngineCache();
 }
 
 // ──────────────────────────────────────────────────────────
@@ -105,26 +68,16 @@ export function reloadGraph(): void {
  *
  * @param projectRoot - 目标项目根目录；未传入时使用 process.cwd()
  */
-export function getCachedGraphData(projectRoot?: string): {
-  graphData: Readonly<GraphJSON>;
-  graphPath: string;
-  mtimeMs: number;
-  sizeBytes: number;
-} | null {
+export function getCachedGraphData(projectRoot?: string): LoadedGraphEvidence | null {
   try {
     const root = resolve(projectRoot ?? process.cwd());
     const graphPath = resolveGraphJsonPath(root);
     if (!existsSync(graphPath)) {
       return null;
     }
-    const stat = statSync(graphPath);
-    const engine = getEngine(root);
-    return {
-      graphData: engine.rawGraph,
-      graphPath,
-      mtimeMs: stat.mtimeMs,
-      sizeBytes: stat.size,
-    };
+    // F280：元数据取自验证这份 engine 的那次 stat（与 graphData 同源）。此前先 stat 再取 engine 两步，
+    // 两步之间文件被重写会让元数据描述另一份文件。
+    return toGraphEvidence(loadEngineCached(graphPath, root));
   } catch (err) {
     // Feature 193 FR-006：graph-format-stale 必须显式上抛，不得静默退化为 null
     // （否则 impact/context/detect_changes 把"旧绝对格式图"误报成"缺图 graph-not-built"，
