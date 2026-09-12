@@ -27,9 +27,8 @@ export class GoLanguageAdapter implements LanguageAdapter {
   /** F249 FR-002 #3：直接持有采集面事实源的引用（不复制字面量），失败模式退化为"导入断裂"。 */
   readonly extensions: ReadonlySet<string> = GO_ADAPTER_SURFACE.extensions;
 
-  readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
-    'vendor',
-  ]);
+  // F284：忽略目录并入采集面事实源，字面量见 collector-surface.ts
+  readonly defaultIgnoreDirs: ReadonlySet<string> = GO_ADAPTER_SURFACE.ignoreDirs;
 
   /**
    * AST 分析（委托 TreeSitterAnalyzer）

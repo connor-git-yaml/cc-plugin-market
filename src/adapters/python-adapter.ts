@@ -30,8 +30,9 @@ import {
 } from '../knowledge-graph/line-range.js';
 import { createGitignoreFilter } from '../utils/file-scanner.js';
 import {
-  PY_WALK_SURFACE,
+  PYTHON_ADAPTER_DECLARED_IGNORE_DIRS,
   PYTHON_SYMBOL_SCAN_SURFACE,
+  PY_WALK_SURFACE,
   surfaceMatchesFile,
 } from '../collector-surface.js';
 
@@ -70,15 +71,8 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    */
   readonly extensions: ReadonlySet<string> = PY_WALK_SURFACE.extensions;
 
-  readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
-    '__pycache__',
-    '.venv',
-    'venv',
-    '.tox',
-    '.mypy_cache',
-    '.pytest_cache',
-    '.eggs',
-  ]);
+  // F284：忽略目录并入采集面事实源（PYTHON_ADAPTER_DECLARED_IGNORE_DIRS），字面量见 collector-surface.ts
+  readonly defaultIgnoreDirs: ReadonlySet<string> = PYTHON_ADAPTER_DECLARED_IGNORE_DIRS;
 
   /**
    * AST 分析（委托 TreeSitterAnalyzer）
@@ -143,24 +137,23 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    * 递归扫描项目根目录下所有 Python 源文件（`.py` 实现 + `.pyi` 类型 stub），
    * 排除语言生态常见忽略目录。
    *
-   * 复用 `defaultIgnoreDirs` 并叠加 Python 项目惯例（test/tests/dist 等）。
+   * 剪枝集来自采集面 #11 `PYTHON_SYMBOL_SCAN_SURFACE.ignoreDirs`（= 适配器声明集 ∪ Python 项目惯例 test/tests/dist 等），
+   * 外加点前缀目录一律剪枝；F284 起**不再读** `this.defaultIgnoreDirs`，实例级覆盖通道对本方法失效（仓内无覆盖者，零行为变化）。
    * 由 `extractSymbolNodes` 与 `buildModuleGraph` 共用，避免 DRY 违反。
    *
    * 文件判定消费 SSoT 的 `PYTHON_SYMBOL_SCAN_SURFACE`（F249 W-002 收敛），本方法**不含**任何
    * 硬编码扩展名字面量：F250 把 `.pyi` 纳入符号采集面时，本方法体一行未改，扩集完全由常量
    * 取值变化自动生效。改回硬编码字面量判断会破坏这条性质（有防回归探针 `T-FR002` 钉死）。
    *
-   * 注意本方法的硬编码剪枝集（`test`/`tests`/`dist` 等）与 unified 路 `walkPyFiles` 的
+   * 注意本方法的剪枝集（#11，含 `test`/`tests`/`dist` 等）与 unified 路 `walkPyFiles` 的
    * `PY_SKELETON_IGNORE_DIRS` **不同**：落在两者差集内的文件只由其中一路采集，这是既有设计
    * 差异，非缺陷（对照探针见 `tests/adapters/python-adapter.test.ts::T-SC005-control`）。
    *
    * @throws 当根目录不可读时抛出（调用方按需 try-catch 决定是否吞掉）
    */
   private scanPyFiles(resolvedRoot: string): string[] {
-    const ignoreNames = new Set([
-      ...this.defaultIgnoreDirs,
-      'test', 'tests', 'dist', 'node_modules', '.git',
-    ]);
+    // F284：剪枝集 = 采集面 #11 的 ignoreDirs（= 声明集 ∪ Python 项目惯例），不再在此拼第二份
+    const ignoreNames = PYTHON_SYMBOL_SCAN_SURFACE.ignoreDirs;
     // F194：叠加 git 忽略过滤层（只叠加不替换硬编码集）。
     // F255 起该过滤层在 git 仓库内消费 `git ls-files --others --ignored --directory` 的
     // **在盘枚举**（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似解析。

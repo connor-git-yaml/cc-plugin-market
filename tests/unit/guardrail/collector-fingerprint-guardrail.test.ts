@@ -341,6 +341,121 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
       expect(comparison.differences.join('\n')).toContain(String(duplicated?.id));
     });
 
+    // F284 四维用例的纪律（护栏角 W-1 / W-6，沿 F278 返工 A3）：断到含格子与方向的**完整行**，不用 toContain('confidence')
+    // 这类子串——否则比较器退化成 key-only、或把「重建 / pinned」两侧对调，用例照绿。
+    const edgeKeyOf = (link: Record<string, unknown>): string => `${String(link['source'])}|${String(link['relation'])}|${String(link['target'])}`;
+
+    it('F284 · a-track：只改一条边的 confidence + evidenceText（三元组与 key 集合不动）→ 逐字段完整行（F279 移交面 #1）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.links.find((link) => typeof (link as Record<string, unknown>)['evidenceText'] === 'string') as Record<string, unknown> | undefined;
+      expect(victim, 'pinned 资产里必须有带 evidenceText 的边（depends-on 类）').toBeDefined();
+      const original = { ...(victim as Record<string, unknown>) };
+      const flipped = original['confidence'] === 'EXTRACTED' ? 'INFERRED' : 'EXTRACTED';
+      (victim as Record<string, unknown>)['confidence'] = flipped;
+      (victim as Record<string, unknown>)['evidenceText'] = 'PERTURBED-EVIDENCE';
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(
+        `边属性不一致（confidence: 重建 ${JSON.stringify(flipped)} vs pinned ${JSON.stringify(original['confidence'])}；` +
+          `evidenceText: 重建 "PERTURBED-EVIDENCE" vs pinned ${JSON.stringify(original['evidenceText'])}）: ${edgeKeyOf(original)}`,
+      );
+      // 三元组未动 ⇒ 不得误报成边计数差异
+      expect(comparison.differences.join('\n')).not.toContain('边计数不一致');
+    });
+
+    it('F284 · a-track：只改一条边的 confidenceScore 数值（key 集合完全不动）→ 值级比较必须抓到（护栏角 W-1：key-only 变异体在此翻红）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.links.find((link) => typeof (link as Record<string, unknown>)['confidenceScore'] === 'number') as Record<string, unknown> | undefined;
+      expect(victim, 'pinned 资产里必须有带 confidenceScore 的边').toBeDefined();
+      const original = { ...(victim as Record<string, unknown>) };
+      (victim as Record<string, unknown>)['confidenceScore'] = 0.123;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(
+        `边属性不一致（confidenceScore: 重建 0.123 vs pinned ${JSON.stringify(original['confidenceScore'])}）: ${edgeKeyOf(original)}`,
+      );
+    });
+
+    it('F284 · a-track：给节点新增一个非 facet 顶层字段 → 「重建新增 [weight] / 重建缺失 []」完整行（F279 移交面 #2）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes[0] as Record<string, unknown>;
+      expect(victim).toBeDefined();
+      victim['weight'] = 42;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(`节点顶层 key 集合不一致（重建新增 [weight] / 重建缺失 []）: ${String(perturbed.nodes[0]?.id)}`);
+    });
+
+    it('F284 · a-track：反向——pinned 侧节点多一个顶层字段、重建侧没有 → 「重建新增 [] / 重建缺失 [weight]」（护栏角 W-6：单向失守在此翻红）', () => {
+      const perturbedPinned = deepClone(pinnedGraphOnly.graph);
+      const victim = perturbedPinned.nodes[0] as Record<string, unknown>;
+      victim['weight'] = 42;
+
+      const comparison = compareGraphOnlyStructure(rebuiltGraph, perturbedPinned);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(`节点顶层 key 集合不一致（重建新增 [] / 重建缺失 [weight]）: ${String(perturbedPinned.nodes[0]?.id)}`);
+    });
+
+    it('F284 · a-track：图顶层出现 hyperedges → 「图顶层 key 集合不一致」完整行 +「hyperedges 不一致」（F279 移交面 #3）', () => {
+      const perturbed = deepClone(rebuiltGraph) as unknown as Record<string, unknown>;
+      perturbed['hyperedges'] = [{ id: 'h1', kind: 'flow', members: ['a', 'b'] }];
+      const rebuiltKeys = Object.keys(perturbed).sort().join(', ');
+      const pinnedKeys = Object.keys(pinnedGraphOnly.graph as unknown as Record<string, unknown>).sort().join(', ');
+
+      const comparison = compareGraphOnlyStructure(perturbed as unknown as typeof rebuiltGraph, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(`图顶层 key 集合不一致（重建 [${rebuiltKeys}] vs pinned [${pinnedKeys}]）`);
+      expect(comparison.differences.join('\n')).toContain('hyperedges 不一致（重建 1 条 vs pinned 0 条）');
+    });
+
+    it('F284 · a-track：反向——pinned 侧多一个图顶层 key、重建侧没有 → 完整行点名两侧 key 列表（护栏角 W-6）', () => {
+      const perturbedPinned = deepClone(pinnedGraphOnly.graph) as unknown as Record<string, unknown>;
+      perturbedPinned['extraTopLevel'] = 1;
+      const rebuiltKeys = Object.keys(rebuiltGraph as unknown as Record<string, unknown>).sort().join(', ');
+      const pinnedKeys = Object.keys(perturbedPinned).sort().join(', ');
+
+      const comparison = compareGraphOnlyStructure(rebuiltGraph, perturbedPinned as unknown as typeof rebuiltGraph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(`图顶层 key 集合不一致（重建 [${rebuiltKeys}] vs pinned [${pinnedKeys}]）`);
+    });
+
+    it('F284 · a-track：hyperedges 非数组形态（{} / null）不得与空数组同签名（护栏角 W-5a）', () => {
+      const rebuilt = deepClone(rebuiltGraph) as unknown as Record<string, unknown>;
+      rebuilt['hyperedges'] = [];
+      for (const [corrupt, label] of [[{}, 'object'], [null, 'null']] as const) {
+        const pinned = deepClone(pinnedGraphOnly.graph) as unknown as Record<string, unknown>;
+        pinned['hyperedges'] = corrupt;
+        const comparison = compareGraphOnlyStructure(rebuilt as unknown as typeof rebuiltGraph, pinned as unknown as typeof rebuiltGraph);
+        expect(comparison.mismatch, label).toBe(true);
+        expect(comparison.differences).toContain(`hyperedges 形态不一致（重建 array(0) vs pinned <non-array:${label}>）`);
+      }
+    });
+
+    it('F284 · a-track：hyperedges 等计数异内容 → 列出两侧独有签名（护栏角 W-5b：只报条数说不出原因）', () => {
+      const rebuilt = deepClone(rebuiltGraph) as unknown as Record<string, unknown>;
+      const pinned = deepClone(pinnedGraphOnly.graph) as unknown as Record<string, unknown>;
+      rebuilt['hyperedges'] = [{ id: 'h1', nodes: ['a', 'b'] }];
+      pinned['hyperedges'] = [{ id: 'h1', nodes: ['a', 'c'] }];
+      const comparison = compareGraphOnlyStructure(rebuilt as unknown as typeof rebuiltGraph, pinned as unknown as typeof rebuiltGraph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences).toContain(
+        'hyperedges 不一致（重建 1 条 vs pinned 1 条）：仅重建有 1 条 / 仅 pinned 有 1 条；首条差异 {"id":"h1","nodes":["a","b"]}',
+      );
+    });
+
+    it('F284 · a-track：只重排一条边对象的 key 顺序（值不变）→ 判一致（稳定序列化不把重构报成漂移）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.links[0] as Record<string, unknown>;
+      const reordered: Record<string, unknown> = {};
+      for (const key of Object.keys(victim).reverse()) reordered[key] = victim[key];
+      perturbed.links[0] = reordered as unknown as (typeof perturbed.links)[number];
+
+      expect(compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph).mismatch).toBe(false);
+    });
+
     it('a-track：仅节点顺序不同（无重复、无增删）→ 判一致（multiset 不引入顺序敏感性）', () => {
       const reordered = deepClone(rebuiltGraph);
       reordered.nodes.reverse();

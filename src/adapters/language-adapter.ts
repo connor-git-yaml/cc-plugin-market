@@ -120,7 +120,8 @@ export interface LanguageAdapter {
 
   /**
    * 默认忽略目录集合（语言生态特有，如 node_modules、__pycache__）
-   * 不包含通用忽略目录（如 .git），通用目录由 file-scanner 独立维护。
+   * 不包含通用忽略目录（如 .git）——通用目录由各采集面的 ignoreDirs 与 walk 的点前缀规则维护，
+   * 全部集合登记在 `src/collector-surface.ts`（F284 事实源）。
    */
   readonly defaultIgnoreDirs: ReadonlySet<string>;
 

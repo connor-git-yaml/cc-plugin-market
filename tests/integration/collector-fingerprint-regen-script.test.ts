@@ -160,6 +160,21 @@ function stripLineRangeFromGraphOnlyAsset(fixtureRoot: string): string {
   return target.id;
 }
 
+/** F284 (f)：把 pinned graph-only 资产里第一条带 confidenceScore 的边的分值改成 0.123（三元组与 key 集合不动）。 */
+function perturbEdgeAttributeInGraphOnlyAsset(fixtureRoot: string): { key: string; original: number } {
+  const assetPath = path.join(fixtureRoot, GRAPH_ONLY_ASSET);
+  const asset = JSON.parse(fs.readFileSync(assetPath, 'utf-8')) as {
+    graph: { links: Array<Record<string, unknown>> };
+  };
+  const victim = asset.graph.links.find((link) => typeof link['confidenceScore'] === 'number');
+  expect(victim).toBeDefined();
+  const target = victim as Record<string, unknown>;
+  const original = target['confidenceScore'] as number;
+  target['confidenceScore'] = 0.123;
+  fs.writeFileSync(assetPath, `${JSON.stringify(asset, null, 2)}\n`, 'utf-8');
+  return { key: `${String(target['source'])}|${String(target['relation'])}|${String(target['target'])}`, original };
+}
+
 /** 扰动 b-track pinned 期望：删一条 module 边 → 重建产物与 pinned 不一致（指纹不变）。 */
 function perturbModuleGraphAsset(fixtureRoot: string): void {
   const assetPath = path.join(fixtureRoot, MODULE_GRAPH_ASSET);
@@ -381,6 +396,28 @@ describe('再生脚本 — 拒绝场景三分（逐轨独立求值，FR-005(e)�
       `metadata key 集合不一致（重建缺失 [] vs 重建新增 [lineRange, lineRange.end, lineRange.start]）: ${victimId}`,
     );
     // B2：metadata 维度专属处置指引（六类 bump responsibility 不覆盖节点字段集合）
+    expect(run.stderr).toContain('六类 bump responsibility');
+    expect(run.stderr).toContain('rm expected-graph-only-graph.json expected-module-graph.json');
+    expect(run.stderr).toContain('两份 pinned 资产均未写盘');
+    expect(assetDigests(fixtureRoot)).toEqual(before);
+  });
+
+  it('(f) F284 边属性值级漂移：pinned 一条边 confidenceScore 改值 → 非零退出 + 完整行点名字段与方向 + 维度专属指引 + 资产字节不变', () => {
+    const fixtureRoot = stageFixtureRoot();
+    const { key, original } = perturbEdgeAttributeInGraphOnlyAsset(fixtureRoot);
+    const before = assetDigests(fixtureRoot);
+
+    const run = runRegenScript(fixtureRoot);
+
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('拒绝再生');
+    expect(run.stderr).toContain('a-track(graph-only)');
+    expect(run.stderr).not.toContain('b-track');
+    expect(run.stderr).toContain('检测到指纹不可见的行为变更');
+    // 比较器方向：重建侧是真实产出（原值），pinned 侧被改成 0.123
+    expect(run.stderr).toContain(`边属性不一致（confidenceScore: 重建 ${JSON.stringify(original)} vs pinned 0.123）: ${key}`);
+    // 护栏角 W-2：F284 维度也走"不属六类 bump responsibility"的专属处置指引，而不是只剩通用 bump 文案
+    expect(run.stderr).toContain('上述差异含 **边属性** 维度');
     expect(run.stderr).toContain('六类 bump responsibility');
     expect(run.stderr).toContain('rm expected-graph-only-graph.json expected-module-graph.json');
     expect(run.stderr).toContain('两份 pinned 资产均未写盘');

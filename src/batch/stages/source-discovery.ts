@@ -233,11 +233,9 @@ function collectMdRecursive(dir: string, out: string[]): void {
 // ============================================================
 
 // F217 T004：加 export（零行为变化）——供 src/panoramic/graph/quality/ignore-oracle.ts
-// 一致性单测断言 PY_SKELETON_IGNORE_DIRS ⊆ 共享内置忽略集合，防止未来三处定义漂移。
-export const PY_SKELETON_IGNORE_DIRS = new Set([
-  'node_modules', '.git', '__pycache__', '.venv', 'venv',
-  'build', 'dist', 'coverage', 'out', 'target', '.tox',
-]);
+// 一致性单测断言（F284 起为**相等**：oracle union = TSJS ∪ PY，由同一事实源派生，不再是 ⊆）。
+// F284：集合本体搬进采集面事实源（`PY_WALK_SURFACE.ignoreDirs`），此处只保留导出名（F220 导出面钉住）。
+export const PY_SKELETON_IGNORE_DIRS: ReadonlySet<string> = PY_WALK_SURFACE.ignoreDirs;
 
 /**
  * Feature 151 T-008c — 收集 .py 文件 CodeSkeleton（含 callSites + 本地 import 解析）。
@@ -395,11 +393,8 @@ export function walkPyFiles(
  * T-020：TS/JS 文件扫描时忽略的目录集合（与 Python 对齐，增加 .next / .nuxt 等前端产物目录）
  * F217 T004：加 export（零行为变化），理由同 PY_SKELETON_IGNORE_DIRS。
  */
-export const TSJS_SKELETON_IGNORE_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'coverage', 'out', 'target',
-  '.next', '.nuxt', '.turbo', '.cache', 'tmp', '.tmp',
-  '__pycache__', '.pytest_cache', '.tox',
-]);
+// F284：集合本体搬进采集面事实源（`TSJS_SKELETON_WALK_SURFACE.ignoreDirs`），此处只保留导出名。
+export const TSJS_SKELETON_IGNORE_DIRS: ReadonlySet<string> = TSJS_SKELETON_WALK_SURFACE.ignoreDirs;
 
 /**
  * Feature 152 T-020 — 收集 .ts/.tsx/.js/.jsx/.mjs/.cjs 文件 CodeSkeleton（含 callSites + import 路径解析）。

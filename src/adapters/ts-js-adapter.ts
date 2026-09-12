@@ -29,7 +29,7 @@ import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallb
 import { buildModuleGraphForProject } from '../knowledge-graph/module-derivation.js';
 import { Project, ScriptTarget, ScriptKind } from 'ts-morph';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
-import { MODULE_DERIVATION_SCAN_SURFACE } from '../collector-surface.js';
+import { MODULE_DERIVATION_SCAN_SURFACE, TSJS_ADAPTER_DECLARED_IGNORE_DIRS } from '../collector-surface.js';
 
 export class TsJsLanguageAdapter implements LanguageAdapter {
   readonly id = 'ts-js';
@@ -44,13 +44,8 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
   // 构成手工镜像对，现收敛为对采集面事实源的共同引用（`===` 引用同一性可被测试断言）。
   readonly extensions: ReadonlySet<string> = MODULE_DERIVATION_SCAN_SURFACE.extensions;
 
-  readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
-    'node_modules',
-    'dist',
-    'build',
-    '.next',
-    '.nuxt',
-  ]);
+  // F284：忽略目录并入采集面事实源，字面量见 collector-surface.ts
+  readonly defaultIgnoreDirs: ReadonlySet<string> = TSJS_ADAPTER_DECLARED_IGNORE_DIRS;
 
   /**
    * AST 分析（委托 ast-analyzer.ts 的 analyzeFile）

@@ -38,8 +38,6 @@ import {
   createGitignoreOracle,
   type UndeterminableSummary,
 } from '../../../utils/gitignore-oracle.js';
-import { JavaLanguageAdapter } from '../../../adapters/java-adapter.js';
-import { GoLanguageAdapter } from '../../../adapters/go-adapter.js';
 import {
   GO_ADAPTER_SURFACE,
   JAVA_ADAPTER_SURFACE,
@@ -49,42 +47,24 @@ import {
 } from '../../../collector-surface.js';
 
 /**
- * 图生产者 ignore 合同的单一事实源：TSJS_SKELETON_IGNORE_DIRS ∪ PY_SKELETON_IGNORE_DIRS
- * （均定义于 `src/batch/batch-orchestrator.ts`）。
+ * 图生产者 ignore 合同的 union 兜底集 = #1 TSJS walk ∪ #2 PY walk 的剪枝集，**由采集面事实源
+ * `src/collector-surface.ts` 派生**（F284；此前是手抄字面量 + ⊆ 子集断言，两侧曾允许分叉）。
  *
- * 字面枚举合并写死为单一 Set（不 import batch-orchestrator.ts 做运行时 spread），
- * 理由：① 避免 ignore-oracle.ts 引入 batch-orchestrator.ts 这个巨型模块的运行时依赖
- * （潜在循环引用与冷启动成本）；② 两侧集合的一致性交由 `ignore-oracle.test.ts` 的
- * 子集断言（真实 import 两常量校验 ⊆ 关系）在测试期守护，防止未来任一 collector
- * 新增忽略目录时忘记同步本集合。
+ * 守卫口径（F284）：`ignore-oracle.test.ts` 与 `collector-surface-ignore-dirs.test.ts` 断言本集合与
+ * TSJS ∪ PY **相等**（不再是 ⊆、不再允许真超集）；行为哨兵测试
+ * `collector-surface-ignore-dirs-behavior.test.ts` 对每个消费方逐名断言有效剪枝集。
  *
- * 与 file-scanner.ts 的 `UNIVERSAL_IGNORE_DIRS`/spec 扫描器语义不同——本集合不含
- * 'specs'/'examples'/'fixtures' 等"spec 产物目录"条目，因为图生产者本身就会扫描
- * 这些目录下的真实源码。
+ * 与 file-scanner.ts 的通用忽略集语义不同——本集合不含 'specs'/'examples'/'fixtures' 等"spec 产物目录"
+ * 条目，因为图生产者本身就会扫描这些目录下的真实源码。
  *
- * 允许是 TSJS_SKELETON_IGNORE_DIRS 与 PY_SKELETON_IGNORE_DIRS 的真超集（union 语义），
- * 不要求恰好相等。
+ * 分派盲区（既有，SSoT 角 W3，登记 M11）：`.py` 只分派到 #2 集合，没有 #11（PythonLanguageAdapter.scanPyFiles）
+ * 分支——#11 采到的 `build/ coverage/ out/ target/` 下 .py 节点会被本 oracle 判 ignored（合法采集判成忽略 =
+ * 假警报，把 graph-quality 压到 pass-with-warnings；实测 f286 旧 dist 同结果）。
  */
 export const GRAPH_COLLECTOR_IGNORE_DIRS: ReadonlySet<string> = new Set([
-  // TSJS_SKELETON_IGNORE_DIRS ∪ PY_SKELETON_IGNORE_DIRS
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  'coverage',
-  'out',
-  'target',
-  '.next',
-  '.nuxt',
-  '.turbo',
-  '.cache',
-  'tmp',
-  '.tmp',
-  '__pycache__',
-  '.pytest_cache',
-  '.tox',
-  '.venv',
-  'venv',
+  // F284：由采集面事实源派生（TSJS ∪ PY 两条 walk 的剪枝集），不再手抄；两侧不可能分叉
+  ...TSJS_SKELETON_WALK_SURFACE.ignoreDirs,
+  ...PY_WALK_SURFACE.ignoreDirs,
 ]);
 
 // ============================================================
@@ -103,30 +83,31 @@ export const GRAPH_COLLECTOR_IGNORE_DIRS: ReadonlySet<string> = new Set([
 // 修复：按路径扩展名分派到对应生产者的专属忽略集合；扩展名未知（含无扩展名的目录
 // 路径本身）时退回 union 兜底（保守，宁可多判 ignored，不误判本该忽略的目录为已入图）。
 
-/** TSJS collector 忽略目录合同（字面量镜像 batch-orchestrator.ts::TSJS_SKELETON_IGNORE_DIRS）。 */
-const TSJS_IGNORE_DIRS: ReadonlySet<string> = new Set([
-  'node_modules', '.git', 'dist', 'build', 'coverage', 'out', 'target',
-  '.next', '.nuxt', '.turbo', '.cache', 'tmp', '.tmp',
-  '__pycache__', '.pytest_cache', '.tox',
-]);
+/** TSJS collector 忽略目录合同（F284：直接引用采集面事实源，不再字面量镜像）。 */
+const TSJS_IGNORE_DIRS: ReadonlySet<string> = TSJS_SKELETON_WALK_SURFACE.ignoreDirs;
 
-/** PY collector 忽略目录合同（字面量镜像 batch-orchestrator.ts::PY_SKELETON_IGNORE_DIRS）。 */
-const PY_IGNORE_DIRS: ReadonlySet<string> = new Set([
-  'node_modules', '.git', '__pycache__', '.venv', 'venv',
-  'build', 'dist', 'coverage', 'out', 'target', '.tox',
-]);
+/** PY collector 忽略目录合同（F284：同上）。 */
+const PY_IGNORE_DIRS: ReadonlySet<string> = PY_WALK_SURFACE.ignoreDirs;
 
-/** generic-language-skeleton-collector 对所有语言均适用的通用忽略目录。 */
+/**
+ * generic-language-skeleton-collector 对所有语言均适用的通用忽略目录（oracle 对 java/go **文件级**判定的补集）。
+ *
+ * 与生产者的真实关系（F284 对抗复审 W1 实证，修正首稿写反的方向）：generic walk 对**目录**调 `isIgnored`，
+ * 目录路径无扩展名 ⇒ 走 union 兜底 ⇒ `node_modules/ dist/ coverage/ tmp/ __pycache__/ venv/ .cache/ .tox/`
+ * 等 GRAPH_COLLECTOR_IGNORE_DIRS 成员都会被剪；而本 oracle 对 `.java/.go` 文件只用 适配器集 ∪ 本集合，
+ * 比 walk **窄**——分歧方向是 oracle 漏判 ignored（不是多判）。要闭合应派生为 JAVA ∪ GRAPH_COLLECTOR_IGNORE_DIRS，
+ * 属行为变更，登记 M11；现状由 behavior 测试逐名钉住。
+ */
 const GENERIC_UNIVERSAL_IGNORE_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git']);
 
-/** Java 生产者忽略集合 = JavaLanguageAdapter().defaultIgnoreDirs ∪ 通用集合。 */
+/** Java 生产者忽略集合 = 采集面 JAVA_ADAPTER_SURFACE.ignoreDirs（= JavaLanguageAdapter.defaultIgnoreDirs）∪ 通用集合。 */
 function javaIgnoreDirs(): ReadonlySet<string> {
-  return new Set([...new JavaLanguageAdapter().defaultIgnoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
+  return new Set([...JAVA_ADAPTER_SURFACE.ignoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
 }
 
-/** Go 生产者忽略集合 = GoLanguageAdapter().defaultIgnoreDirs ∪ 通用集合。 */
+/** Go 生产者忽略集合 = 采集面 GO_ADAPTER_SURFACE.ignoreDirs ∪ 通用集合。 */
 function goIgnoreDirs(): ReadonlySet<string> {
-  return new Set([...new GoLanguageAdapter().defaultIgnoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
+  return new Set([...GO_ADAPTER_SURFACE.ignoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
 }
 
 /**

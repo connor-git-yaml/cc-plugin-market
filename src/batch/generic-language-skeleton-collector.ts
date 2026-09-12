@@ -55,6 +55,7 @@ function resolveAdapterForFile(
     const surface: CollectorPipelineSurface = {
       extensions: adapter.extensions,
       matchSemantics: 'case-insensitive',
+      ignoreDirs: adapter.defaultIgnoreDirs,
     };
     if (surfaceMatchesFile(surface, filePath)) return adapter;
   }
@@ -80,7 +81,7 @@ function walkFiles(
   }
 
   // 并集采集面：本采集器按 `extname().toLowerCase()` 匹配，故语义为 case-insensitive。
-  const surface: CollectorPipelineSurface = { extensions, matchSemantics: 'case-insensitive' };
+  const surface: CollectorPipelineSurface = { extensions, matchSemantics: 'case-insensitive', ignoreDirs: adapterIgnoreDirs };
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);

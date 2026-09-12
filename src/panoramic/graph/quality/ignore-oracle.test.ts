@@ -17,29 +17,21 @@ import { createIgnoreOracle, GRAPH_COLLECTOR_IGNORE_DIRS } from './ignore-oracle
 import { checkLegacyAndIgnoredNodes } from './legacy-ignored-check.js';
 import type { GraphJSON } from '../graph-types.js';
 import { PY_SKELETON_IGNORE_DIRS, TSJS_SKELETON_IGNORE_DIRS } from '../../../batch/batch-orchestrator.js';
+import { PY_WALK_SURFACE, TSJS_SKELETON_WALK_SURFACE } from '../../../collector-surface.js';
 
-describe('ignore-oracle: 一致性单测', () => {
-  it('PY_SKELETON_IGNORE_DIRS ⊆ GRAPH_COLLECTOR_IGNORE_DIRS', () => {
-    for (const dir of PY_SKELETON_IGNORE_DIRS) {
-      expect(
-        GRAPH_COLLECTOR_IGNORE_DIRS.has(dir),
-        `PY_SKELETON_IGNORE_DIRS 中的 "${dir}" 应在 GRAPH_COLLECTOR_IGNORE_DIRS 内`,
-      ).toBe(true);
-    }
+describe('ignore-oracle: 一致性单测（F284：由单向 ⊆ 收紧为双向相等 + 引用同一性）', () => {
+  it('生产者导出的两组集合就是采集面事实源上的同一对象（=== 引用同一性）', () => {
+    expect(PY_SKELETON_IGNORE_DIRS).toBe(PY_WALK_SURFACE.ignoreDirs);
+    expect(TSJS_SKELETON_IGNORE_DIRS).toBe(TSJS_SKELETON_WALK_SURFACE.ignoreDirs);
   });
 
-  it('TSJS_SKELETON_IGNORE_DIRS ⊆ GRAPH_COLLECTOR_IGNORE_DIRS', () => {
-    for (const dir of TSJS_SKELETON_IGNORE_DIRS) {
-      expect(
-        GRAPH_COLLECTOR_IGNORE_DIRS.has(dir),
-        `TSJS_SKELETON_IGNORE_DIRS 中的 "${dir}" 应在 GRAPH_COLLECTOR_IGNORE_DIRS 内`,
-      ).toBe(true);
-    }
+  it('GRAPH_COLLECTOR_IGNORE_DIRS === TSJS ∪ PY（双向：生产者删一个目录名 oracle 必须跟着丢，反之亦然）', () => {
+    const union = new Set([...TSJS_SKELETON_IGNORE_DIRS, ...PY_SKELETON_IGNORE_DIRS]);
+    expect([...GRAPH_COLLECTOR_IGNORE_DIRS].sort()).toEqual([...union].sort());
   });
 
-  // 反向说明：GRAPH_COLLECTOR_IGNORE_DIRS 允许是两者的真超集（union 语义），
-  // 不要求恰好相等——未来某语言 collector 单独新增忽略目录，只需同步补充本集合，
-  // 不强制另一语言也认识该目录。
+  // 此前的说明"允许是两者的真超集"已随 F284 撤回：超集意味着 oracle 可以认识生产者不认识的目录，
+  // 生产者删掉一个目录名时 oracle 仍判它 ignored（fail-open）——正是 §12.1 R2 点名的守卫单向缺口。
 });
 
 describe('createIgnoreOracle', () => {

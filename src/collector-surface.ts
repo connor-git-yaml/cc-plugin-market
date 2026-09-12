@@ -38,12 +38,115 @@ import * as path from 'node:path';
  */
 export type ExtensionMatchSemantics = 'case-sensitive' | 'case-insensitive';
 
-/** 单条采集管线的 `{扩展集, 匹配语义}` 二元组。 */
+/** 单条采集管线的 `{扩展集, 匹配语义, 忽略目录}` 三元组。 */
 export interface CollectorPipelineSurface {
   /** 该管线识别的扩展名集合（一律以小写字面量声明，与生产者的比较基准对齐）。 */
   readonly extensions: ReadonlySet<string>;
   readonly matchSemantics: ExtensionMatchSemantics;
+  /**
+   * 该管线遍历时按**目录名**剪枝的集合（F284：忽略目录并入采集面事实源）。
+   *
+   * 此前这组名字散落在 12 处字面量（生产者 walk / 适配器 `defaultIgnoreDirs` / 图质量 ignore-oracle 的
+   * "字面量镜像"），守卫只断言 `producer ⊆ oracle` 单向——生产者删掉一个目录名时 oracle 仍判它 ignored
+   * （fail-open，F254/F255/F258/F259 反复踩的同一片区）。现在生产者与 oracle 都引用这里，两侧不可能再分叉。
+   *
+   * 边界（如实）：只表达"按目录名剪枝"这一维；各 walk 另有**点前缀目录一律剪枝**与 `.gitignore` 叠加过滤两条
+   * 共享规则，不在本字段内（改动它们属 `BEHAVIOR_VERSION_BUMP_RESPONSIBILITIES` 的 ignore-dirs-pruning 手工项）。
+   */
+  readonly ignoreDirs: ReadonlySet<string>;
 }
+
+/**
+ * F284：各管线的忽略目录集合。字面量**逐字**搬自原生产者（零行为变化，外部语料 A/B 见 specs/284-…/），
+ * 在此集中声明只为让每个名字只出现一次；改动任一集合仍须按 `BEHAVIOR_VERSION_BUMP_RESPONSIBILITIES`
+ * 的 `ignore-dirs-pruning` 条目 bump（忽略目录不进指纹分量——那是格式变更，另立卡）。
+ */
+const TSJS_SKELETON_WALK_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  'node_modules', '.git', 'dist', 'build', 'coverage', 'out', 'target',
+  '.next', '.nuxt', '.turbo', '.cache', 'tmp', '.tmp',
+  '__pycache__', '.pytest_cache', '.tox',
+]);
+const PY_WALK_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  'node_modules', '.git', '__pycache__', '.venv', 'venv',
+  'build', 'dist', 'coverage', 'out', 'target', '.tox',
+]);
+/** `JavaLanguageAdapter.defaultIgnoreDirs`（generic collector 按适配器并集剪枝）。 */
+const JAVA_ADAPTER_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  'target',   // Maven
+  'build',    // Gradle
+  'out',      // IntelliJ IDEA
+  '.gradle',  // Gradle 缓存
+  '.idea',    // IntelliJ 配置
+  '.settings', // Eclipse 配置
+  '.mvn',     // Maven Wrapper
+]);
+/** `GoLanguageAdapter.defaultIgnoreDirs`。 */
+const GO_ADAPTER_IGNORE_DIRS: ReadonlySet<string> = new Set(['vendor']);
+/**
+ * `utils/file-scanner.ts` 的通用忽略目录（与语言无关，spec 扫描与 module 派生扫描共用）。
+ * 与图 collector 各面不同：含 `specs` / `examples` / `fixtures` 等"spec 产物 / 示例"目录——图生产者会扫描
+ * 这些目录下的真实源码，故 ignore-oracle 的 union **不**包含本集合（见 ignore-oracle.ts 头注释）。
+ */
+const MODULE_DERIVATION_SCAN_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  // VCS
+  '.git',
+  // 测试产物和覆盖率
+  'coverage',
+  // 本工具的输出目录
+  'specs',
+  // 构建产物
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  // 第三方打包产物和依赖
+  'vendor',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'env',
+  // 示例/文档代码（通常不是核心源码）
+  'examples',
+  'example',
+  'worked',
+  'fixtures',
+  '__fixtures__',
+  'testdata',
+  'test-fixtures',
+  // CI/CD 和工具配置
+  '.cache',
+  '.parcel-cache',
+  '.turbo',
+]);
+/** `PythonLanguageAdapter.defaultIgnoreDirs`（registry 聚合 + `scanPyFiles` 的基底）。 */
+export const PYTHON_ADAPTER_DECLARED_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  '__pycache__',
+  '.venv',
+  'venv',
+  '.tox',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.eggs',
+]);
+/**
+ * `PythonLanguageAdapter.scanPyFiles` 的剪枝集 = 适配器声明集 ∪ Python 项目惯例（`test`/`tests`/`dist` 等）。
+ * 与 `#2 pyWalk` 的集合**不同**是既有设计差异，非缺陷（对照探针 `tests/adapters/python-adapter.test.ts::T-SC005-control`）；
+ * 差集两向（F284 对抗复审 W3 补全）：仅 #2 剪 = `build / coverage / out / target`（#11 会采、oracle 却按 #2 判 ignored，
+ * 既有假警报面，登记 M11）；仅 #11 剪 = `.mypy_cache / .pytest_cache / .eggs / test / tests`。
+ */
+const PYTHON_SYMBOL_SCAN_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  ...PYTHON_ADAPTER_DECLARED_IGNORE_DIRS,
+  'test', 'tests', 'dist', 'node_modules', '.git',
+]);
+/** `TsJsLanguageAdapter.defaultIgnoreDirs`（只经 registry 聚合进 file-scanner / debt-scanner，不是 #1 walk 的剪枝集）。 */
+export const TSJS_ADAPTER_DECLARED_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  '.next',
+  '.nuxt',
+]);
 
 /**
  * #1 TSJS skeleton walk（`batch/stages/source-discovery.ts::walkTsJsFiles`）。
@@ -61,6 +164,7 @@ export interface CollectorPipelineSurface {
 export const TSJS_SKELETON_WALK_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']),
   matchSemantics: 'case-sensitive',
+  ignoreDirs: TSJS_SKELETON_WALK_IGNORE_DIRS,
 };
 
 /**
@@ -70,6 +174,7 @@ export const TSJS_SKELETON_WALK_SURFACE: CollectorPipelineSurface = {
 export const PY_WALK_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.py', '.pyi']),
   matchSemantics: 'case-sensitive',
+  ignoreDirs: PY_WALK_IGNORE_DIRS,
 };
 
 /**
@@ -80,12 +185,14 @@ export const PY_WALK_SURFACE: CollectorPipelineSurface = {
 export const JAVA_ADAPTER_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.java']),
   matchSemantics: 'case-insensitive',
+  ignoreDirs: JAVA_ADAPTER_IGNORE_DIRS,
 };
 
 /** #3 go 分量（`adapters/go-adapter.ts`，匹配路径与语义同 java 分量）。 */
 export const GO_ADAPTER_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.go']),
   matchSemantics: 'case-insensitive',
+  ignoreDirs: GO_ADAPTER_IGNORE_DIRS,
 };
 
 /**
@@ -99,6 +206,7 @@ export const GO_ADAPTER_SURFACE: CollectorPipelineSurface = {
 export const MODULE_DERIVATION_SCAN_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts']),
   matchSemantics: 'case-insensitive',
+  ignoreDirs: MODULE_DERIVATION_SCAN_IGNORE_DIRS,
 };
 
 /**
@@ -130,6 +238,7 @@ export const MODULE_DERIVATION_SCAN_SURFACE: CollectorPipelineSurface = {
 export const PYTHON_SYMBOL_SCAN_SURFACE: CollectorPipelineSurface = {
   extensions: new Set(['.py', '.pyi']),
   matchSemantics: 'case-sensitive',
+  ignoreDirs: PYTHON_SYMBOL_SCAN_IGNORE_DIRS,
 };
 
 /**
@@ -235,5 +344,7 @@ export function mergeSurfaces(
   return {
     extensions: new Set([...a.extensions, ...b.extensions]),
     matchSemantics: a.matchSemantics,
+    // generic collector 对注入适配器的 defaultIgnoreDirs 取并集剪枝，合并面如实反映该行为
+    ignoreDirs: new Set([...a.ignoreDirs, ...b.ignoreDirs]),
   };
 }

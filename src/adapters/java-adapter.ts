@@ -27,15 +27,8 @@ export class JavaLanguageAdapter implements LanguageAdapter {
   /** F249 FR-002 #3：直接持有采集面事实源的引用（不复制字面量），失败模式退化为"导入断裂"。 */
   readonly extensions: ReadonlySet<string> = JAVA_ADAPTER_SURFACE.extensions;
 
-  readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
-    'target',   // Maven
-    'build',    // Gradle
-    'out',      // IntelliJ IDEA
-    '.gradle',  // Gradle 缓存
-    '.idea',    // IntelliJ 配置
-    '.settings', // Eclipse 配置
-    '.mvn',     // Maven Wrapper
-  ]);
+  // F284：忽略目录并入采集面事实源（引用同一性可被测试断言），字面量见 collector-surface.ts
+  readonly defaultIgnoreDirs: ReadonlySet<string> = JAVA_ADAPTER_SURFACE.ignoreDirs;
 
   /**
    * AST 分析（委托 TreeSitterAnalyzer）

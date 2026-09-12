@@ -112,10 +112,12 @@ a-track 另有第四个维度（F279 新增）：`graph.graph` 元数据 + 顶�
 比较器、护栏单测三处**无人读**——坏 stamp 一旦被烤进资产，此后 `fingerprintUnchanged`
 恒为 false ⇒ 拒绝判据恒不成立 ⇒ 整条护栏的拒绝语义永久失效。
 
-**第四维度不是全字段深比较**，以下三面目前零覆盖（已实证，登记为已知缺口）：边属性
-（`edgeKey` 只取 `source|relation|target`，`confidence`/`confidenceScore`/`directional`/
-`evidenceText`/`evidenceSource` 全不比）、节点非 facet 顶层字段、`GraphJSON` 除
-`directed`/`multigraph` 外的顶层字段（如 `hyperedges`）。
+**比较器不是全字段深比较**。F279 登记的三面零覆盖已由 **F284** 补上（比较器第 5/6/7 维）：边属性**值级**
+（同 `edgeKey` 组内 `confidence`/`confidenceScore`/`directional`/`evidenceText` 等全部属性按稳定序列化比对）、
+节点非 facet 顶层字段（key 集合）、`GraphJSON` 顶层 key 集合 + `hyperedges` 内容。**仍零覆盖**（如实登记）：
+metadata 值级 / 叶子类型档 / 数组内 key 改名（F279 移交面 #4–#6）；节点顶层非 facet 字段与图顶层非枚举字段的
+**值级**（第 6/7 维只比 key 名，字段入基线后其值可漂移不红——今天两面均为空集，真实脚本打不到）；hyperedges 对
+非确定性生产者（full 模式 UUID id / LLM 文本 / `nodes` 不排序）结构性恒红，内容比较只对确定性产出有意义。
 
 拒绝时脚本会打印 `[regen] 检测到指纹不可见的行为变更：先 bump behaviorVersion 再跑再生`。
 **这条通用文案对 metadata 维度不成立**：`src/panoramic/graph/collector-fingerprint.ts` 的六类
@@ -123,7 +125,8 @@ bump responsibility 全部是"哪些文件被计入采集面"，**没有一条�
 的再生记录（见上文）明写着"六类 responsibility 均不适用，故不 bump"。照着通用文案做一次
 bump，等于按权威清单判定为**错**的版本跳变。
 
-因此差异里出现 `metadata ` 开头的条目时，脚本会**额外**打印一条维度专属指引。处置路径是：
+因此差异里出现 `metadata ` / `节点顶层 key 集合` / `边属性` / `图顶层 key 集合` / `hyperedges ` 开头的条目时
+（F278 metadata 维 + F284 三维，同属"生产者字段 / 属性 / 结构"而非采集面），脚本会**额外**打印一条维度专属指引。处置路径是：
 
 1. 先确认这次改动**只是节点字段增删、采集面未变**（若采集面也变了，那才是六类 responsibility
    适用的场景，正常 bump）。

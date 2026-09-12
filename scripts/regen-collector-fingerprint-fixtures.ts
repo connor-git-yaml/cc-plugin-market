@@ -140,18 +140,25 @@ export function selectRegenDiagnostic(inputHashChanged: boolean): string {
  * "六类均不适用，故不 bump"）。只给那条文案，维护者就只剩两条路：做一次按清单为错的 bump，
  * 或 `rm expected-*.json && --init` 全绕过。这里补一条维度专属的处置指引来消掉这个死角。
  *
- * 判定用前缀而非关键词包含：三条 metadata 文案都以 `metadata ` 开头，b-track 的差异一律以
+ * 判定用前缀而非关键词包含：F278 的三条 metadata 文案以 `metadata ` 开头，F284 的三维以 `边属性` /
+ * `节点顶层 key 集合` / `图顶层 key 集合` / `hyperedges ` 开头（护栏角 W-2：新维度必须同步进这张前缀表，否则
+ * 拒绝路径只剩通用 bump 文案），b-track 的差异一律以
  * `moduleGraph` 开头，前缀判定不会把"某个 module 字段恰好叫 metadata"误算进来。
  */
+/** 不属于六类 bump responsibility 的「生产者字段 / 属性 / 结构」维度文案前缀（F278 metadata + F284 三维）。 */
+const PRODUCER_FIELD_DIMENSION_PREFIXES: readonly string[] = ['metadata ', '节点顶层 key 集合', '边属性', '图顶层 key 集合', 'hyperedges '];
+
 function printMetadataDimensionGuidance(differences: readonly string[]): void {
-  if (!differences.some((difference) => difference.startsWith('metadata '))) return;
+  const hit = PRODUCER_FIELD_DIMENSION_PREFIXES.filter((prefix) => differences.some((difference) => difference.startsWith(prefix)));
+  if (hit.length === 0) return;
   console.error(
-    '[regen] 上述差异含**节点 metadata key 集合**维度。注意 collector-fingerprint.ts 的六类 bump ' +
-      'responsibility 只覆盖"哪些文件被计入采集面"，不覆盖节点携带的字段集合——F271 给 symbol 节点新增 ' +
+    `[regen] 上述差异含 **${hit.map((prefix) => prefix.trim()).join(' / ')}** 维度（节点 metadata key 集合 / 节点顶层 key 集合 / ` +
+      '边属性值 / 图顶层 key 集合与 hyperedges：F278 + F284）。注意 collector-fingerprint.ts 的六类 bump ' +
+      'responsibility 只覆盖"哪些文件被计入采集面"，不覆盖节点携带的字段集合、边属性映射与图顶层结构——F271 给 symbol 节点新增 ' +
       'lineRange 时的留痕即写明"六类均不适用，故不 bump"。',
   );
   console.error(
-    '[regen] 因此若已确认本次只是节点字段增删、采集面未变：正确处置是删除两份 pinned 资产后跑 --init ' +
+    '[regen] 因此若已确认本次只是节点字段增删 / 边属性映射或图顶层结构变化、采集面未变：正确处置是删除两份 pinned 资产后跑 --init ' +
       `重建基线（rm ${GRAPH_ONLY_ASSET_FILENAME} ${MODULE_GRAPH_ASSET_FILENAME}），该路径会在 ` +
       `${REGEN_AUDIT_FILENAME} 留下审计记录；MUST NOT 为了让本脚本放行而做一次按 bump responsibility ` +
       '清单判定为错的 bump。',
@@ -591,22 +598,31 @@ function compareGraphMetadata(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
 }
 
 /**
- * a-track 严格结构比较，四个维度全部相等才判一致：
+ * a-track 严格结构比较，七个维度全部相等才判一致：
  *   1. 节点 id **multiset**
  *   2. 边 **multiset**（`source|relation|target`）
  *   3. 按 node id 分组的节点形态：`kind` / `label`（F279 新增）+ metadata **递归 key 路径集合**
  *      （F278 第三维度，F279 由顶层 key 下沉；只比 key 名不比 value）
  *   4. `graph.graph` 元数据 + 顶层 `directed`/`multigraph`（F279 新增，排除 `builder`）
+ *   5. 边属性**值级**（F284：按 `edgeKey` 分组、同计数组内属性稳定序列化的 multiset）
+ *   6. 节点顶层 key 集合（F284：`kind`/`label`/`metadata` 之外的顶层字段增删；只比 key 名不比值）
+ *   7. 图顶层 key 集合 + `hyperedges` 内容（F284：非数组形态单列签名；等计数异内容时列出两侧独有签名）
  *
- * **覆盖面的诚实边界（MUST NOT 把下面这段删掉换成"任何差异都会变红"）**：上面四个维度
- * **不是**全字段深比较，以下三面目前**零覆盖**，异构对抗审查已在真实 pinned 资产上逐条
- * 实证判绿（F279 登记为已知缺口、移交后续卡，不在本卡授权范围内）：
- *   - **边属性**：`edgeKey` 只取 `source|relation|target`，`GraphEdge` 的
- *     `confidence`/`confidenceScore`/`directional`/`evidenceText`/`evidenceSource` 全部不参与
- *     比较。实测：14 条边属性全改、三元组不动 ⇒ 再生脚本判"无需更新"并 exit 0。
- *   - **节点非 facet 顶层字段**：维度 3 只看 `kind`/`label`/`metadata` 三个 facet，
- *     给节点新增 `filePath`/`weight` 等顶层字段不报。
- *   - **`GraphJSON` 非 `directed`/`multigraph` 顶层字段**：如 schema v2.0 的 `hyperedges`。
+ * **覆盖面的诚实边界（MUST NOT 把下面这段删掉换成"任何差异都会变红"）**：上面的维度
+ * **不是**全字段深比较。F279 登记的三面零覆盖已由 F284 补上（边属性值级 / 节点顶层 key 集合 /
+ * 图顶层 key 集合 + `hyperedges` 内容），仍**零覆盖**的面（F279 移交、本卡未授权）：
+ *   - **metadata 叶子的类型档**：路径集合只记 key 名，`{a:{}}` 与 `{a:1}`/`{a:null}` 同签名。
+ *   - **数组内的嵌套 key 改名**：`spans:[{start,end}] → spans:[{from,to}]` 判绿（数组按叶子）。
+ *   - **metadata 值级比较**：沿用 F278 FR-008"只比 key 名不比 value"。
+ *   - **节点顶层非 facet 字段的值级** / **图顶层非枚举字段的值级**（护栏角 W-4）：维度 6/7 只比 key 名，
+ *     字段一旦经 `--init` 入基线，其值此后可无限漂移而不红；今天两面均为空集（22 节点顶层恰 id/kind/label/metadata，
+ *     图顶层恰 5 个已知 key），故真实脚本打不到——登记为潜伏面，收口时可照 `compareGraphMetadata` 的 denylist 值比较。
+ *   - **hyperedges 对非确定性生产者结构性恒红**（护栏角 W-5c）：full 模式产出的 `Hyperedge.id` 是 UUID v4、
+ *     `label`/`rationale` 是 LLM 文本、`nodes` 不排序；一旦 pinned 资产含 hyperedges，本维度每次再生必红。
+ *     graph-only 今天不产出 hyperedges，维度先于产出存在是为了抓「出现 / 消失」，内容比较只对确定性生产者有意义。
+ * 边属性为什么比**值**而 metadata 只比 key：边的属性面是有限的标量枚举 / 派生分（`confidence`、
+ * `confidenceScore` 由 confidence-mapper 确定性映射、`directional`、`evidenceText`），没有 metadata
+ * 那种浮点噪声与开放 schema；F279 实证的失效形态正是"值全改、三元组不动"，只比 key 抓不住。
  *
  * 为什么不复用 `scripts/graph-semantic-diff.mjs`：那是 F214 时代的 allowlist 式 diff，
  * 设计目标是"忽略已知可接受差异"；本护栏的目标正相反——**在其覆盖的维度内**，任何未预期
@@ -614,6 +630,159 @@ function compareGraphMetadata(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
  *
  * 为什么是 multiset 而非集合：重复边（同 source/relation/target 出现两次）是真实的图内容
  * 差异，用集合比较会把"边被复制了一份"判成一致。
+ */
+// ============================================================
+// F284：F279 移交的三面——边属性（值级）/ 节点顶层 key 集合 / 图顶层 key 集合 + hyperedges
+// ============================================================
+
+type GraphEdgeLike = GraphJSON['links'][number];
+
+/**
+ * 稳定序列化：对象按 key 排序后递归，数组保序。只用于**比较与诊断文案**，不写入任何资产。
+ * 为什么不直接 `JSON.stringify`：生产者拼装边对象的 key 顺序是实现细节，不是行为面；
+ * 让 key 顺序变化触发护栏等于把"重构"报成"行为漂移"。
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+/** 边除 `source`/`relation`/`target` 外的属性投影（值级）。 */
+function edgeAttributes(link: GraphEdgeLike): Record<string, unknown> {
+  const { source: _source, relation: _relation, target: _target, ...rest } = link as unknown as Record<string, unknown>;
+  return rest;
+}
+
+function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(item);
+    else groups.set(key, [item]);
+  }
+  return groups;
+}
+
+/**
+ * 边属性维度：按 `edgeKey` 分组，比较每组属性签名的 multiset。
+ * 计数不等的组跳过（上游"边计数不一致"已点名，再叠一条 multiset 文案是噪声：护栏角 I-2），只比两侧同 key 且
+ * 同计数的组；单边一组时给逐字段富诊断（含方向：重建 vs pinned）。
+ */
+function compareEdgeAttributes(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+  const differences: string[] = [];
+  const left = groupBy(rebuilt.links, edgeKey);
+  const right = groupBy(pinned.links, edgeKey);
+  for (const key of [...left.keys()].filter((k) => right.has(k)).sort()) {
+    const leftEdges = left.get(key) ?? [];
+    const rightEdges = right.get(key) ?? [];
+    if (leftEdges.length !== rightEdges.length) continue;
+    const leftSignatures = leftEdges.map((edge) => stableStringify(edgeAttributes(edge))).sort();
+    const rightSignatures = rightEdges.map((edge) => stableStringify(edgeAttributes(edge))).sort();
+    if (leftSignatures.join('\u0000') === rightSignatures.join('\u0000')) continue;
+    if (leftEdges.length === 1 && rightEdges.length === 1) {
+      const a = edgeAttributes(leftEdges[0]!);
+      const b = edgeAttributes(rightEdges[0]!);
+      const fields = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()
+        .filter((field) => stableStringify(a[field]) !== stableStringify(b[field]))
+        .map((field) => `${field}: 重建 ${stableStringify(a[field])} vs pinned ${stableStringify(b[field])}`);
+      differences.push(`边属性不一致（${fields.join('；')}）: ${key}`);
+    } else {
+      differences.push(`边属性 multiset 不一致（重建 ${leftSignatures.join(' | ')} vs pinned ${rightSignatures.join(' | ')}）: ${key}`);
+    }
+  }
+  return differences;
+}
+
+/**
+ * 节点顶层 key 集合维度：`kind`/`label`/`metadata` 三个 facet 之外的顶层字段（如 `filePath`/`weight`）
+ * 的增删。只比 key 名不比值（facet 的值级 / key 级判定各归各的维度）。
+ */
+function compareNodeTopLevelKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+  const differences: string[] = [];
+  const left = groupBy(rebuilt.nodes, (node) => node.id);
+  const right = groupBy(pinned.nodes, (node) => node.id);
+  const keysOf = (node: GraphNodeLike): string[] => Object.keys(node as unknown as Record<string, unknown>).sort();
+  for (const id of [...left.keys()].filter((k) => right.has(k)).sort()) {
+    const leftNodes = left.get(id) ?? [];
+    const rightNodes = right.get(id) ?? [];
+    const leftSignatures = leftNodes.map((node) => JSON.stringify(keysOf(node))).sort();
+    const rightSignatures = rightNodes.map((node) => JSON.stringify(keysOf(node))).sort();
+    if (leftSignatures.join('\u0000') === rightSignatures.join('\u0000')) continue;
+    if (leftNodes.length === 1 && rightNodes.length === 1) {
+      const a = new Set(keysOf(leftNodes[0]!));
+      const b = new Set(keysOf(rightNodes[0]!));
+      const extra = [...a].filter((k) => !b.has(k));
+      const missing = [...b].filter((k) => !a.has(k));
+      differences.push(`节点顶层 key 集合不一致（重建新增 [${extra.join(', ')}] / 重建缺失 [${missing.join(', ')}]）: ${id}`);
+    } else {
+      differences.push(`节点顶层 key 集合 multiset 不一致（重建 ${leftSignatures.join(' | ')} vs pinned ${rightSignatures.join(' | ')}）: ${id}`);
+    }
+  }
+  return differences;
+}
+
+/**
+ * 图顶层维度：`GraphJSON` 顶层 key 集合（如 schema v2.0 的 `hyperedges` 出现 / 消失）+ `hyperedges`
+ * 内容（存在时按稳定序列化的 multiset 比较）。graph-only 今天不产出 hyperedges——"今天不产出"正是
+ * F271 lineRange 盲区的同构条件，所以维度必须先于产出存在。
+ */
+function compareGraphTopLevel(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+  const differences: string[] = [];
+  const leftKeys = Object.keys(rebuilt as unknown as Record<string, unknown>).sort();
+  const rightKeys = Object.keys(pinned as unknown as Record<string, unknown>).sort();
+  if (JSON.stringify(leftKeys) !== JSON.stringify(rightKeys)) {
+    differences.push(`图顶层 key 集合不一致（重建 [${leftKeys.join(', ')}] vs pinned [${rightKeys.join(', ')}]）`);
+  }
+  // 护栏角 W-5a：非数组形态（{} / null / "corrupt"）不得折成 []——那会与「空数组」同签名而 key 集合维度又沉默
+  type HyperedgesShape = { kind: 'absent' | 'array' | 'non-array'; items: readonly unknown[]; type: string };
+  const hyperedgesOf = (graph: GraphJSON): HyperedgesShape => {
+    const raw = (graph as unknown as { hyperedges?: unknown }).hyperedges;
+    if (raw === undefined) return { kind: 'absent', items: [], type: 'absent' };
+    if (Array.isArray(raw)) return { kind: 'array', items: raw, type: 'array' };
+    return { kind: 'non-array', items: [], type: raw === null ? 'null' : typeof raw };
+  };
+  const describeShape = (shape: HyperedgesShape): string => (shape.kind === 'array' ? `array(${shape.items.length})` : `<${shape.kind}:${shape.type}>`);
+  const leftHyper = hyperedgesOf(rebuilt);
+  const rightHyper = hyperedgesOf(pinned);
+  if (leftHyper.kind === 'absent' && rightHyper.kind === 'absent') return differences;
+  if (leftHyper.kind === 'non-array' || rightHyper.kind === 'non-array') {
+    if (leftHyper.kind !== rightHyper.kind || leftHyper.type !== rightHyper.type) {
+      differences.push(`hyperedges 形态不一致（重建 ${describeShape(leftHyper)} vs pinned ${describeShape(rightHyper)}）`);
+    }
+    return differences;
+  }
+  const leftSignatures = leftHyper.items.map(stableStringify).sort();
+  const rightSignatures = rightHyper.items.map(stableStringify).sort();
+  if (leftSignatures.join('\u0000') !== rightSignatures.join('\u0000')) {
+    // 护栏角 W-5b：等计数异内容时说清两侧各自独有的签名（multiset 差集），不再只报条数
+    const multisetMinus = (a: readonly string[], b: readonly string[]): string[] => {
+      const pool = [...b];
+      return a.filter((signature) => {
+        const at = pool.indexOf(signature);
+        if (at === -1) return true;
+        pool.splice(at, 1);
+        return false;
+      });
+    };
+    const onlyLeft = multisetMinus(leftSignatures, rightSignatures);
+    const onlyRight = multisetMinus(rightSignatures, leftSignatures);
+    const clip = (signature: string): string => (signature.length > 160 ? `${signature.slice(0, 160)}…` : signature);
+    differences.push(
+      `hyperedges 不一致（重建 ${leftSignatures.length} 条 vs pinned ${rightSignatures.length} 条）：仅重建有 ${onlyLeft.length} 条 / ` +
+        `仅 pinned 有 ${onlyRight.length} 条；首条差异 ${clip(onlyLeft[0] ?? onlyRight[0] ?? '')}`,
+    );
+  }
+  return differences;
+}
+
+/**
+ * a-track 严格结构比较入口（七维，逐维文档见上方「a-track 严格结构比较」注释——F284 把 5/6/7 维的实现插在
+ * 那段注释与本函数之间，导致本函数一度不挂任何文档注释；这里留一条入口注释指回去）。
  */
 export function compareGraphOnlyStructure(
   rebuilt: GraphJSON,
@@ -654,6 +823,11 @@ export function compareGraphOnlyStructure(
 
   const graphMetadataDifferences = compareGraphMetadata(rebuilt, pinned);
   differences.push(...graphMetadataDifferences);
+
+  // F284：F279 移交三面
+  differences.push(...compareEdgeAttributes(rebuilt, pinned));
+  differences.push(...compareNodeTopLevelKeys(rebuilt, pinned));
+  differences.push(...compareGraphTopLevel(rebuilt, pinned));
 
   return { mismatch: differences.length > 0, differences };
 }
