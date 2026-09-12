@@ -138,3 +138,5 @@ specs/190-scaffold-kb-mvp/trace.md
 
 # Feature 238 — Codex capability 探测 sidecar（install-time 本地诊断产物，非 tracked wrapper，FR-207）
 .codex/spec-driver-capability.md
+# F281：项目级 Codex 配置是机器专属（含绝对路径的 MCP 覆盖），不入库
+.codex/config.toml

@@ -22,12 +22,28 @@
  *   2. 清理路径由**同一个生效 home** 派生，而非硬编码 homedir()；
  *   3. 覆盖两种情形——unset/default（保持原有默认路径断言逐字不变）与 custom（新增）。
  * ─────────────────────────────────────────────────────────────────────────────
+ * 🔴 F281：真实家目录隔离 + cwd 独立
+ *
+ * 原缺陷（两条，同一根因：子进程继承了宿主机的 HOME 与 cwd）：
+ *   a. unset 场景的"默认 ~/.codex"就是**用户真实的** Codex 家目录——每跑一次 e2e 就在真家目录里
+ *      装两个插件再卸掉，测试变成了对用户状态的读写；
+ *   b. `codex` 以仓根为 cwd 启动，而仓根可能有机器专属、未跟踪的项目级 `.codex/config.toml`
+ *      （本机实况：`[mcp_servers.spectra] command = "node"` 覆盖了插件注册的 `command = "spectra"`），
+ *      且 Codex 只对真家目录 config 里登记为 trusted 的项目加载项目级配置——于是同一条测试
+ *      在主 checkout 必红、在 worktree 必绿，红绿取决于"在哪个目录跑"而不是被测代码。
+ * 修法：两个场景都给子进程一个**临时 HOME**（默认场景的 `~/.codex` 因而落到 `<tmpHome>/.codex`，
+ * 默认路径派生语义不变；trusted 登记为空，项目级配置天然不生效），并以 fixtureRoot 为 cwd；
+ * 临时 HOME 随清理链回收；`rm plugins/cache/<market>` 是否删对目录的守卫改在删家目录**之前**取证
+ * （否则整个家目录删掉后"cache 不存在"恒真，守卫空转）。
+ * 临时目录一律在 `beforeAll` 里创建：`describe.skipIf` 跳过时 describe 体仍被求值、afterAll 不跑，
+ * 若在收集期 mkdtemp，无 codex 的机器每跑一次全量就泄漏 5 个空目录（对抗复审 W-1 实测）。
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 
 const REPO_ROOT = resolve('.');
 
@@ -59,19 +75,33 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
   describe(`feature-213 codex plugin install e2e（${label}）`, () => {
     const suffix = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
     const market = `cc-plugin-market-e2e-${suffix}`;
-    const fixtureRoot = mkdtempSync(join(tmpdir(), 'codex-e2e-'));
-
+    let fixtureRoot = '';
+    // 🔴 F281：子进程的 HOME 是本场景专属的临时目录，真实家目录（含用户的 ~/.codex 与 trusted 登记）
+    // 对 codex 不可见；默认场景的 `~/.codex` 因而落到 <isolatedHome>/.codex。
+    let isolatedHome = '';
     // 🔴 W4 核心：生效的 Codex 家目录在此**唯一确定**，
     // 子进程环境与清理路径都从它派生 —— 二者不可能再指向不同目录。
-    const injectedCodexHome = makeCodexHome();
-    const effectiveCodexHome = injectedCodexHome ?? join(homedir(), '.codex');
+    let injectedCodexHome: string | undefined;
+    let effectiveCodexHome = '';
+    let marketCachePath = '';
+
+    // 临时目录只在套件真正执行时创建（skip 态零落盘，见头注释）
+    beforeAll(() => {
+      fixtureRoot = mkdtempSync(join(tmpdir(), 'codex-e2e-'));
+      isolatedHome = mkdtempSync(join(tmpdir(), 'codex-e2e-home-'));
+      injectedCodexHome = makeCodexHome();
+      effectiveCodexHome = injectedCodexHome ?? join(isolatedHome, '.codex');
+      marketCachePath = join(effectiveCodexHome, 'plugins', 'cache', market);
+    });
 
     const cleanupResults: CleanupStep[] = [];
     let cleanedUp = false;
+    /** `rm plugins/cache/<market>` 之后、删家目录之前取证：cache 是否真的没了（W4 守卫的取证点） */
+    let cacheResidueAfterRm: boolean | null = null;
 
-    /** 子进程环境：CODEX_HOME 由场景**显式**决定，绝不继承宿主机取值 */
+    /** 子进程环境：HOME 隔离到临时目录；CODEX_HOME 由场景**显式**决定，绝不继承宿主机取值 */
     function childEnv(): NodeJS.ProcessEnv {
-      const env: NodeJS.ProcessEnv = { ...process.env };
+      const env: NodeJS.ProcessEnv = { ...process.env, HOME: isolatedHome };
       if (injectedCodexHome === undefined) {
         delete env['CODEX_HOME'];
       } else {
@@ -80,8 +110,14 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
       return env;
     }
 
+    /**
+     * cwd 固定为 fixture 目录：仓根的项目级 `.codex/config.toml`（机器专属、未跟踪）不得参与。
+     * 这是双保险——HOME 隔离后 trusted 登记为空、项目级配置本就不加载（对抗复审 I-2 实测），
+     * 但 cwd 独立让断言不依赖 Codex 的 trust 语义细节。timeout：同步 spawn 挂起时 vitest 的
+     * testTimeout 打不断它，30s 硬上界让单步失败 loud 而非整场卡死。
+     */
     function codex(args: string[]) {
-      return spawnSync('codex', args, { encoding: 'utf-8', env: childEnv() });
+      return spawnSync('codex', args, { encoding: 'utf-8', env: childEnv(), cwd: fixtureRoot, timeout: 30_000 });
     }
 
     // cleanedUp flag 只用于**跳过重复的 codex 卸载命令与 rm**（test finally + afterAll 两处都会调用），
@@ -109,14 +145,16 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
       // <CODEX_HOME>/plugins/cache/<name>/ 缓存目录（会残留 <name>/<plugin>/<version> 空壳），
       // 必须显式 rm 兜底，否则每跑一次 e2e 泄漏一个 cc-plugin-market-e2e-* 缓存目录。
       // 🔴 W4：路径基于 effectiveCodexHome，**不再**硬编码 homedir()。
+      // 🔴 F281：cache 目录单独先删并立即取证（家目录整体删除之前），随后回收 fixture / 临时 CODEX_HOME / 临时 HOME。
       const rmSteps: Array<[string, string]> = [
-        ['rm plugins/cache/<market>', join(effectiveCodexHome, 'plugins', 'cache', market)],
+        ['rm plugins/cache/<market>', marketCachePath],
         ['rm fixtureRoot', fixtureRoot],
         // 自定义场景下这个临时 CODEX_HOME 整体是本测试造的，必须一并回收；
         // default 场景下 injectedCodexHome 为 undefined，此步不存在（步数因此按场景计算）。
         ...(injectedCodexHome !== undefined
           ? ([['rm 临时 CODEX_HOME', injectedCodexHome]] as Array<[string, string]>)
           : []),
+        ['rm 临时 HOME', isolatedHome],
       ];
       for (const [label2, target] of rmSteps) {
         try {
@@ -125,6 +163,9 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
         } catch (error) {
           cleanupResults.push({ label: label2, status: null, stderr: error instanceof Error ? error.message : String(error) });
         }
+        if (target === marketCachePath) {
+          cacheResidueAfterRm = existsSync(marketCachePath);
+        }
       }
     }
 
@@ -132,18 +173,20 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
     // 再做清理链汇总断言——即便主测试断言失败、异常已抛出，此处仍会跑，使清理失败不被遮蔽。
     afterAll(() => {
       cleanup();
-      // 3 步 codex 卸载 + 2 步 rm（default）/ 3 步 rm（custom，多一个临时 CODEX_HOME）
-      const expectedSteps = injectedCodexHome === undefined ? 5 : 6;
+      // 3 步 codex 卸载 + 3 步 rm（default：cache / fixtureRoot / 临时 HOME）/ 4 步 rm（custom，多一个临时 CODEX_HOME）
+      const expectedSteps = injectedCodexHome === undefined ? 6 : 7;
       expect(cleanupResults.length, `清理步数异常: ${JSON.stringify(cleanupResults)}`).toBe(
         expectedSteps,
       );
       expect(cleanupResults.every((r) => r.status === 0), `清理链有失败步: ${JSON.stringify(cleanupResults)}`).toBe(true);
 
-      // 🔴 W4 反向守卫：`rmSync(force:true)` 对**不存在**的路径同样返回成功，
-      // 因此"清理链全绿"本身并不能证明删对了目录。此处显式断言残留已消失，
-      // 使"操作 A 目录、清理 B 目录"的假绿无法再通过。
+      // 🔴 W4 反向守卫（F281 对抗复审 W-2 校正措辞）：本守卫保证的是「rm 步骤确实作用于 marketCachePath
+      // 且删净」——`rmSync(force:true)` 对不存在的路径同样返回成功，故取证点必须在 cleanup 内、删整个
+      // 临时家目录**之前**（否则恒真、守卫空转）。「操作 A 目录、清理 B 目录」的 A/B 分歧由安装期的正向检查
+      // （下方 it 内「安装产物确实落在本场景生效的 CODEX_HOME 下」）承担，两道守卫缺一不可。
+      expect(cacheResidueAfterRm, 'cache rm 步骤未执行，无法取证').not.toBeNull();
       expect(
-        existsSync(join(effectiveCodexHome, 'plugins', 'cache', market)),
+        cacheResidueAfterRm,
         `cache 残留在 ${effectiveCodexHome}，说明清理路径与生效 CODEX_HOME 不一致`,
       ).toBe(false);
     });
@@ -188,8 +231,9 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
 
         // 🔴 W4 新增：安装产物确实落在**本场景生效的** CODEX_HOME 下，
         // 而不是宿主机环境变量恰好指向的另一个目录。
+        // 🔴 F281：默认场景下这也证明 codex 走的是临时 HOME 派生的 ~/.codex，而非用户真实家目录。
         expect(
-          existsSync(join(effectiveCodexHome, 'plugins', 'cache', market)),
+          existsSync(marketCachePath),
           `未在 ${effectiveCodexHome} 下找到 marketplace cache，子进程实际用的可能是别的 CODEX_HOME`,
         ).toBe(true);
       } finally {
@@ -201,8 +245,9 @@ function defineScenario(label: string, makeCodexHome: () => string | undefined) 
 }
 
 describe.skipIf(!hasCodex)('feature-213 codex plugin install e2e', () => {
-  // 情形 1：显式 unset CODEX_HOME → codex 走默认 ~/.codex（原用例语义，断言逐字保留）
-  defineScenario('CODEX_HOME unset → 默认 ~/.codex', () => undefined);
+  // 情形 1：显式 unset CODEX_HOME → codex 走默认 ~/.codex（原用例语义，断言逐字保留；
+  // F281 起 ~ 是隔离的临时 HOME，不再是用户真实家目录）
+  defineScenario('CODEX_HOME unset → 默认 ~/.codex（HOME 隔离）', () => undefined);
 
   // 情形 2（W4 新增）：自定义 CODEX_HOME → 安装与清理都必须跟随到该目录
   defineScenario('自定义 CODEX_HOME', () => mkdtempSync(join(tmpdir(), 'codex-home-e2e-')));
