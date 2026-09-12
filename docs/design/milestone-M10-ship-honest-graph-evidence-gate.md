@@ -202,6 +202,7 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 - W-4 零断言用例 `watch-command.test.ts:229`（9090 块中唯一真阳性）；W-5 `graph-mcp-snapshot` fixture 用不合法 kind/sources、Layer B 承诺未兑现；W-6 `prepublishOnly` 缺 `test:plugins`（1840 用例）与 `typecheck:tests`；W-7 coverage 阈值无任何门禁执行。
 - INFO：7 处单点守护（变异只 1 红）；`repo-maintenance-sync-check` 主测试对 never-fail 零红；CI Test 步 13m07s（>10s 的 13 文件占累计 58.6%）；mjs gate 二跑；`claude-review.yml` 5 连败失效；Python pinned 在 CI 恒 unverifiable；perf anchor 停 4.3.0 且无自动消费者；**本地 pre-commit 的 graph-quality 结论建立在陈旧图上**（"只可见不判定"在开发机上=长期无人刷新，P0-C 收官时须裁决）。
 - 预存 flaky 6 条 ×3 隔离重跑全部不可复现（18 核开发机），维持"满载/CI 条件下 flaky"口径；无新 flaky。
+- **补交（串行全量）**：CI 同款 `VITEST_MAX_FORKS=1` 在干净 clone 上 8206 用例 **0 失败 / 414s**（并行 74s；用例累计 347s vs 并行 529s，并行争抢膨胀 35%）；预存 flaky 6 条在「隔离 ×3 / 并行全量 / 串行全量」三种条件下全部 0 失败。**旁证 F281 根因**：干净 clone 不含未跟踪的 `.codex/config.toml`，F213 e2e 在那里通过——主仓失败确由该项目级配置引起。CI 13m 主要是 4 vCPU runner 串行化，非测试失控；串行下最慢 5 文件占墙钟 31%（慢测试收敛卡收益依据）。
 
 ### 12.4 处置：批次 3 派发 + M10 尾 + M11 移交
 
