@@ -151,7 +151,7 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
   **口径缺陷 1 已按协议追加进计划文档**：尺子 `normalizeName()` 写于 F147，不认 F214/F260 之后的 `Class.method` 标签形态 → 把命中记成假阳性，Java 原始 0/0 是尺子伪影。两组读数并列落账、均不得单独引用；修尺子立小卡（§12），修完**重新取原始读数**作为 M10 收官对照组。**实质信号**：Java 调用边 recall 3.4%（53 条 calls 边 vs 5885 次真实调用）——P1-F 多语言 parity 缺口不是纸面推测；GORM recall 上限受"外部边界"（reflect/内建）结构性压制，正是 P0-C「诚实的零」三分的外部边界项。M-1/M-3 人工协议未执行（需人工）。
 - **🏁 M9 正式收官**：T063 第二轮两层 PASS + 版本号从本机 Info.plist 读取回填（ChatGPT.app 26.908.40834 / Codex Desktop 0.151.0），T039 勾选，M9 文档 status→closed。
 - **账本**：F279 ×5 + F278 ×5 全部流转（3 分流 F277 移交卡 / 1 新卡「scripts/tests 类型门禁」/ 1 分流 P1-F / 其余记录为 P0-C 收官证据）——按推荐项处置，可翻案。
-- **架构整洁 / 坏味道审查**：三路异构子代理并行（src 侧含 08-23 待证伪池 10 条逐条 verdict / spec-driver 引擎侧 / 测试守护资产 + CI 拓扑），结果见本条目下方追加节。
+- **架构整洁 / 坏味道审查**：三路异构子代理并行（src / spec-driver / 测试+CI，合计约 119 万 token），结论与债务清单见 **§12**；主线程复核三条最重发现全部成立。
 
 **2026-09-01（批次 2 体检 + 账本 20 条流转 + 发版链）**：
 - **F270（P0-A）部分交付 + 诚实更正**：账本主链落地（PostToolUse 采集器 / 判定器接账本 / `background_tasks` 在途三态 / 锚点三分修病根 iv / agent_id 归属 / US5 零落盘闸门 / 审计留痕 / 分发登记）；集成态审查（六 Phase 全 commit 后补做，五路异构三轮）再收 4 处 fail-open；**SC 诚实口径 6 真达成 / 4 部分 / 5 未达成**（vs 曾声称 13/15）。**病根 iii（GATE 暂停误判）原样存活、病根 v（状态竞态）零实现且被账本并发面加重、PENDING/长异步与 snapshot-stale 专码未做——全部移交 F276**。结构性教训入 F277：范围在 plan 阶段静默收缩且无对账点，是全部 over-claim 的根源。
@@ -166,3 +166,61 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 - **批次 2（2026-08-31 派发）**：F270=P0-A 门禁证据源换代 ∥ F271=P1-E 产品表面清扫 ∥ F272=P1-G 测试资产清淤；P1-K 等 P0-A 落地（避免同碰 SKILL/judge）；P1-F 下批。
 - **G0-4 两基线**：下轮（≈09-06，发布满一周）跑 adoption census + F241 冻结口径复测。
 - **T062/T063**：等用户升级 Codex ≥0.149 后执行（P0-B 已落地，前置齐了）。
+
+## 12. 架构整洁与坏味道审查结论（2026-09-12，三路异构子代理 + 主线程复核）
+
+> 只读审查，全部证据带 file:line；主线程亲自复核 src C-1、spec-driver W-1/W-2（均成立）。08-23 交界审查留下的「待证伪池」10 条本次逐条给 verdict。本节是批次 3 各卡的 SSoT，prompt 只做薄指针。
+
+### 12.1 src/（Spectra）— 1 critical + 15 warning，根因六条
+
+| 根因 | 现象（file:line 见子代理报告，此处摘要） |
+|---|---|
+| **R1 编排体无"阶段"一等概念** | `runBatch` 1474 行单函数（`batch-orchestrator.ts:298–1771`，F220 只外移 6 个取数 helper）；graph.json **三套装配配方**（runBatch 内联 / `buildAstGraphOnly` / `spectra graph` 降级品 sourceCommit=null）且 5 处提示引导用户跑降级品；`parseArgs` 934 行；MCP 与 CLI 两个 batch 入口各拼 option，走 MCP 丢 outputDir/excludeDirs 等 5 字段且不过 authGate |
+| **R2 事实源落在消费层** | 忽略目录 12 份字面量，`ignore-oracle.ts:107` 手抄一份 `source-discovery.ts:237/398` 已导出的常量，守卫只断言 `producer ⊆ oracle` 单向（生产者移除目录时 fail-open）——F254/F255/F258/F259 反复踩的同一片区 |
+| **R3 横切能力无宿主层** | LLM 调用 kernel ≥6 处、auth 三路分发写两遍（`llm-client.ts:305` / `llm-facade.ts:50`）、4 处裸 `new Anthropic` 只认 API key（订阅口径下结构性不可用）、**1055 行 mapreduce 生产不可达**（`--enable-adr` 帮助文案仍写"v4.0.1 临时禁用"）；git 访问散落 7 模块 3 私有 runner、全仓无 `killSignal`（F268 纪律未传播，`source-commit.ts` 在 MCP 热路径无 timeout）；原子写 4 份（F267 只修 1）；深比较器 3 家 2 份逐字副本 |
+| **R4 模块级可变单例 + 测试 reset 钩子** | 🔴 **C-1**：`panoramic/qa/index.ts:39` engineCache 无任何失效判据，`clearEngineCache` 生产零调用；MCP 同进程 `batch` 重建图后 `panoramic-query` **永远拿旧图**，且该工具不经 `runAgentContextTool`——F266 诚实返回面在此双重缺席。同根因：UnifiedGraph 进程级全局 + 12 个仅供测试的 reset 出口 |
+| **R5 注册表/开关是名义上的** | GeneratorRegistry 19 注册仅 12 经派发（6 adapter 走裸函数 + `query.ts` 第 4 条路径）；`spectra index` 产物 `.spectra/unified-graph.json` 在 src 内零读者（`incremental.ts` 实为 589 行非 1575，有 1 消费者——池子该条**部分误报**）；`getDependencies` 零实现，每 generator 全仓 walk ×2 + hash ×1 |
+| **R6 层级方向未定义** | 8 对跨目录依赖成环（logger 只在 panoramic、graph-types 反向依赖、utils→adapters、mcp→batch 内部）；`query-helpers.ts` 放错层；graph-quality ~900 行判定逻辑住在 CLI 文件里，MCP 侧只能另写 `isModuleNode` |
+
+**待证伪池 verdict**：#1/#2/#4/#5/#7/#9/#10 成立（#4 数字 7/19、#5 ≥6 套、#10 7 模块）、#8 成立（"三遍"应为 2 walk+1 hash）、#3 部分误报（真问题是 index 产物零读者）、#6 一半（12 份字面量成立；"walker 各自 spawn git"误报）。正面结论：F266 返回面结构清晰未重复 graph-quality 判据；F267 opt-in 形态干净；F274 指纹不构成"第 N 套比较器"；两个 import-resolver 已按 F181 收口非待修。另：MCP 实际注册 **18** 个工具（`server.ts:3`），M10 §0 写的 17 为旧数。
+
+### 12.2 plugins/spec-driver — 0 critical + 7 warning，根因三条
+
+| 根因 | 现象 |
+|---|---|
+| **R1 局部副本 + 形态匹配式收敛** | 入口守卫 **8 处手写**（含判定器 `fix-compliance-judge.mjs:1228` 单侧 realpath 无 try → 理论 fail-open；`extract-wrapper-body.mjs:135` / `detect-codex-capability.mjs:189` `catch→false` 静默不执行——`codex-skills.sh:163/191` 两处 CRITICAL-1 补丁正是其症状），memory「F247 全仓唯一守卫实现」与实况不符；`classifyErrorClass`×3、`isPlainObject`×4、`DELEGATION_TOOL_NAMES`×3（core/writer/reader 各一份，core↔reader 无守卫）、文档注入引擎 ×3、参数解析器 ×9 |
+| **R2 诊断族无共享结果模型** | 6 个 doctor/validator CLI 各自词表/退出码/解析器/渲染器：同一退出码 `1` 有 4 种含义、`2` 有 3 种；`judge-snapshot-doctor` 唯一无 JSON 通道；两份泛型 `parseFlags` 布尔哨兵类型不同（`'true'` vs `true`，F258 在 graph-consumption 修过的 `Number(true)` 隐患在 graph-bootstrap-status 未同步核查） |
+| **R3 九轮对抗审计内嵌为注释、合同滞后实现** | 闭包 10 文件 5382 行、core 注释占 60.4%；`tool_use_id→tool_result` **三套配对索引**（窗口/角色/聚合三开关各自手写）；双 tokenizer（`parseRenameOperands` 用 `trim()/\s` 违反自述纪律，实为冗余第二道）；`evaluate()` 358 行编排层承载改判定的磁盘逻辑；审计 schema 保留 4 个零产出点枚举（F276-C 删的 nonblock 路由）；`buildAuditEvent`/`tryAppendFailOpenEvent` 各拼一份 11 字段字面量 |
+
+**W-2（主线程复核成立）**：canonical `hooks.json` 新增未登记脚本会穿过 generator（`codex-hooks-generator.mjs:148–176` 第二循环只封 Claude-only 一侧）与两层门禁装进用户 `$CODEX_HOME/hooks.json`，`isOwnedEntry=false` ⇒ `--remove` 不回收、`validate --baseline` 当第三方数据保全——「守卫抓删不抓加」（F270 教训）在分发链未应用。**测试资产**：判定器主路径唯一真实 transcript 端到端用例硬编码本机 worktree slug，CI 恒 skip；F270「真实录制」只覆盖 3 个叶函数；8 处长度钉死断言。正面：F277 共享块 24 份副本 sha256 与模板逐一相等，SKILL↔脚本抽检 3 处无漂移。
+
+### 12.3 测试守护资产 + CI — 0 critical + 7 warning（21 组变异实验）
+
+- **W-1 类型检查结构性零覆盖量化**：`tsconfig` include 仅 src ⇒ tests 553 + src 测试 13 + scripts 3 个 `.ts` 与 242 个 `.mjs` 零类型门；临时 tsconfig 实跑 **543 处真实类型错误 / 117 文件**（`src/` 非测试 0 处）。
+- **W-2 F249 双轨护栏对边属性零检测**（真实 builder 变异：边 confidence 改值 → 护栏 52/52 全绿，而 F272 pinned 深比较 4 红、F220 charter 8 红）——F279 Out-of-Scope #1-#3 未立卡。
+- **W-3 门禁判据零钉住**：`fix-compliance-core.mjs:297` 操作数 `!== 2` 改 `< 2` → 829 用例零红（方向：跟随保真度非绕过）。
+- W-4 零断言用例 `watch-command.test.ts:229`（9090 块中唯一真阳性）；W-5 `graph-mcp-snapshot` fixture 用不合法 kind/sources、Layer B 承诺未兑现；W-6 `prepublishOnly` 缺 `test:plugins`（1840 用例）与 `typecheck:tests`；W-7 coverage 阈值无任何门禁执行。
+- INFO：7 处单点守护（变异只 1 红）；`repo-maintenance-sync-check` 主测试对 never-fail 零红；CI Test 步 13m07s（>10s 的 13 文件占累计 58.6%）；mjs gate 二跑；`claude-review.yml` 5 连败失效；Python pinned 在 CI 恒 unverifiable；perf anchor 停 4.3.0 且无自动消费者；**本地 pre-commit 的 graph-quality 结论建立在陈旧图上**（"只可见不判定"在开发机上=长期无人刷新，P0-C 收官时须裁决）。
+- 预存 flaky 6 条 ×3 隔离重跑全部不可复现（18 核开发机），维持"满载/CI 条件下 flaky"口径；无新 flaky。
+
+### 12.4 处置：批次 3 派发 + M10 尾 + M11 移交
+
+**批次 3（2026-09-12 派发，编号已查空闲，写入路径 disjoint 可并行；门禁链串行）**：
+
+| 卡 | 类型 | 内容 | 来源 |
+|---|---|---|---|
+| **F280** | fix · small · **critical** | `panoramic-query` 引擎缓存按 mtime+size 失效（复用 `graph-tools.ts:59–66` 判据）+ 接 F266 诚实 envelope | 12.1 C-1 |
+| **F281** | fix · small · 安全 | F213 e2e「默认 ~/.codex」场景隔离：禁止对真实 home mutate、cwd 项目级 `.codex/config.toml` 不得影响断言；`.codex/config.toml` 入 gitignore（含机器绝对路径） | 批次 3 体检 |
+| **F282** | fix · small | G0-4 尺子：`graph-accuracy.mjs normalizeName` 显式支持 `Class.method`；census 与 08-23 ad-hoc 口径差异核对；修完按协议重取原始读数作 M10 收官对照组 | §11 09-12 口径缺陷 |
+| **F283** | fix · small · **门禁类** | Codex hooks 归属表派生化（generator 对非 owned∪claude-only handler fail-loud + 两表键集相等守卫）+ `DELEGATION_TOOL_NAMES` 单源 + `parseRenameOperands` 变异钉住矩阵 | 12.2 W-2 / 12.3 W-3 |
+| **F284** | fix · small | 采集面 SSoT 扩到忽略目录（`collector-surface.ts` per-pipeline ignoreDirs，消费方改引用，守卫双向）+ F249 护栏补边属性/节点顶层/hyperedges 三面 | 12.1 W-5 / 12.3 W-2 |
+| **F285** | story · small | 发布/CI 门补齐：`prepublishOnly` 加 `test:plugins` + `typecheck:tests`；coverage 阈值接 CI 或删并改 F150/F171 口径；`tsconfig.tests.json` 进 CI 只报不阻断；mjs gate 二跑清理；`claude-review.yml` 删/修 | 12.3 W-1/W-6/W-7 |
+| **F286** | story · medium | P1-K/F277 移交承接：FR-010~013（审查 agent 写盘/证据契约、预跑注入证据包）+ 账本分流的「向后兼容类 SC 验证模板」「产出型子代理先 Write 主制品」等 | F277 verification-report + ledger |
+| **F287** | fix · medium · **门禁类·串行链头** | P0-A 残余卡 A：G0 诊断码 canonical 表 + userFacing 白名单 / G3 PENDING / G4 snapshot-stale + **K-1 入口守卫收敛为 `isInvokedDirectly`**（同文件顺手） | specs/276 handoff + 12.2 W-1 |
+
+门禁串行链：**F287（卡 A）→ 卡 B（G1 锁 + 计数幂等 + G2 路由半边，取号待 A ship）→ 续做/旁链入口卡**。F283 与 F287 主要文件 disjoint（generator/schema vs judge/io），先 ship 先 push。
+
+**M10 尾（P1 既有轨道，按容量）**：P1-F 多语言 parity（Java 调用边 recall 3.4% 实锤 + `.mjs` 顶层具名导出 symbol 缺席待判）、P1-H 评测前置、P1-I 诚实工具面（tokenBudget / 确定性回归）、P1-J 检索内核 v1 + ARB 基准、P1-L brainstorm、P1-M Spec Drift adoption、P1-N Codex 运行时跟进。
+
+**M11 移交（架构还债，立卡前按本节证据复核，不照单开工）**：共享 git runner（timeout+SIGKILL）；graph.json 单一装配函数 + `spectra graph` 裁决；LLM 调用面收敛 + mapreduce 1055 行接通或删；`spectra index` 产品面裁决；MCP/CLI batch option resolver 共用；原子写收编 3 处；深比较器合一；GeneratorRegistry 二选一；logger/graph-types 下沉 + query-helpers 归位 + graph-quality 判定逻辑下沉；getDependencies 实现或删；parseArgs 拆表；runBatch 真·分阶段（large）；spec-driver 诊断结果模型 `diagnostic-cli.mjs`；审计事件合同清扫；判定器主路径真实语料入库 + 长度钉死断言清理；回执索引抽象；文档注入引擎合一；小清扫（JSDoc/`--format` 双解析/SKILLS 单源/runId 同源/dev spike 移出）；慢测试收敛（CI 13m）；graph-mcp-snapshot 资产更新；零守护用例清理 + F272 A 类 64 条；perf anchor 重采 + 自动消费者。
+
