@@ -13,20 +13,11 @@
  */
 import { statSync } from 'node:fs';
 import { GraphQueryEngine } from './graph-query.js';
-import type { GraphJSON } from './graph-types.js';
+import type { LoadedGraphEvidence } from './graph-types.js';
 
-/**
- * 一次成功加载的图 + 验证它的那次 stat 的文件元数据。
- * mtimeMs / sizeBytes 与 graphData 严格同源（就是决定复用或重载这份 engine 的那次 stat）；
- * 消费方（F266 honesty 标注、反向邻接表 cache key）据此绑定"就是这份图"，**不得另行 stat / 加载**
- * （F280 对抗复审 W-1：二次加载会描述另一份图；C-1：加载期错误会翻转工具成功状态）。
- */
-export interface LoadedGraphEvidence {
-  graphData: Readonly<GraphJSON>;
-  graphPath: string;
-  mtimeMs: number;
-  sizeBytes: number;
-}
+// `LoadedGraphEvidence` 的定义在纯类型模块 graph-types.ts（避免 type-only 消费方经本模块拖进 graph-query 值依赖）；
+// 此处转发导出，既有 import 面不变。
+export type { LoadedGraphEvidence };
 
 /** 缓存条目 = engine + 验证它的那次 stat */
 export interface CachedEngine {

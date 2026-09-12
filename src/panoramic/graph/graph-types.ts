@@ -284,3 +284,17 @@ export interface BuildGraphOptions {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   unifiedGraph?: any;
 }
+
+/**
+ * 一次成功加载的图 + 验证它的那次 stat 的文件元数据（F280；定义在纯类型模块以免 type-only import 把
+ * `engine-cache` → `graph-query` 的值依赖拖进严格类型程序——tests/type-tests 的 exactOptionalPropertyTypes 程序
+ * 曾因此从 10 文件膨胀到 96 文件、CI 变红）。
+ * mtimeMs / sizeBytes 与 graphData 严格同源（就是决定复用或重载这份 engine 的那次 stat）；消费方
+ * （F266 honesty 标注、反向邻接表 cache key）据此绑定"就是这份图"，**不得另行 stat / 加载**。
+ */
+export interface LoadedGraphEvidence {
+  graphData: Readonly<GraphJSON>;
+  graphPath: string;
+  mtimeMs: number;
+  sizeBytes: number;
+}

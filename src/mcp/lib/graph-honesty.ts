@@ -20,8 +20,9 @@
 import type { GraphJSON, GraphNode } from '../../panoramic/graph/graph-types.js';
 import type { GraphFreshnessVerdict } from '../../panoramic/graph/quality/quality-types.js';
 import { evaluateFreshness } from '../../panoramic/graph/source-commit.js';
-import type { LoadedGraphEvidence } from '../../panoramic/graph/engine-cache.js';
-import type { NaturalLanguageHonestyInputs } from '../../panoramic/query.js';
+// 两个类型都从纯类型模块取：经 engine-cache / query.ts 取会把值依赖（graph-query、三个 generator）拖进 type-only 消费方的程序
+import type { LoadedGraphEvidence } from '../../panoramic/graph/graph-types.js';
+import type { NaturalLanguageHonestyInputs } from '../../panoramic/qa/types.js';
 import {
   getBuilderStamp,
   parseGraphBuilderStamp,

@@ -3,7 +3,7 @@
  * 包含 BatchMode、QnAQuery、QnAAnswer、Citation、GraphContext 等所有 F5 公开类型
  */
 
-import type { LoadedGraphEvidence } from '../graph/engine-cache.js';
+import type { LoadedGraphEvidence } from '../graph/graph-types.js';
 
 // ============================================================
 // 轻量模式类型（Story 1）
@@ -139,4 +139,17 @@ export interface GraphHtmlOptions {
    * "极小图"banner（节点数 < 3 时）。未传时不显示 banner，与旧版兼容。
    */
   nodeCount?: number;
+}
+
+/**
+ * F280：natural-language 分支随结果带回、供 MCP 层装配 F266 honesty 的两项输入（不进序列化面 `data`）：
+ *  - graph：产出答案时实际使用的那份图（null = 图加载失败、走了 graph-insufficient 回退）
+ *  - resultsEmpty：citations 为空（三种 canned 零结果 + LLM 未引用任何图节点）。这是「零引用」而非严格的「零图证据」：
+ *    rag-only 等「图有证据但不足」形态也落此类——resolutionOmitted 的成因文案（non-caller-oriented-query）对其仍为真
+ * 定义在本纯类型模块而非 `panoramic/query.ts`：后者值依赖三个 generator，type-only import 它会把整片 panoramic
+ * 拖进 tests/type-tests 的 exactOptionalPropertyTypes 程序（CI 曾因此变红）。
+ */
+export interface NaturalLanguageHonestyInputs {
+  graph: LoadedGraphEvidence | null;
+  resultsEmpty: boolean;
 }

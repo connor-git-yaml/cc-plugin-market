@@ -9,7 +9,7 @@ import { CrossPackageAnalyzer } from './generators/cross-package-analyzer.js';
 import { ArchitectureIRGenerator } from './generators/architecture-ir-generator.js';
 import { ArchitectureOverviewGenerator } from './generators/architecture-overview-generator.js';
 import { answerQuestion } from './qa/index.js';
-import type { LoadedGraphEvidence } from './graph/engine-cache.js';
+import type { NaturalLanguageHonestyInputs } from './qa/types.js';
 
 // F5：新增 natural-language operation（FR-009）
 export type PanoramicOperation = 'cross-package' | 'architecture-ir' | 'overview' | 'natural-language';
@@ -21,16 +21,8 @@ export interface PanoramicQueryOptions {
   question?: string;
 }
 
-/**
- * F280：natural-language 分支随结果带回装配 F266 honesty 所需的两项输入（不进 `data`，不序列化）：
- *  - graph：产出答案时实际使用的那份图（null = 图加载失败、走了 graph-insufficient 回退）
- *  - resultsEmpty：citations 为空（三种 canned 零结果 + LLM 未引用任何图节点）。这是「零引用」而非严格的「零图证据」：
- *    rag-only 等「图有证据但不足」形态也落此类——resolutionOmitted 的成因文案（non-caller-oriented-query）对其仍为真
- */
-export interface NaturalLanguageHonestyInputs {
-  graph: LoadedGraphEvidence | null;
-  resultsEmpty: boolean;
-}
+// `NaturalLanguageHonestyInputs` 定义见 ./qa/types.ts（纯类型模块），此处转发导出保持既有 import 面
+export type { NaturalLanguageHonestyInputs };
 
 export type PanoramicQueryResult =
   | { ok: true; data: unknown; honestyInputs?: NaturalLanguageHonestyInputs }
