@@ -127,3 +127,23 @@ describe('graph-accuracy (Sprint 3 Phase B.1)', () => {
     expect(result.notes.some((n) => n.includes('contains-only'))).toBe(true);
   });
 });
+
+describe('F282 normalizeName — Class.method 标签形态（F214/F260 之后 method 节点 label）', () => {
+  it('把 Class.method 归一化为裸方法名，与 truth-set 的裸 callee 名对齐', async () => {
+    const mod = (await loadGraphAccuracy()) as GraphAccuracyModule & { normalizeName: (s: string) => string | null };
+    expect(typeof mod.normalizeName).toBe('function');
+    expect(mod.normalizeName('Association.Replace')).toBe('Replace');
+    expect(mod.normalizeName('HikariDataSource.isClosed')).toBe('isClosed');
+    expect(mod.normalizeName('association.go::Association.Replace')).toBe('Replace');
+    expect(mod.normalizeName('pool/HikariPool.java::HikariPool.getConnection()')).toBe('getConnection');
+  });
+
+  it('既有形态不回退：文件后缀 / 前导点 / :: / # / ()', async () => {
+    const mod = (await loadGraphAccuracy()) as GraphAccuracyModule & { normalizeName: (s: string) => string | null };
+    expect(mod.normalizeName('engine.py')).toBe('engine');
+    expect(mod.normalizeName('.tanh')).toBe('tanh');
+    expect(mod.normalizeName('engine.py#Value')).toBe('Value');
+    expect(mod.normalizeName('test_sanity_check()')).toBe('test_sanity_check');
+    expect(mod.normalizeName('')).toBeNull();
+  });
+});

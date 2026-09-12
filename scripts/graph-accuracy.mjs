@@ -145,7 +145,19 @@ function classifyEdges(links) {
   return { callEdges, containmentEdges, otherEdges };
 }
 
-function normalizeName(s) {
+/**
+ * 把 graph 侧 callee label 与 truth-set 侧 callee 名归一化到同一形态（两侧对称调用）。
+ *
+ * F282（2026-09-12）：F214 canonical ID + F260 实例方法调用边之后，method 节点 label 为
+ * `Class.method`（如 `Association.Replace` / `HikariDataSource.isClosed`），而 tree-sitter
+ * truth-set 提取的是裸方法名（`Replace` / `isClosed`）——首次 G0-4 复测把命中记成假阳性，
+ * HikariCP 原始读数 0/0 是本函数不认该形态造成的伪影（见 docs/design/f265-graph-quality-rerun-plan.md
+ * 「口径缺陷 1」）。修法：文件后缀剥离**之后**取最后一个 `.` 段；因两侧同一函数，
+ * truth 侧若含 `pkg.func` 形态也同样取尾段，保持对称。
+ *
+ * why 导出：让单测直接钉住归一化矩阵（此前只能经 analyzeGraphAccuracy 黑盒触达）。
+ */
+export function normalizeName(s) {
   // 去掉路径前缀 / 文件后缀，只保留 symbol 名
   // graphify 节点 label 形如 "test_sanity_check()" / "Value" / "engine.py" / ".tanh"
   if (!s) return null;
@@ -161,7 +173,9 @@ function normalizeName(s) {
   if (n.includes('#')) n = n.split('#').pop();
   // 去掉 .py / .ts 后缀
   n = n.replace(/\.(py|ts|tsx|js|jsx)$/, '');
-  return n;
+  // F282：`Class.method` → `method`（须在后缀剥离之后，否则 `engine.py` 会被切成 `py`）
+  if (n.includes('.')) n = n.split('.').pop();
+  return n || null;
 }
 
 function computeCallAccuracy(callEdges, nodeLabelIdx, truthCallTargets) {

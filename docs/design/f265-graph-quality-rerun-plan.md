@@ -298,3 +298,41 @@ census 脚本与 M-1 是**互补**关系，不是替代关系：census 给分母
 - **处置**：冻结口径的原始读数**照记不改**（上表）；同时以 scratchpad 副本（仅在 `normalizeName` 末尾追加「取最后一个 `.` 段」）产出**对照读数**，两组并列落账，均不得单独引用。修尺子立独立小卡（`normalizeName` 显式支持 `Class.method`，并给 F150 时代的 truth-set 提取加同形态测试），修完后按本协议**重新取一次原始读数**作为 M10 收官对照组。
 - **不构成本缺陷的部分**：GORM `sampleMissed` 里 `ValueOf / Indirect / len / make / Kind` 属标准库 / 内建（外部边界），图按设计不出这类边——这是 recall 的结构性上限（M10 P0-C「诚实的零」三分里的「外部边界」），不是漏检；报 recall 时须附「truth 含外部边界调用」说明。
 
+### 缺陷 1 处置结果（F282，2026-09-12）：尺子已修，重取读数
+
+`normalizeName` 已在文件后缀剥离后取最后一个 `.` 段（两侧对称）。按 §2.2 冻结命令重取（语料 SHA 按 §2.1，输出含 `baseline{repo,commit,scope}`；builder 溯源见下）。**两组读数都取、都落账**（缺陷 2 的处置）：
+
+**协议口径读数**（与 2026-09-12 修前读数、F241 同口径可比；GORM 一行受缺陷 2 的 scope 错位污染，precision 不承载边正确性信息）：
+
+| 语料 | callPrecision | callRecall | hits / graphCallees / truth |
+|---|---|---|---|
+| GORM (Go) @688e8ea0，truth 仅顶层 13 文件（`--ignore-dirs`） | 0.587 | 0.307 | 71 / 121 / 231 |
+| HikariCP (Java) @ea81bfb5，truth 全仓 | 1.0 | 0.034 | 28 / 28 / 819 |
+
+**口径一致读数**（图与 truth 同为全仓；GORM 去掉 `--ignore-dirs`、`--baseline-scope gorm-full-repo`，其余参数不变）：
+
+| 语料 | callPrecision | callRecall | hits / graphCallees / truth | 可达 recall 上界（truth ∩ 图内定义符号） |
+|---|---|---|---|---|
+| GORM (Go) @688e8ea0 | 1.0 | **0.184** | 121 / 121 / 658 | 未取（全仓 truth 未分解） |
+| HikariCP (Java) @ea81bfb5 | 1.0 | **0.034** | 28 / 28 / 819 | 28 / 329 = **0.085** |
+
+**M10 收官对照组 = 口径一致读数的 recall 轴**（GORM 0.184、HikariCP 0.034 / 可达上界 0.085）。precision 轴在本尺子下结构性 ≈ 1.0（缺陷 3），不作对照。修前原始读数（GORM 0.496/0.273、HikariCP 0/0）保留在上一节作为口径缺陷证据，不再引用。
+
+builder 溯源（如实）：两份 graph.json `graph.builder = { commit 37b1f814, dirty: true, distSha256 b0e74f2c… }`，与本仓 `dist/.spectra-build-meta.json` 的 `distSha256` **逐字相等**（F261 D1 口径：戳只可见不判定）。`commit` 字段是建图时工作树的戳，取数时 HEAD 已前移到 00684522 但 dist 内容未变——"builder == HEAD" 只在 distSha256 这一层成立。PATH 上的 `spectra` 是 4.5.0 发布件，不是建图者（建图走本仓 dist）。
+
+### 缺陷 2（F282 对抗复审发现）：GORM 协议口径 scope 错位——图全仓建、truth 只扫顶层
+
+- **机制**：§2.2 的 GORM 命令用 `--ignore-dirs schema,callbacks,…` 把 truth 限到 13 个顶层文件，但 `spectra batch` 在语料根目录**全仓**建图。192 条 `calls` 边里源在顶层的 75 条、在子包的 117 条；121 个唯一 callee = 顶层源 55 个 **55/55 命中** + 仅子包源 66 个 **16/66 = 0.242**，后者与「目标随机替换」基线 0.239 ± 0.027（300 trials）无差别。即 0.587 = 100% 与随机数按子包边占比的加权平均，**不含任何边正确性信息**；图越好（P1-F 修出子包正确边）该数越低——敏感性：给图加 40 个 callbacks/ 里真实存在的函数名作 callee → 顶层口径 precision 0.587 → 0.486。（分解与敏感性由对抗复审脚本产出、主线程复算一致；脚本未入库。）
+- **处置**：按 §0 不回改定义、只追加：协议口径读数照记（仅用于与 F241 / 修前同口径对照），另取口径一致读数（上表）；M10 收官对照组改用口径一致 recall。后续每次复跑两组都取、都落账。
+- **顺带实证**：`callbacks/create.go::AfterCreate` 在协议口径被记 FP 与边对错无关（源与目标都在 callbacks/，truth 根本没扫）；它其实**真是假边**（`callbacks/create.go:229` 的接口调用 `i.AfterCreate(tx)` 被解析到同名包级函数 `:223`），口径一致后尺子反而把它记成 hit——见缺陷 3。
+
+### 缺陷 3（F282 对抗复审发现）：label-only 尺子的 precision 轴在口径一致时结构性 ≈ 1.0
+
+- **机制**：图的 `calls` 边就是从 truth extractor 扫的同一批调用表达式解析出来的，callee **名字**必然在 truth 里；FP 只能来自 scope 错位。实测 5/5 语料口径一致 precision 恰为 1.000（HikariCP 28/28、GORM 全仓 121/121、self-dogfood src 770/770、micrograd 4/4、nanoGPT 20/20）。
+- **盲区 = 本仓一直在打的同名误解析假边**（F242 / F259 / F263）：除缺陷 2 的 `AfterCreate`，GORM `callbacks.go::Register` 节点 lineRange {182,232} 把 `processor.Register`(:182) 与 `callback.Register`(:227) 合成一个节点；103/192 GORM 边、14/53 HikariCP 边的源是 module 节点（caller 归属已退化到文件级）——尺子都看不见。随机目标替换基线 HikariCP 0.493 ± 0.066：尺子只能识别随机垃圾，识别不了真实失效形态。
+- **处置**：precision 不再作为图精度证据引用；只有 recall 轴有信息量。symbol 级（source symbol × target symbol）尺子与 Go 同名不同 receiver 合并节点问题移交 M11（M10 §12.4 债务清单）。
+
+### 口径说明（F282 对抗复审 W-2 / W-3，追加）
+
+- **recall 分母含外部边界**：HikariCP 819 个 truth 名里仅 329 个对应图内定义的符号（其余为 JDK / 外部：`getLogger` / `toCharArray` / `AtomicReference` …），可达 recall 上界 28/329 = 0.085 而非 0.034；且图缺 `private` 方法节点（`HikariConfig.java:1147 checkIfSealed`、`:1194 loadProperties` 无节点）——P1-F parity 缺口一部分在**符号抽取层**，不全在调用边。GORM 顶层口径同理：231 个 truth 名对应图内符号 129 个，可达上界 71/129 = 0.550。报 recall 时须同时给两个分母（与 F260「分母污染 11×→3.03×」同类教训）。
+- **尺子换代后跨语言读数不可比**：同图同 truth 只换尺子（对抗复审 A/B 脚本产出，未入库）：micrograd 0.75/0.083 → 1.0/0.111；nanoGPT 0.333/0.040 → 1.0/0.113；self-dogfood(src) 0.778/0.268 → 1.0/0.328。F151 SC-002 阈值（≥0.70 / ≥0.30）与入库 anchor `tests/baseline/{micrograd,nanoGPT}/graphify/full.json` 的 callPrecision 是旧尺子产物，与 F282 之后任何复跑不可比；下次 baseline 升版时重取并在 fixture 里标尺子版本。

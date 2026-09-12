@@ -384,6 +384,11 @@ export async function runCensus(options = {}) {
 
   return {
     generatedAt: new Date().toISOString(),
+    // F282：计数单位显式化——只数结构化 tool_use 块（Claude `assistant.message.content[].tool_use`、
+    // Codex `function_call` / `mcp_tool_call_end`），子代理 transcript 一并扫描；**不数**文本里对
+    // 工具名的提及（hook 反馈 / 摘要 / 助手正文）。2026-08-23 交界审查的 ad-hoc grep（70 次/月）
+    // 把文本提及也算进去了，与本尺子读数不可比。
+    countingUnit: 'structured tool_use blocks (Claude assistant tool_use / Codex function_call & mcp_tool_call_end); subagent transcripts included; text mentions excluded',
     sourceDirs,
     sourceStatus,
     tools,
