@@ -482,3 +482,6 @@
 - [MCP 可用性][Spectra] 本卡 Spectra MCP 仅 plan 阶段调用过 impact / context 作旁证（图 stale，未能当主证），specify / implement 各段 / verify / Phase E 均未调用（换算式：有效主证调用 0 ÷ 6 Phase = 0%，单位：Phase）——不是连接失败，是改动面（散文引擎 + 门守护脚本）与图覆盖面不相交；诚实登记而非省略
 - [环境][grep] 本机 `grep` 是 `ugrep -G --ignore-files` 的 shell function：遵守 .gitignore、无 `./` 前缀，输入包里 `grep -v "^./…"` 排除管道全空；影响「命令原文可复现」（FR-027）——本卡产物一律写 `command grep`
 - [环境][node --test 取数] `node --test` 汇总行用 `ℹ` 前缀，BSD grep 的 `.` 匹配不到多字节字符，脚本化取数会静默取空（三个变异体结果一度显示为空）；取数脚本须用固定字面前缀
+- [结果准确性][spec-driver spec-review · 类别列抽检第二支笔] 本卡新加的「类别列取值抽检」在自身 Phase 5 首次真实命中：矩阵把 FR-016 标约束型，而新建守护代码注释自称实现 FR-016 (ii)，plan 的「承载制品已由别的 FR 认领 ⇒ 本条不新造」论证被从严判据否定 → 追加改判。说明「第二支笔」设计有效，也说明 plan 阶段的类别判定依据需要一条「共享制品」处理规则（候选后续卡）
+- [流程顺畅度][spec-driver verify · 角色 prompt 体量] verify.md 已达 582 行，子代理「整读角色 prompt + 68 行对账」组合三次停摆于读完再写；最终靠编排器摘录判定态定义成 151 行简报 + 按行段拆三路 + 每 6 行落盘完成。改进方向：verify 角色 prompt 分层（定义层 / 流程层），或引擎级支持分段对账产物合并
+

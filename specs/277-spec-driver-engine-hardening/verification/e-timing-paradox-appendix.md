@@ -21,10 +21,22 @@
 | 10 | D-4 | 2026-09-07 | 同上 | FR-028 判据「声明条数 == 检索命令实际输出计数」（`agents/plan.md:381`、plan-template `:118`） | 对「删清单一行但不改声明数」型缺口**恒真**（声明数与命令计数都没变）；演示执行体因额外比对清单条数才报出 M2 | **单调收紧**为「清单条数 == 声明条数 == 命令实际输出计数」三向等式（只增加合取项，不新增任何放行路径），落 `agents/plan.md` + plan-template 两副本，见本表 #13 | 机械（M2 变异体，e-d4 §5） |
 | 11 | D-4 | 2026-09-07 | 同上 | SKILL 注入锚点名（`sync-delegation-contract.mjs` 三个标题串 → 5 mode）在 plan 无 K 行 | 本卡改了其全部 5 份承载 SKILL，属 K15 型回归面 | 追加登记为「不改 · 回归面由 `delegation-contract` 两项守护覆盖」；B-1（该申报的关键量是否都申报了）活例 | 人工推演 |
 | 12 | D-8 | 2026-09-07 | T120 子代理（`verification/e-d8-inferred-premises-runtime.md`） | spec 推断前提登记：A-2 需 ≥ 3 次合格观察；A-4 内嵌「本卡注入量 0 / 空载」；V-2「5 SKILL 2970 行 / doc 732 行」 | A-2 缺席（0 ÷ 3）；A-4 子陈述证伪（+704 bytes，主陈述 PASS）；V-2 现值 4448 / 916 行（结构性陈述仍真） | A-2 等 D-5 窗口回补后重判 SC-009；A-4 与 #1 同源、撤回子陈述；V-2 数值追加更新、不退回 `[推断]`、分母维持 5 | 机械（5 条命令与输出见 e-d8） |
+| 14 | Phase 5 verify | 2026-09-12 | spec-review 5a-1（CRITICAL）+ verify part1（类别存疑） | 矩阵 FR-016 类别 = 约束型（plan.md:242 判定依据：「承载制品已由 FR-014 认领，本条自身不新造制品」） | 从严判据（plan-template「存在一份本次要新造或改写的仓库内制品承载它 ⇒ 实现型」）不认「被另一 FR 认领」例外：块 1 协议文本承载 FR-016 (ii) 的独立性口径声明、`scripts/lib/agent-tools-core.mjs:74,203` 断言 (iii) 以之为检查目标 | **编排器裁定 G-①：FR-016 改判实现型**，认领 Phase C，落点 = `templates/agent-output-discipline.md` 独立性声明 + `agent-tools-core.mjs` 断言 (ii)(iii)，判定态「已实现」（`agent-tools:required` pass 8 ÷ 8）；矩阵正文不改（冻结），此处追加；计数：约束型 13 → 12、实现型 51 → 52（单位：FR 条）；下游：T123 的「13 行」= 12 约束型 + FR-016 改判后仍在场；SC-013 桶归属重算留痕见 plan 修订记录 6 | 机械（5a-1 与 part1 各附 grep 命令 + 输出） |
+| 15 | Phase 5 verify | 2026-09-12 | verify part2 | spec FR-037 L339「本 Feature 新增的脚本只允许 `import` `node:` 内置模块，零 npm 依赖」 | `scripts/lib/agent-tools-core.mjs:33` `import { extractFrontmatterTools } from './namespace-consistency-core.mjs'`（仓内相对路径 helper，非 npm 包）——字面判据无例外 ⇒ verify 记「已违反」 | **编排器裁定 G-②**：FR-037 的来源 C-2 意图是「零 npm 依赖」，仓内相对路径 import 不引入依赖；字面措辞过窄，spec 冻结正文不改、此处追加澄清「`node:` 内置模块与仓内相对路径模块均允许，禁止的是 npm 包」；verify 的「已违反」按字面成立、不改判，交付定性时计「字面违反 · 意图满足 · 已澄清」 | 机械（part2 附 grep 命令 + 输出） |
+| 16 | Phase 5 verify | 2026-09-12 | verify part2 | FR-040 核验方式含「本卡对预算影响为 0 / 空载」 | verify 记「已违反」的对象是该声明（+704 bytes），预算门 `worktree-local-state:agents-byte-budget` 本身 pass | 与 #1 同源：声明撤回已登记，约束（预算内）成立；交付定性时计「声明证伪 · 约束满足 · 已登记」 | 机械（part2 + e-d7） |
+| 17 | Phase 5 quality-review | 2026-09-12 | 5b（CRITICAL） | `plugins/spec-driver/contracts/orchestration-schema.mjs` 346 行 | 1010 行，约 809 行（189 ~ 997）是门挂载判据，与「schema」职责分叉 | **编排器裁定 G-③：登记为后续卡（结构性债务）**——纯移动抽 `contracts/gate-mounting.mjs` + 原文件 re-export 保 5 处消费点接口；本卡不做，理由：门禁类代码在卡尾改动且异构档位缺席，风险高于收益；报警状态由「未处置」转「已处置 → 后续卡」 | 人工裁定 |
+| 18 | Phase 5 spec-review | 2026-09-12 | 5a-2（WARNING） | `agents/plan.md` (ii) 与 4 份 SKILL 手写副本自称与块 4「逐字同源」 | 实测块 4 为表格 + 换算式，副本为逗号枚举句，文本形式不同 | 措辞改为「路径集合与换算式同源（手写副本、非注入块）」，5 载体同批改、sha 抽检；改为共享块的候选已在 plan 登记 (8) | 机械（sha 比对） |
 
 ## 处置动作（追加后执行的唯一正文改动，非冻结面）
 
 - **#13 · FR-028 三向等式收紧**（对应 #10）：`plugins/spec-driver/agents/plan.md` 与 `plan-template.md` 两副本的一致性校验措辞由「声明条数 == 命令计数」改为「清单条数 == 声明条数 == 命令实际输出计数」，并删除模板中允许以「计数」替代「清单」的措辞（若存在）。**方向论证**：新判据 = 旧判据 ∧ 「清单条数 == 声明条数」，任何在新判据下通过的输入在旧判据下也通过，反之不然 ⇒ 严格单调收紧、零新增放行路径；异构档位缺席（Codex 暂停），以单调性论证 + e-d4 M2 变异体作为证据。
+
+## GATE_VERIFY 裁决（编排器 · 2026-09-12）
+
+- 日志行：`[GATE] GATE_VERIFY | policy=balanced | override=无 | decision=PAUSE | merge=fail | recomputed=3c5aa22b | held=3c5aa22b | match=yes | reason=story behavior=always；合并律不通过（不通过侧 9 条：移交 4 / 缺席 1 / 已违反 2 / 类别存疑 1 / 报警未处置 1）；口径 (b) 60 ÷ 64 = 93.75% < 95.3%`
+- 用户对交互式提问未作选择并两次指示「继续」，编排器按推荐项执行「登记类修复 + 小范围复验」：G-① FR-016 改判（#14）、G-② FR-037 澄清（#15）、G-③ schema 抽模块留后续卡（#17）、(ii) 措辞修正（#18）；不做代码改动。
+- **修复轮后的合并律仍为 fail（结构性）**：移交 4 条（用户拍板边界 A）与 FR-018 缺席（D-5 零合格观察）在本卡内不可消除；FR-037 / FR-040 按字面仍记「已违反」。交付定性：**部分交付**——已实现 49 + 1（FR-016 改判）= 50、已核验未违反 10、移交 4、缺席 1、已违反 2（字面）、裁剪 1（单位：FR 条，合计 68）。
+- 不得据此把 SC 或口径 (b) 改判为达成；本裁决只改变「报警未处置 → 已处置」与「类别存疑 → 已裁定」两项的状态。
 
 ## 未改写声明
 
