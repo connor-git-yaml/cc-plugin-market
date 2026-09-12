@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { parseYamlDocument } from './simple-yaml.mjs';
@@ -277,6 +278,9 @@ export function readArtifactFile(projectRoot, relPath) {
  */
 export const STATE_STORAGE_DIAGNOSTICS = Object.freeze({
   unavailable: 'state-storage-unavailable',
+  // F288 卡 B · G1：锁不可得（有界重试耗尽 ⟹ 降级为无锁 RMW = 改动前行为，不改裁决方向）/ 陈旧锁被接管
+  lockUnavailable: 'state-lock-unavailable',
+  lockTakenOver: 'state-lock-taken-over',
 });
 
 /** 阻断计数状态主目录（相对 projectRoot）：.specify/runs/ 已被仓库既有 .gitignore 整段忽略 */
@@ -332,14 +336,20 @@ function normalizeState(sessionId, parsed) {
       : 0,
     // F270 P3：解锁计时器，为「不计入 blockCount 但也不能立即放行」的裁决（证据陈旧 / 无法交叉
     // 校验 / 在途 undetermined / 重入 / 指纹无进展）计数。缺省 0（向后兼容）。
-    // 🔴 当前只有**原样带回方、没有递增方**（F276 卡 C 删掉了零接线的解锁计时器路由）：带回逻辑
-    // 属**不可删面**——routeBlock / releaseDegraded / defer 分支整体覆写时不得抹平，合同钉见
-    // judge-cli 的 `p3-carry`；递增方留给卡 B 接线。
-    // 🔴 该字段**不可单独作为任何放行预算**，除非卡 B 同时定义它的不可伪造性——它落在被判方可写
-    // 的状态文件里，直接当预算即等于送出一条 0 成本绕过。
+    // F288 卡 B：递增方已接线（judge 的指纹路由 nonBlock 分支，同一次锁内 mutation 写回）；所有分支经 mutateBlockState
+    // 的 mutator 展开 `...state` 带回，不再有手工透传面。
+    // 🔴 该字段**不可单独作为任何放行预算**——它落在被判方可写的状态文件里。卡 B 的不可伪造性替代物：judge 把两条
+    // 降级放行都闸在「transcript 上 harness 回灌的阻断反馈 ≥ BLOCK_LIMIT 或 420 backstop」之后（releaseCorroborated），
+    // 预置计数只能换来再被阻断（state-budget-uncorroborated）。
     nonBlockStopCount: Number.isInteger(src.nonBlockStopCount) && src.nonBlockStopCount >= 0
       ? src.nonBlockStopCount
       : 0,
+    // F288 卡 B · G1/G2：上一次被计数 / 被路由的证据状态指纹（sha256 hex）。缺省 null（向后兼容）。
+    // 🔴 `null` 是「会话内首次」态：G2 路由三分里它与「指纹相同」同落 nonBlock 分支，且**所有**分支都必须写回，
+    // 否则 null 成吸收态、routeBlock 结构性不可达（R2-3 ①）。
+    lastCountedFingerprint: typeof src.lastCountedFingerprint === 'string' && /^[0-9a-f]{64}$/.test(src.lastCountedFingerprint)
+      ? src.lastCountedFingerprint
+      : null,
   };
 }
 
@@ -517,13 +527,17 @@ export function saveBlockState(projectRoot, sessionId, state) {
       ? state.inFlightDeferCount
       : 0,
     // F270 P3：整体覆写语义不变——调用方须原样带回本字段，否则被抹平（见 normalizeState 注释）。
-    // 🔴 当前只有原样带回方、没有递增方；带回逻辑属不可删面（合同钉 `p3-carry`），递增方留给卡 B。
-    // 🔴 该字段不可单独作为任何放行预算，除非卡 B 同时定义其不可伪造性——状态文件在被判方写域。
+    // F288 卡 B：递增方已接线（judge 的指纹路由 nonBlock 分支）；放行预算的「不可伪造性」由 judge 侧的
+    // transcript 反馈条目佐证闸门承担（放行须 harness 回灌的阻断反馈 ≥ BLOCK_LIMIT 或 420 backstop），
+    // 状态文件本身仍在被判方写域，预置计数只能换来更早被再次阻断，换不来放行。
     // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中"锚在可擦文件=backstop
     //   整体可擦"后撤销——backstop 改为单调量比常量、不存锚；该路由本身已随 F276 卡 C 删除。）
     nonBlockStopCount: Number.isInteger(state && state.nonBlockStopCount) && state.nonBlockStopCount >= 0
       ? state.nonBlockStopCount
       : 0,
+    lastCountedFingerprint: typeof (state && state.lastCountedFingerprint) === 'string' && /^[0-9a-f]{64}$/.test(state.lastCountedFingerprint)
+      ? state.lastCountedFingerprint
+      : null,
     updatedAt: new Date().toISOString(),
   };
 
@@ -546,6 +560,202 @@ export function saveBlockState(projectRoot, sessionId, state) {
   return { ok: false, path: null, degraded: true, diagnostics: [STATE_STORAGE_DIAGNOSTICS.unavailable], errors };
 }
 
+// ────────────────────────────────────────
+// F288 卡 B · G1：状态文件并发安全（锁内 RMW）
+// ────────────────────────────────────────
+
+/** 锁重试：60 × 8ms ≈ 480ms（B-9 原型口径；同步睡眠，不忙等） */
+const LOCK_RETRY_MAX = 60;
+const LOCK_RETRY_WAIT_MS = 8;
+/** 陈旧锁墙钟兜底：300s，覆盖 F273 实证的宿主合盖睡眠 ~5min 冻结（单独墙钟判据会把活着的持锁者误接管） */
+const LOCK_STALE_MS = 300 * 1000;
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * pid 存活探针（存在性判据，不是归属判据——第 3 轮裁决 2：不做 pidStartedAt，安全性不押在锁判据上）。
+ * EPERM（存在但无权探测 = 不是本用户的判定器进程）按**不存活**：对抗复审 W-4 实测 `{pid:1}` 伪造锁曾让锁永不被接管
+ * （每个 Stop +480ms 有界 DoS + 本会话 G1 退回改动前）。误判活锁为陈旧的后果只是退回无锁 RMW（= 改动前行为）。
+ */
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 取会话级状态锁：`<状态目录>/<sanitizedId>.lock`（`openSync 'wx'` O_EXCL）。
+ *
+ * 语义（F288 卡 B · G1，第 3 轮裁决 1/2 后的终版）：
+ *   - 锁必须包住 load（只包 write 等于没包）；临界区不裹 IO（审计 / 终态 / stderr 全在锁外，F227 DoS 面）。
+ *   - 陈旧锁接管：持锁 pid 不存活（含无权探测的 pid）、墙钟超 300s、startedAt 在未来（伪造）、或内容不可解析且 mtime ≥ 2s
+ *     ⟹ 改名后 unlink 再重试，落 `state-lock-taken-over`。`.lock` 若被占成目录：改名成功但 unlink 失败 ⟹ 每次 Stop 残留一个
+ *     `.lock.stale.*` 目录（只在被判方主动占位时发生，方向 = 退回无锁 RMW，登记不修）。
+ *   - 有界重试耗尽 ⟹ `acquired:false` + `state-lock-unavailable`；调用方**降级为无锁 RMW（= 改动前行为）**，
+ *     不改裁决方向（锁的可得性既不额外放行也不额外阻断：被判方长期占锁的全部收益 = 把 G1 退回改动前）。
+ *   - 锁只能落在**一个**位置（主状态目录）；只有主目录本身不可用（mkdir / open 非 EEXIST 失败）才退到 tmp 目录——
+ *     「主目录忙」不得退到 tmp（两把不同的锁互不排斥 = 互斥被打破，比不加锁更坏）。
+ *   - 锁文件只由持有者按 `lockId` 比对后 unlink（`releaseStateLock`）；`resetBlockState` 不删锁。
+ *   - 绝不抛：任何 fs 异常转成返回态（拿不到锁就 throw 会让 judge 顶层 catch fail-open 静默关门禁）。
+ *
+ * @returns {{ acquired:boolean, lockPath:string|null, lockId:string|null, diagnostics:string[] }}
+ */
+export function acquireStateLock(projectRoot, sessionId) {
+  const sanitizedId = sanitizeSessionId(sessionId);
+  const diagnostics = [];
+  const candidates = [
+    path.join(projectRoot, ...STATE_SUBDIR, `${sanitizedId}.lock`),
+    path.join(stateTmpBase(), STATE_TMP_SUBDIR, `${sanitizedId}.lock`),
+  ];
+  for (const lockPath of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    } catch {
+      continue;   // 该级目录不可用 → 下一级
+    }
+    const lockId = crypto.randomBytes(8).toString('hex');
+    // 🔴 锁文件必须**带内容原子出现**：先写临时文件再 `linkSync` 到锁路径（同目录硬链接，EEXIST 即锁已存在）。
+    // 用 `openSync 'wx'` + 再写内容会留下「文件已在但内容为空」的窗口，等待者读到空内容判为陈旧 ⟹ 接管 ⟹ 互斥被打破
+    // （8 进程并发实测丢更新）。
+    const stagingPath = `${lockPath}.${process.pid}.${lockId}.tmp`;
+    let levelUnusable = false;
+    try {
+      fs.writeFileSync(stagingPath, `${JSON.stringify({ lockId, pid: process.pid, startedAt: Date.now() })}\n`, { flag: 'wx' });
+    } catch {
+      continue;   // 该级目录不可写 → 下一级
+    }
+    try {
+      for (let attempt = 0; attempt <= LOCK_RETRY_MAX; attempt += 1) {
+        try {
+          fs.linkSync(stagingPath, lockPath);
+          return { acquired: true, lockPath, lockId, diagnostics };
+        } catch (err) {
+          if (!err || err.code !== 'EEXIST') { levelUnusable = true; break; }
+          let holder = null;
+          let holderMtime = 0;
+          let vanished = false;
+          try {
+            holderMtime = fs.statSync(lockPath).mtimeMs;
+            holder = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          } catch (readErr) {
+            // 对抗复审 B-W1：ENOENT = 锁在 stat/read 之间被别人删/接管走 ⟹ 不是陈旧、更不能去接管
+            // （否则会 rename 掉别人刚 link 上来的活锁 ⇒ 双持锁 / 丢更新）；重试 link 见分晓。
+            if (readErr && readErr.code === 'ENOENT') vanished = true;
+            holder = null;
+          }
+          if (vanished) {
+            if (attempt < LOCK_RETRY_MAX) sleepSync(LOCK_RETRY_WAIT_MS);
+            continue;
+          }
+          // 内容不可解析但文件很新（< 2s）：按新鲜处理（防止把刚出现、尚未可读的锁误判为陈旧）
+          const unreadableButRecent = holder === null && holderMtime > 0 && (Date.now() - holderMtime) < 2000;
+          // startedAt 必须 ≤ now：未来时间戳是伪造（对抗复审 W-4：否则 300s 墙钟兜底被一个未校验字段整个绕掉）
+          const now = Date.now();
+          const fresh = unreadableButRecent || (holder && typeof holder === 'object'
+            && pidAlive(holder.pid)
+            && Number.isFinite(holder.startedAt) && holder.startedAt <= now && (now - holder.startedAt) < LOCK_STALE_MS);
+          if (!fresh) {
+            // 接管：先把陈旧锁改名成唯一名（rename 只会成功一次，两个等待者不会互相删掉对方刚建的新锁），
+            // 再核对被 rename 走的确实是我们判陈旧的那把锁（对抗复审 B-W1：read→rename 之间锁可能被换成活锁）。
+            const stalePath = `${lockPath}.stale.${process.pid}.${lockId}`;
+            const judgedLockId = holder && typeof holder === 'object' ? holder.lockId : null;
+            try {
+              fs.renameSync(lockPath, stalePath);
+              // 身份核对：judgedLockId 已知时，stalePath 的 lockId 必须与之相符；不符说明窗口内换成了别的锁 ⟹ rename 回去、不接管。
+              let identityOk = true;
+              if (judgedLockId !== null) {
+                try {
+                  const moved = JSON.parse(fs.readFileSync(stalePath, 'utf8'));
+                  identityOk = moved && moved.lockId === judgedLockId;
+                } catch { identityOk = false; }
+              }
+              if (!identityOk) {
+                try { fs.renameSync(stalePath, lockPath); } catch { /* 目标已被新持有者占回，弃权 */ }
+              } else {
+                try { fs.unlinkSync(stalePath); } catch { /* 留下的陈旧副本无害 */ }
+                if (!diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver)) diagnostics.push(STATE_STORAGE_DIAGNOSTICS.lockTakenOver);
+              }
+            } catch {
+              // 已被别的等待者接管 → 下一轮 link 见分晓
+            }
+            continue;
+          }
+          if (attempt < LOCK_RETRY_MAX) sleepSync(LOCK_RETRY_WAIT_MS);
+        }
+      }
+    } finally {
+      try { fs.unlinkSync(stagingPath); } catch { /* 已不存在 */ }
+    }
+    if (!levelUnusable) break;   // 主目录可用但一直忙：不得退到 tmp 级别的另一把锁
+  }
+  return { acquired: false, lockPath: null, lockId: null, diagnostics: [...diagnostics, STATE_STORAGE_DIAGNOSTICS.lockUnavailable] };
+}
+
+/** 释放锁：只在锁文件内 lockId 与自己一致时 unlink（防误删别人接管后的锁）；绝不抛。 */
+export function releaseStateLock(lock) {
+  if (!lock || !lock.acquired || !lock.lockPath) return;
+  try {
+    const current = JSON.parse(fs.readFileSync(lock.lockPath, 'utf8'));
+    if (current && current.lockId === lock.lockId) fs.unlinkSync(lock.lockPath);
+  } catch {
+    // 锁文件已不在 / 不可读 → 无事可做
+  }
+}
+
+/**
+ * 锁内 read-modify-write（F288 卡 B · G1）：`acquire → load → mutator(state) → save → release`。
+ *
+ * `mutator(state)` 返回 `{ next, result }`：`next` 为要写回的完整状态（null = 不写回）；`result` 原样透传给调用方
+ * （路由决策在锁内做、副作用在锁外做——「锁内决定谁来写终态，锁外真正去写」，R2-8）。
+ * mutator 抛错不向外抛（A-6：顶层 catch 会把它兜成放行）：按 `ok:false` + `mutatorError` 返回，调用方走 fail-closed。
+ *
+ * 锁不可得 ⟹ 不跳过、不推迟：同样执行 load → mutator → save（= 改动前的无锁 RMW），并在 diagnostics 带
+ * `state-lock-unavailable`；两级存储都写不进 ⟹ `ok:false` + `errors`（与 saveBlockState 同形，交给
+ * judge 的 routeStorageUnavailable）。`lockUnavailable` 与 `ok:false` 是两个独立返回态，绝不合并（D-1）。
+ *
+ * @param {string} projectRoot
+ * @param {string} sessionId
+ * @param {(state:object) => { next:object|null, result?:any }} mutator
+ * @returns {{ ok:boolean, written:boolean, state:object, result:any, lockUnavailable:boolean, degraded:boolean,
+ *            diagnostics:string[], errors?:object[], mutatorError?:unknown, path:string|null }}
+ */
+export function mutateBlockState(projectRoot, sessionId, mutator) {
+  const lock = acquireStateLock(projectRoot, sessionId);
+  const diagnostics = [...lock.diagnostics];
+  let outcome;
+  try {
+    const loaded = loadBlockState(projectRoot, sessionId);
+    let decision;
+    try {
+      decision = mutator(loaded);
+    } catch (err) {
+      outcome = { ok: false, written: false, state: loaded, result: undefined, degraded: false, path: null, mutatorError: err };
+    }
+    if (!outcome) {
+      const next = decision && decision.next && typeof decision.next === 'object' ? decision.next : null;
+      const result = decision ? decision.result : undefined;
+      if (next === null) {
+        outcome = { ok: true, written: false, state: loaded, result, degraded: false, path: null };
+      } else {
+        const saved = saveBlockState(projectRoot, sessionId, next);
+        outcome = saved.ok
+          ? { ok: true, written: true, state: loadBlockState(projectRoot, sessionId), result, degraded: saved.degraded, path: saved.path }
+          : { ok: false, written: false, state: loaded, result, degraded: true, path: null, errors: saved.errors };
+        if (!saved.ok) diagnostics.push(...saved.diagnostics);
+      }
+    }
+  } finally {
+    releaseStateLock(lock);
+  }
+  return { ...outcome, lockUnavailable: !lock.acquired, diagnostics };
+}
+
 /**
  * 重置阻断计数状态（FR-006 增补：补救成功后的清零转移）。
  * 删除两级存储（主路径 + tmpdir 回落）中该 session 对应的状态文件，
@@ -560,6 +770,8 @@ export function saveBlockState(projectRoot, sessionId, state) {
  * @returns {void}
  */
 export function resetBlockState(projectRoot, sessionId) {
+  // F288 卡 B（R2-9）：reset 是幂等删除、无 read-modify-write ⟹ 不需要互斥，锁不可得时照样生效（F211 清零不得被锁吞掉）；
+  // 只删状态文件、不删锁文件（锁只由持有者按 lockId 比对后 unlink）。
   const sanitizedId = sanitizeSessionId(sessionId);
   // 两级都无条件尝试删除：不因主路径删除失败就跳过 tmpdir，否则 load 会回落读到
   // tmpdir 残留旧计数导致清零失效（fix-report 影响范围扫描：重置必须两级都清）。

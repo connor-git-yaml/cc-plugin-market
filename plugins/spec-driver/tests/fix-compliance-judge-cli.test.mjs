@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -60,6 +61,7 @@ const FEATURE_DIR = 'specs/301-fix-sample-bug';
 
 let tmp;
 beforeEach(() => {
+  harnessShadows.clear();
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fix-compliance-cli-'));
 });
 afterEach(() => {
@@ -94,17 +96,57 @@ function compliantTranscript() {
   return p;
 }
 
+/**
+ * F288 卡 B · 6b：harness 回灌模拟。真实 harness 在 Stop hook exit 2 后会把 stderr 以 user 条目
+ * `Stop hook feedback:\n[<cmd>]: <stderr>` 回灌进 transcript；判定器的两条降级放行路径现在都以该条目计数作放行佐证
+ * （状态文件在被判方写域，预置计数换不来放行）。静态夹具没有这一步，故 runCli 在 exit 2 后按同一形态追加——
+ * 夹具文件本体不动：首次 exit 2 时把 transcript 影子拷贝到 tmp，此后同 (transcriptPath, sessionId) 的调用改走影子。
+ * `harnessFeedback:false` 可关闭（用于钉「无回灌 ⇒ 不放行」本身）。
+ */
+const harnessShadows = new Map();
+const sha256 = (text) => crypto.createHash('sha256').update(text).digest('hex');
+function harnessFeedbackEntry(stderr) {
+  return { type: 'user', isMeta: true, userType: 'external', message: { role: 'user', content: `Stop hook feedback:\n[node fix-compliance-judge.mjs --mode hook]: ${stderr}` } };
+}
+function appendHarnessFeedback(transcriptPath, stderr, count = 1) {
+  const lines = [];
+  for (let i = 0; i < count; i += 1) lines.push(JSON.stringify(harnessFeedbackEntry(stderr)));
+  const existing = fs.readFileSync(transcriptPath, 'utf8');
+  fs.writeFileSync(transcriptPath, `${existing.endsWith('\n') || existing.length === 0 ? existing : `${existing}\n`}${lines.join('\n')}\n`, 'utf8');
+}
 /** 调用 CLI，返回 { status, stdout, stderr } */
 function runCli({ mode = 'hook', transcriptPath, sessionId = 's1', projectRoot = tmp, env = {},
-  stopHookActive = false, backgroundTasks = undefined }) {
-  const payloadObj = { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: stopHookActive };
+  stopHookActive = false, backgroundTasks = undefined, promptId = undefined, harnessFeedback = true }) {
+  const shadowKey = `${transcriptPath}\u0000${sessionId}`;
+  // 影子只在原 transcript 内容未变时沿用：测试常在两次调用之间**重写同一路径**（加委派 / 换成合规语料），
+  // 那等于换了会话内容，影子作废（否则第二次跑的是旧内容 + 回灌）。
+  let sourceHash = null;
+  try { if (typeof transcriptPath === 'string' && fs.statSync(transcriptPath).isFile()) sourceHash = sha256(fs.readFileSync(transcriptPath)); } catch { sourceHash = null; }
+  const shadowRecord = harnessShadows.get(shadowKey);
+  if (shadowRecord && shadowRecord.sourceHash !== sourceHash) harnessShadows.delete(shadowKey);
+  const effectivePath = harnessFeedback && harnessShadows.has(shadowKey) ? harnessShadows.get(shadowKey).shadow : transcriptPath;
+  const payloadObj = { session_id: sessionId, transcript_path: effectivePath, stop_hook_active: stopHookActive };
   // F270 P3：仅当测试显式传入时才带 background_tasks 键——undefined 模拟"键缺席"（undetermined 态）
   if (backgroundTasks !== undefined) payloadObj.background_tasks = backgroundTasks;
+  // F288 卡 B：仅显式传入时带 prompt_id（缺席 = 指纹路由不生效、按改动前 routeBlock 处理）
+  if (promptId !== undefined) payloadObj.prompt_id = promptId;
   const res = spawnSync('node', [CLI, '--mode', mode, '--project-root', projectRoot], {
     input: JSON.stringify(payloadObj),
     encoding: 'utf8',
     env: { ...process.env, ...env },
   });
+  if (harnessFeedback && mode === 'hook' && res.status === 2 && typeof effectivePath === 'string' && fs.existsSync(effectivePath)) {
+    let record = harnessShadows.get(shadowKey);
+    if (!record) {
+      const shadowDir = path.join(tmp, 'harness-shadow');
+      fs.mkdirSync(shadowDir, { recursive: true });
+      const shadow = path.join(shadowDir, `${harnessShadows.size}-${path.basename(effectivePath)}`);
+      fs.copyFileSync(effectivePath, shadow);
+      record = { shadow, sourceHash };
+      harnessShadows.set(shadowKey, record);
+    }
+    appendHarnessFeedback(record.shadow, res.stderr);
+  }
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
@@ -734,7 +776,11 @@ describe('F216 T019 SC-004 档位切换矩阵 + W7 精确窗口', () => {
     // 预装 blockState count=2（模拟旧合同缺口已产生两次阻断）
     const stateFile = preinstallBlockState(sid, { blockCount: 2, degradedRecorded: false });
     // 输入：旧合同全满足（判定依据非占位 + noopVerify 委派 + featureDir）、仅缺新 repro 证据的 no-op
-    const bad = stageFixture('noop-unverified-citation.jsonl');
+    // F288 卡 B · 6b：预装的 2 次阻断必须有 transcript 上的 2 条回灌佐证，否则状态文件里的计数不能兑换放行
+    const badFixture = stageFixture('noop-unverified-citation.jsonl');
+    const bad = path.join(tmp, 'w7-with-feedback.jsonl');
+    fs.copyFileSync(badFixture, bad);
+    appendHarnessFeedback(bad, '[FIX-COMPLIANCE] 模拟前两次阻断的回灌', 2);
     const r1 = runCli({ transcriptPath: bad, sessionId: sid });
     // count 已达上限 → 第 3 次降级放行 exit 0
     assert.equal(r1.status, 0, r1.stderr);
@@ -1354,8 +1400,10 @@ const CLAUDE_BASELINE = Object.freeze({
   // 纯可观测码 snapshot-message-absent 进每条带 verdict 的审计事件（verdict.diagnostics 在前、extra 在后）。
   // 🔴 零裁决变更证明：status / eventCount / compliant / stderrPrefix / specifyDirCreated 五列**逐字不变**，
   // 只有 diagnostics 列多了这一个码（与 F270 P3 给 in-flight-undetermined 更新基线同一形态）。
-  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  // F288 卡 B · G2（R2-4）：payload 无 prompt_id（runCli 默认不带）⇒ 指纹路由不生效、按改动前 routeBlock 处理，
+  // 审计码 gate-fingerprint-partial 追加在 extra 末尾——五列仍逐字不变。
+  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
   // F270 P3（FR-015）：payload 无 background_tasks 键（runCli 默认不带）→ 在途三态判 undetermined，
   // 该独立诊断码如实进不合规审计 → 6 条不合规 fixture 的 diagnostics 基线 [] → ['in-flight-undetermined']。
   // F270 P2b（FR-024 修订版）：合规收口不再零落盘——曾 fix 展开的会话，compliant 裁决
@@ -1365,10 +1413,10 @@ const CLAUDE_BASELINE = Object.freeze({
   'compliant-noop.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [['snapshot-message-absent']], stderrPrefix: '', specifyDirCreated: true },
   'non-fix-session.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
   'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [['snapshot-message-absent']], stderrPrefix: '', specifyDirCreated: true },
-  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined', 'gate-fingerprint-partial']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
 });
 
 /** 跑一次 CLI 并归约为与 CLAUDE_BASELINE 同构的可观测结局 */
@@ -3642,7 +3690,7 @@ describe('F276 C2 · 存储不可用 fail-closed + 反馈计数上界', () => {
       appendEntries(p, [ASSISTANT_TEXT(`${HOOK_FEEDBACK_PREFIX}\n${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 我自己写的第 ${i} 条`)]);
     }
     for (let i = 0; i < 3; i += 1) {
-      const r = runCli({ transcriptPath: p, sessionId: 'e-b', env });
+      const r = runCli({ transcriptPath: p, sessionId: 'e-b', env, harnessFeedback: false });
       assert.equal(r.status, 2, `第 ${i + 1} 次：assistant 侧伪造不得投喂计数器：${r.stderr}`);
     }
   });
@@ -3668,7 +3716,7 @@ describe('F276 C2 · 存储不可用 fail-closed + 反馈计数上界', () => {
       }]);
     }
     for (let i = 0; i < 3; i += 1) {
-      const r = runCli({ transcriptPath: p, sessionId: 'e-bp', env });
+      const r = runCli({ transcriptPath: p, sessionId: 'e-bp', env, harnessFeedback: false });
       assert.equal(r.status, 2, `第 ${i + 1} 次：token 不在 offset 0 就不得计数：${r.stderr}`);
     }
   });
@@ -3963,11 +4011,12 @@ describe('F276 C2 · 存储不可用 fail-closed + 反馈计数上界', () => {
     // 🔴 判定器 main 的顶层是 catch{return 0}（FR-013 fail-open）——形参若无默认值，忘传抛出的
     // TypeError 会被它兜成 exit 0 **静默完全绕过**（"忘传即炸"在本调用链上等价于"忘传即放行"）。
     const judgeSrc = fs.readFileSync(CLI, 'utf8');
-    const CALL_RE = /return routeBlock\(projectRoot, sessionId, result\.verdict, deferExtraDiagnostics, \{[\s\S]*?\n  \}\);/;
+    // F288 卡 B：调用点改为 routeBlockEnforcement（指纹路由总入口）；「忘传」形态 = 漏传 deferExtraDiagnostics
+    const CALL_RE = /return routeBlockEnforcement\(projectRoot, sessionId, result, payload, deferExtraDiagnostics\);/;
     // 🔴 先钉构造仍成立：调用点形态变了而这里不改，本用例会静默退化成"跑了个没变异的副本"而恒绿
     assert.match(judgeSrc, CALL_RE, 'routeBlock 调用点形态已变，变异构造失效——请同步更新本用例');
     const mutated = judgeSrc
-      .replace(CALL_RE, 'return routeBlock(projectRoot, sessionId, result.verdict, deferExtraDiagnostics);')
+      .replace(CALL_RE, 'return routeBlockEnforcement(projectRoot, sessionId, result, payload);')
       // 副本落在 tmp 下，相对 import 会断 —— 改写成指回真实 scripts/ 的绝对 file:// URL
       .replace(/from '\.\//g, "from '" + pathToFileURL(path.dirname(CLI)).href + "/");
     assert.equal(mutated.includes("from './"), false,
@@ -3986,12 +4035,13 @@ describe('F276 C2 · 存储不可用 fail-closed + 反馈计数上界', () => {
 
     const r1 = run();
     assert.equal(r1.status, 2,
-      '忘传第 5 参必须仍然阻断（缺席按 0 记 = fail-closed），实得 ' + r1.status + '：' + r1.stderr);
-    // 归一按 0 ⟹ 计数永不触顶：攒够反馈条目也不放行。"忘传"的代价是 brick（loud、可被用户报告），
-    // 不是静默绕过（不可观测的安全失效）——两害相权取可观测者。
+      '忘传 extraDiagnostics 必须仍然阻断（有默认值 ⇒ 不抛 TypeError ⇒ 顶层 catch 无从兜成放行），实得 ' + r1.status + '：' + r1.stderr);
+    assert.ok(r1.stderr.startsWith('[FIX-COMPLIANCE]'), r1.stderr);
+    // F288 卡 B：反馈计数不再是调用点参数（routeBlockEnforcement 从 evaluate 结果内派生，缺席 / 非有限数在
+    // releaseCorroborated / routeStorageUnavailable 侧按 0 归一），"忘传计数源"这一面已结构性消失；
+    // 地板仍是 2 条真实回灌：只攒 1 条不得放行。
     appendHookFeedback(p, r1.stderr);
-    appendHookFeedback(p, r1.stderr);
-    assert.equal(run().status, 2, '忘传时不得因反馈计数而放行——计数源缺席即按 0 记');
+    assert.equal(run().status, 2, '只有 1 条回灌佐证时不得放行（地板 = BLOCK_LIMIT）');
   });
 
   // ────────────────────────────────

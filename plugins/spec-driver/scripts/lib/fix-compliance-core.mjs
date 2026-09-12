@@ -1297,6 +1297,30 @@ export const STORAGE_UNAVAILABLE_FEEDBACK_TOKEN = '[FIX-COMPLIANCE][STORAGE-UNAV
  * @returns {number}
  */
 export function countStorageUnavailableBlockFeedback(entries, latestFixLineIndex) {
+  return countHookFeedbackEntries(entries, latestFixLineIndex, (text) => text.includes(STORAGE_UNAVAILABLE_FEEDBACK_TOKEN));
+}
+
+/** 本判定器一切阻断类 stderr 的公共首段（block / GATE-DEGRADED / STORAGE-UNAVAILABLE 三种渲染串共享）。 */
+export const FIX_COMPLIANCE_FEEDBACK_MARK = '[FIX-COMPLIANCE]';
+
+/**
+ * F288 卡 B（第 3 轮裁决 6b：状态文件不可伪造性）——放行佐证计数：数「本段 fix 展开之后、harness 回灌的**本判定器**
+ * 阻断反馈」条数（block / 存储不可用两种 exit 2 形态都算；WARN / GATE-DEGRADED 是 exit 0，harness 不回灌）。
+ *
+ * why：`blockCount` / `nonBlockStopCount` / `degradedRecorded` 都住在被判方可写的状态文件里，预置
+ * `{"blockCount":2,"degradedRecorded":true}` 即可让首个 Stop 0 次往返放行且零终态。本计数器是 storage-free 的
+ * 事实源：每条反馈条目**必然伴随一次自己被阻断的 Stop 往返**（见 countStorageUnavailableBlockFeedback JSDoc 的
+ * 地板论证），故 judge 把两条放行路径（blockCount 达上限 / nonBlock 预算耗尽）都闸在「佐证 ≥ BLOCK_LIMIT 或 420
+ * backstop」之后：预置计数换不来放行，只能换来再被阻断。
+ *
+ * 谓词四条件与窗口基线（latest）与 countStorageUnavailableBlockFeedback 完全同源；已登记残余（自注册 Stop hook
+ * 投喂、harness 懒刷盘让佐证滞后 ⟹ 多吃一次阻断，方向 fail-closed、上界 420）见 F288 fix-report。
+ */
+export function countBlockFeedbackEntries(entries, latestFixLineIndex) {
+  return countHookFeedbackEntries(entries, latestFixLineIndex, (text) => text.includes(FIX_COMPLIANCE_FEEDBACK_MARK));
+}
+
+function countHookFeedbackEntries(entries, latestFixLineIndex, predicate) {
   if (typeof latestFixLineIndex !== 'number' || Number.isNaN(latestFixLineIndex)) return 0;
   const list = Array.isArray(entries) ? entries : [];
   let count = 0;
@@ -1307,7 +1331,7 @@ export function countStorageUnavailableBlockFeedback(entries, latestFixLineIndex
     const text = entry.textBlocks[0];
     if (typeof text !== 'string') continue;
     if (!text.startsWith(HOOK_FEEDBACK_PREFIX)) continue;
-    if (!text.includes(STORAGE_UNAVAILABLE_FEEDBACK_TOKEN)) continue;
+    if (!predicate(text)) continue;
     count += 1;
   }
   return count;

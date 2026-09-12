@@ -18,6 +18,8 @@
 
 import process from 'node:process';
 import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   detectFixSkillExpansion,
   detectTranscriptDialect,
@@ -29,6 +31,7 @@ import {
   collectArtifactWriteWitnessDirs,
   countAssistantEntriesSinceEarliestFixExpansion,
   countStorageUnavailableBlockFeedback,
+  countBlockFeedbackEntries,
   STORAGE_UNAVAILABLE_FEEDBACK_TOKEN,
   resolveFeatureDirCandidate,
   classifyClosureForm,
@@ -51,9 +54,8 @@ import {
   checkFeatureDirOnDisk,
   listFeatureDirCandidatesByShortName,
   readArtifactFile,
-  loadBlockState,
-  saveBlockState,
   resetBlockState,
+  mutateBlockState,
   // F287 卡 A · G0：state-storage 码由 io 首发，judge 三处复用只引用不重复登记
   STATE_STORAGE_DIAGNOSTICS,
 } from './lib/fix-compliance-io.mjs';
@@ -97,6 +99,13 @@ export const JUDGE_DIAGNOSTICS = Object.freeze({
   // G4 快照交叉校验（纯诊断码：不改路由、不进任何预算桶）。与 F236 的 `judge-snapshot-*`（插件安装快照漂移）同名不同物。
   snapshotMessageAbsent: diag('snapshot-message-absent', false),
   snapshotStale: diag('snapshot-stale', false),
+  // F288 卡 B · G2 指纹路由（纯审计码，userFacing:false）：无进展 / prompt_id 缺席不走指纹 / 两条耗尽放行触发码
+  gateFingerprintNoProgress: diag('gate-fingerprint-no-progress', false),
+  gateFingerprintPartial: diag('gate-fingerprint-partial', false),
+  nonblockLimitExhausted: diag('nonblock-limit-exhausted', false),
+  nonblockBackstopExhausted: diag('nonblock-backstop-exhausted', false),
+  // F288 卡 B · 6b 放行佐证：状态文件的预算计数走在 transcript 可见的阻断往返前面（预置 / 篡改 / 懒刷盘）⟹ 不放行、继续阻断
+  stateBudgetUncorroborated: diag('state-budget-uncorroborated', false),
 });
 
 /**
@@ -115,6 +124,13 @@ const USER_FACING_SET = new Set(USER_FACING_DIAGNOSTIC_CODES);
 
 /** 会话内不合规阻断上限（FR-006）：达到后降级放行 */
 export const BLOCK_LIMIT = 2;
+
+/**
+ * F288 卡 B · G2：指纹路由「无进展」分支（nonBlock）的 Stop 次数上限。
+ * 🔴 承重不变量 R-11：`NON_BLOCK_LIMIT >= BLOCK_LIMIT` 且两桶阈值同为 2 ⟹ 放行地板不变——被判方在两桶之间交替只会**多吃** exit 2，
+ * 最短完全绕过仍是 2 次 exit 2 后第 3 次放行（单元钉在 card-b 测试）。
+ */
+export const NON_BLOCK_LIMIT = BLOCK_LIMIT;
 
 /**
  * 会话内"在途推迟"次数上限（F256 第 2 轮 CRITICAL-1b）：达到后不再推迟，恢复正常裁决。
@@ -188,6 +204,13 @@ const IN_FLIGHT_DEFER_LIMIT = 3;
  * 只给它加了一条抹不掉的天花板——把「**永久**免于裁决」降级为「约 140 轮内免于裁决」。
  */
 export const EARLIEST_FIX_ENTRY_DEFER_LIMIT = 420;
+
+/**
+ * F288 卡 B · G2：nonBlock 分支的 transcript 派生 backstop（单调量直接比常量、不存锚）。与闸门三同源同值：
+ * 状态文件被 `rm -rf` 后它仍独立生效——只保证「不随状态目录删除而回退」，**对 transcript 篡改零抵抗**（已知下界，不得写成"不可擦"）。
+ * 同时是 6b 放行佐证的第二条腿：反馈条目 ≥ BLOCK_LIMIT **或** entry ≥ 本值 才允许任何降级放行。
+ */
+export const NON_BLOCK_ENTRY_LIMIT = EARLIEST_FIX_ENTRY_DEFER_LIMIT;
 
 // ────────────────────────────────────────
 // 参数解析
@@ -374,6 +397,8 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
   // 照抄 earliest 就是把防线搭反（被判方付过 2 次往返后重展开 fix 即可拿到 0 次往返的放行）。
   const storageUnavailableFeedbackCount =
     countStorageUnavailableBlockFeedback(entries, anchor.latestFixLineIndex);
+  // F288 卡 B · 6b：两条降级放行路径共同的佐证计数（本判定器一切 exit 2 回灌条目，窗口同上取 latest）
+  const blockFeedbackCount = countBlockFeedbackEntries(entries, anchor.latestFixLineIndex);
 
   // F270 P2：证据窗口下界统一切至 latestFixLineIndex（最晚一次 **fix** 展开）。
   // 不能用 anchorLineIndex（最晚**任意**展开）：尾部一次 doc 展开会把 5 个窗口推到 doc 行，
@@ -655,6 +680,10 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     transcriptDiagnostics: [], verdict, inFlightDelegations, assistantEntriesSinceEarliestFix,
     ledgerDiagnostics,   // F270 P4：账本读取诊断（ledger-entry-conflict 等），透传进 runHook 审计
     storageUnavailableFeedbackCount,   // F276 卡 C：`!saved.ok` 分支的上界计量源（事实字段透传）
+    blockFeedbackCount,                // F288 卡 B：降级放行的佐证计数（事实字段透传）
+    // F288 卡 B · G2 指纹分量：🔴 latest（最晚 fix 展开）而非 earliest——R-5 方向钉；账本条目数取账本原始返回长度
+    latestFixLineIndex: anchor.latestFixLineIndex,
+    ledgerDelegationCount: ledgerResult.delegations.length,
   };
 }
 
@@ -672,7 +701,10 @@ export function buildFeedbackText(missing, opts = {}) {
     .map((key) => MISSING_ACTION_TEXT[key])
     .filter(Boolean);
   const segments = [];
-  if (opts.degraded) segments.push(GATE_DEGRADED_PREFIX_LINE);
+  if (opts.degraded) segments.push(opts.degradedPrefixLine || GATE_DEGRADED_PREFIX_LINE);
+  // 对抗复审 C-1（误伤面）：预算已耗尽但放行佐证不足时，明确告知用户在等 harness 回灌阻断反馈，
+  // 勿反复重补同一制品空烧预算；harness 不回灌的环境（如某些 headless）请改 enforcement: warn。
+  if (opts.noticeLine) { segments.push(opts.noticeLine); segments.push(''); }
   segments.push(...actionLines);
   segments.push('', DUAL_PATH_GUIDANCE);
   // F287 G0（R2-7）：唯一渲染点按可见面白名单过滤——内务码（快照 / PENDING 计数等）只进审计事件，不进用户 stderr。
@@ -729,49 +761,250 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
  *   而静默放行是不可观测的安全失效——两害相权取可观测者。
  * @returns {number} 退出码
  */
-function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], counts = {}) {
-  const rawFeedbackCount = counts ? counts.storageUnavailableFeedbackCount : undefined;
-  const storageUnavailableFeedbackCount = Number.isFinite(rawFeedbackCount) ? rawFeedbackCount : 0;
-  const loaded = loadBlockState(projectRoot, sessionId);
-  const count = loaded.blockCount;
+const finiteOrZero = (value) => (Number.isFinite(value) && value >= 0 ? value : 0);
 
-  if (count < BLOCK_LIMIT) {
-    // 未达上限：尝试持久化 N+1 → 成功则硬阻断；失败（两级存储不可用）不再等同「已达上限」放行——
-    // F276：该映射被实测为两条 mkdir 即可自诱发的 0 成本绕过，改走 routeStorageUnavailable（fail-closed + 反馈计数上界）
-    const nextCount = count + 1;
-    const saved = saveBlockState(projectRoot, sessionId, {
-      blockCount: nextCount,
-      degradedRecorded: loaded.degradedRecorded,
-      // saveBlockState 是整体覆写：本路径不改在途预算与解锁计时器，必须原样带回，否则会被抹平为 0
-      // （F270 P3 自查抓到的漏带即清零：三处旧调用点都要补两新字段——见 io normalizeState 注释）
-      inFlightDeferCount: loaded.inFlightDeferCount,
-      nonBlockStopCount: loaded.nonBlockStopCount,
-    });
-    if (saved.ok) {
-      appendAuditEvent(projectRoot, buildAuditEvent({
-        sessionId, enforcement: 'block', verdict, blockCount: nextCount, degraded: false, extraDiagnostics,
-      }));
-      process.stderr.write(`${PREFIX_BLOCK} ${buildFeedbackText(verdict.missing)}\n`);
-      return 2;
+/**
+ * F288 卡 B · 6b 放行佐证（状态文件不可伪造性的替代物）：任何降级放行都必须有 storage-free 且**被判方不可自产**的事实支撑——
+ * 只认 harness 回灌的本判定器阻断反馈 ≥ BLOCK_LIMIT（每条 = 一次真实 exit 2 往返）。
+ * 🔴 对抗复审 C-1（绕过面）：「最早 fix 展开后 assistant entry ≥ 420」曾是第二条腿——但 assistant entry 是被判方产出面
+ *    （一个 turn 内 420 次 `Bash true` 即可让首个 Stop 零往返放行；同一常量在 F257 是「≥420 ⇒ 不再给推迟通道」的 fail-closed
+ *    语义，接成放行腿等于方向反转），故删除。420 只保留为 nonBlock 跑道的耗尽触发（routeByFingerprint），耗尽后仍须佐证才放行。
+ *    代价（如实登记）：harness 不回灌反馈的环境（Codex 方言回灌形态未采样）会被阻断到底——每个 Stop loud
+ *    （`state-budget-uncorroborated`），逃生口只有配置 `enforcement: warn`；与卡 C 的 storage-unavailable 路径同一口径。
+ * 状态文件里的 blockCount / nonBlockStopCount / degradedRecorded 都在被判方写域：预置计数只能换来「再被阻断」。
+ * 缺席 / 非有限数一律按 0（fail-closed：不放行）。
+ */
+function releaseCorroborated(counts) {
+  return finiteOrZero(counts.blockFeedbackCount) >= BLOCK_LIMIT;
+}
+
+/**
+ * 是否已有本会话的 failed 终态记录（record-workflow-run 月度 jsonl）。
+ * why：`degradedRecorded:true` 可被预置在状态文件里以抑制终态写入（6b 的「零终态」半边）；
+ * 终态记录本身就是可见性——若它不存在，标记再真也要补写。读不到 runs 目录 ⟹ false（补写是安全方向）。
+ */
+function hasFailedRunRecord(projectRoot, runId) {
+  try {
+    const runsDir = path.join(projectRoot, '.specify', 'runs');
+    for (const name of fs.readdirSync(runsDir)) {
+      if (!/^\d{4}-\d{2}\.jsonl$/.test(name)) continue;
+      for (const line of fs.readFileSync(path.join(runsDir, name), 'utf8').split('\n')) {
+        if (!line.includes('spec-driver-fix') || !line.includes(runId)) continue;
+        try {
+          const event = JSON.parse(line);
+          if (event && event.workflowId === 'spec-driver-fix' && event.runId === runId && event.result === 'failed') return true;
+        } catch {
+          // 非 JSON 行跳过
+        }
+      }
     }
-    // 存储不可用 → 不再无条件降级放行（F276 卡 C 方向反转），改走 fail-closed + 反馈计数上界
-    return routeStorageUnavailable(projectRoot, sessionId, verdict, {
-      feedbackCount: storageUnavailableFeedbackCount,
-      errors: saved.errors,
-      extraDiagnostics,
-      inFlightDeferCount: loaded.inFlightDeferCount,
-      nonBlockStopCount: loaded.nonBlockStopCount,
+  } catch {
+    // runs 目录缺席 / 不可读 → 视为无记录
+  }
+  return false;
+}
+
+/**
+ * F288 卡 B · G2：证据状态指纹（四分量：prompt_id / 缺失集合 / 账本条目数 / 最晚 fix 锚点位置；禁止任何文本启发式）。
+ * 🔴 prompt_id 缺席 ⟹ 返回 null ⟹ 整条指纹路由不生效、按 routeBlock 处理（= 改动前行为）+ gate-fingerprint-partial（R2-4，撤回 sentinel 兜底）。
+ * 🔴 锚点分量必须是 `latestFixLineIndex`（R-5），绝不误取 earliest。
+ */
+export function computeEvidenceFingerprint({ promptId, missing, ledgerDelegationCount, latestFixLineIndex }) {
+  if (typeof promptId !== 'string' || promptId.length === 0) return null;
+  const material = JSON.stringify([
+    promptId,
+    [...(Array.isArray(missing) ? missing : [])].sort(),
+    Number.isInteger(ledgerDelegationCount) ? ledgerDelegationCount : -1,
+    Number.isInteger(latestFixLineIndex) ? latestFixLineIndex : -1,
+  ]);
+  return crypto.createHash('sha256').update(material).digest('hex');
+}
+
+const UNCORROBORATED_NOTICE = '预算已耗尽但缺放行佐证（transcript 上本判定器的阻断反馈 < 2 条）：请等待上一次阻断反馈落盘后再停止；勿反复重补同一制品。若你的运行环境不回灌 hook 反馈，请在 spec-driver.config.yaml 设 fix_compliance.enforcement: warn。';
+function emitBlock(projectRoot, sessionId, verdict, blockCount, diagnostics, noticeLine = null) {
+  appendAuditEvent(projectRoot, buildAuditEvent({
+    sessionId, enforcement: 'block', verdict, blockCount, degraded: false, extraDiagnostics: diagnostics,
+  }));
+  process.stderr.write(`${PREFIX_BLOCK} ${buildFeedbackText(verdict.missing, { diagnostics, noticeLine })}\n`);
+  return 2;
+}
+
+/**
+ * 处理不合规 + block 档、**prompt_id 缺席**（指纹路由不生效）时的阻断计数路由（FR-006 有界化；= 改动前行为 + 佐证闸门）。
+ * F288 卡 B · G1：整段 RMW 走 `mutateBlockState`（锁内 load → 决策 → 写回；degradedRecorded 的 test-and-set 在锁内、终态写在锁外）。
+ * @param {string[]} [extraDiagnostics] - 上游路由追加的诊断码（如在途预算耗尽 / gate-fingerprint-partial）
+ * @param {{ storageUnavailableFeedbackCount?:number, blockFeedbackCount?:number, entryCount?:number, fingerprint?:string|null }} [counts]
+ *   F276 卡 C / F288 卡 B：`!saved.ok` 分支与降级放行的上界计量源；缺席 / 非有限数按 0（fail-closed，IW-1：本文件 main 的顶层
+ *   catch 会把 TypeError 兜成放行，故不做 required fail-loud）。
+ * @returns {number} 退出码
+ */
+function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], counts = {}) {
+  const canRelease = releaseCorroborated(counts || {});
+  const fingerprint = counts && typeof counts.fingerprint === 'string' ? counts.fingerprint : null;
+  const mutated = mutateBlockState(projectRoot, sessionId, (state) => {
+    if (state.blockCount < BLOCK_LIMIT) {
+      return {
+        next: { ...state, blockCount: state.blockCount + 1, lastCountedFingerprint: fingerprint ?? state.lastCountedFingerprint },
+        result: { route: 'block', nextCount: state.blockCount + 1 },
+      };
+    }
+    if (!canRelease) return { next: null, result: { route: 'uncorroborated', blockCount: state.blockCount } };
+    return {
+      next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint ?? state.lastCountedFingerprint },
+      result: { route: 'release', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount },
+    };
+  });
+  return dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostics, counts || {});
+}
+
+/**
+ * 本文件自身的 bug（mutator 抛错 / 未知路由）：不是存储故障——不得渲染「路径不可写」文案（对抗复审 W-2）。
+ * fail-closed：exit 2 + `internal-error`（审计可见；blockCount 报 null，本次处在第几次阻断不可知）；
+ * 上界仍是 6b 佐证闸（反馈 ≥ BLOCK_LIMIT ⇒ 降级放行）——判定器自身 bug 不得把会话锁死，但放行需要的仍是真实往返。
+ */
+function routeInternalError(projectRoot, sessionId, verdict, { canRelease, extraDiagnostics }) {
+  const diagnostics = [...new Set([...extraDiagnostics, JUDGE_DIAGNOSTICS.internalError.code])];
+  if (canRelease) {
+    return releaseDegraded(projectRoot, sessionId, verdict, {
+      alreadyRecorded: false, storageUnavailable: false, extraDiagnostics: diagnostics, blockCount: null,
     });
   }
+  return emitBlock(projectRoot, sessionId, verdict, null, diagnostics);
+}
 
-  // 已达上限（count >= 2）→ 降级放行
-  return releaseDegraded(projectRoot, sessionId, verdict, {
-    alreadyRecorded: loaded.degradedRecorded,
-    storageUnavailable: false,
-    inFlightDeferCount: loaded.inFlightDeferCount,
-    nonBlockStopCount: loaded.nonBlockStopCount,
-    extraDiagnostics,
+/**
+ * 路由决策（锁内产出）→ 副作用（锁外）。五种决策：block / nonblock / uncorroborated / release / nonblockRelease。
+ * 两级存储写不进（`!mutated.ok` 且有决策）⟹ 与卡 C 同向：routeStorageUnavailable（fail-closed + 反馈计数上界）；
+ * mutator 抛错 / 无决策 / 未知路由（本文件 bug）⟹ routeInternalError（同样 fail-closed，不让顶层 catch 兜成放行，
+ * 也不冒充存储故障）。
+ * @param {{ storageUnavailableFeedbackCount?:number, blockFeedbackCount?:number }} [counts] 上界计量源（缺席按 0）
+ */
+function dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostics, counts = {}) {
+  const storageUnavailableFeedbackCount = finiteOrZero(counts ? counts.storageUnavailableFeedbackCount : undefined);
+  const canRelease = releaseCorroborated(counts || {});
+  const lockDiagnostics = (mutated.diagnostics || []).filter((code) => code !== STATE_STORAGE_DIAGNOSTICS.unavailable);
+  const diagnostics = [...new Set([...extraDiagnostics, ...lockDiagnostics])];
+  const decision = mutated.result;
+  if (mutated.mutatorError || (mutated.ok && !decision)) {
+    return routeInternalError(projectRoot, sessionId, verdict, { canRelease, extraDiagnostics: diagnostics });
+  }
+  if (!decision || !mutated.ok) {
+    if (decision && (decision.route === 'release' || decision.route === 'nonblockRelease')) {
+      // 佐证已够、只是 degradedRecorded 写不进 ⟹ 允许重复终态（宁可可审计不可静默丢失）
+      return releaseDegraded(projectRoot, sessionId, verdict, {
+        alreadyRecorded: false, storageUnavailable: true, extraDiagnostics: diagnostics, blockCount: decision.blockCount,
+        terminalWarning: decision.route === 'nonblockRelease' ? nonBlockTerminalWarning(verdict, decision.trigger) : null,
+        trigger: decision.trigger,
+      });
+    }
+    return routeStorageUnavailable(projectRoot, sessionId, verdict, {
+      feedbackCount: storageUnavailableFeedbackCount,
+      errors: mutated.errors,
+      extraDiagnostics: diagnostics,
+    });
+  }
+  switch (decision.route) {
+    case 'block':
+      return emitBlock(projectRoot, sessionId, verdict, decision.nextCount, diagnostics);
+    case 'nonblock':
+      // 无进展：不消耗阻断预算，但退出码保持裁决自身语义（2）；文案走 buildFeedbackText（R2-5：首次 exit 2 也要看到该补什么）
+      return emitBlock(projectRoot, sessionId, verdict, decision.blockCount, [...diagnostics, JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code]);
+    case 'uncorroborated':
+      return emitBlock(projectRoot, sessionId, verdict, decision.blockCount, [
+        ...diagnostics,
+        ...(decision.noProgress ? [JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code] : []),
+        JUDGE_DIAGNOSTICS.stateBudgetUncorroborated.code,
+      ], UNCORROBORATED_NOTICE);
+    case 'release':
+      return releaseDegraded(projectRoot, sessionId, verdict, {
+        alreadyRecorded: decision.wasAlreadyRecorded && hasFailedRunRecord(projectRoot, sessionId),
+        storageUnavailable: false, extraDiagnostics: diagnostics, blockCount: decision.blockCount,
+      });
+    case 'nonblockRelease':
+      return releaseDegraded(projectRoot, sessionId, verdict, {
+        alreadyRecorded: decision.wasAlreadyRecorded && hasFailedRunRecord(projectRoot, sessionId),
+        storageUnavailable: false,
+        extraDiagnostics: [...diagnostics, JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code],
+        blockCount: decision.blockCount,
+        terminalWarning: nonBlockTerminalWarning(verdict, decision.trigger),
+        trigger: decision.trigger,
+      });
+    default:
+      return routeInternalError(projectRoot, sessionId, verdict, { canRelease, extraDiagnostics: diagnostics });
+  }
+}
+
+/** nonBlock 跑道耗尽的原因文案（终态 warning 与 stderr 首行共用，两处不得说成「已达阻断上限」——blockCount 可能为 0）。 */
+function nonBlockExhaustionReason(trigger) {
+  return trigger === JUDGE_DIAGNOSTICS.nonblockBackstopExhausted.code
+    ? `证据窗口锚点后 assistant entry 已达 ${NON_BLOCK_ENTRY_LIMIT}（会话长度 backstop，nonBlock 跑道耗尽）`
+    : `证据状态无进展的 Stop 已达 ${NON_BLOCK_LIMIT} 次`;
+}
+
+function nonBlockTerminalWarning(verdict, trigger) {
+  return `${PREFIX_DEGRADED} fix 会话降级放行（${nonBlockExhaustionReason(trigger)}），缺失: ${verdict.missing.join(', ')}`;
+}
+
+/**
+ * F288 卡 B · G2：指纹路由（Design X，互斥三分；仅 enforcement === 'block' 且 prompt_id 在场时到达此处）。
+ *
+ * | 条件 | 路由 | blockCount | 写回指纹 |
+ * |---|---|---|---|
+ * | last === null（会话内首次）或 fp === last（无进展） | nonBlock：未耗尽 exit 2（不计 blockCount，nonBlockStopCount +1）；耗尽且佐证够 ⟹ 降级放行 | 不计 | MUST |
+ * | last !== null && fp !== last（有进展） | routeBlock 语义：< 上限 +1 exit 2；达上限且佐证够 ⟹ 降级放行 | +1 | MUST |
+ *
+ * 🔴 所有分支都在同一次锁内 mutation 写回指纹（R2-3 ①：不写回 ⟹ null 成吸收态 ⟹ routeBlock 结构性不可达）。
+ * 🔴 指纹只用于收紧不用于放宽（D-5）：任何指纹状态都不直接导致 return 0——放行只经两条有界预算 + 佐证闸门。
+ * 🔴 并发（K-14，如实登记）：同一 Stop 的第 2 个进程看到第 1 个刚写回的指纹 ⟹ 落入无进展格 ⟹ blockCount 增量正确为 1，
+ *    代价是每个 Stop 多消耗 N−1 格 nonBlockStopCount（fail-open 方向：组合跑道缩短），上界仍由 NON_BLOCK_LIMIT + 420 封顶。
+ * 🔴 420 backstop 只是 nonBlock 跑道的耗尽触发（F257 语义：会话长度异常 ⇒ 不再给通道），**不是**放行佐证——
+ *    耗尽后仍须 harness 回灌反馈 ≥ BLOCK_LIMIT 才放行（对抗复审 C-1：assistant entry 是被判方产出面）。
+ * 逐轮序列（端到端钉）：冻结暂停 exit2(nb=1) → exit2(nb=2) → exit0；有进展 exit2(nb=1) → exit2(b=1) → exit2(b=2) → exit0；
+ * 最短完全绕过仍是 2 次 exit 2 后放行（持平，不更松）。
+ */
+function routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, counts) {
+  const canRelease = releaseCorroborated(counts);
+  const backstop = finiteOrZero(counts.entryCount) >= NON_BLOCK_ENTRY_LIMIT;
+  const mutated = mutateBlockState(projectRoot, sessionId, (state) => {
+    const last = state.lastCountedFingerprint;
+    const progressed = last !== null && fingerprint !== last;
+    if (progressed) {
+      if (state.blockCount < BLOCK_LIMIT) {
+        return { next: { ...state, blockCount: state.blockCount + 1, lastCountedFingerprint: fingerprint }, result: { route: 'block', nextCount: state.blockCount + 1 } };
+      }
+      if (!canRelease) return { next: { ...state, lastCountedFingerprint: fingerprint }, result: { route: 'uncorroborated', blockCount: state.blockCount, noProgress: false } };
+      return { next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint }, result: { route: 'release', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount } };
+    }
+    const limitExhausted = state.nonBlockStopCount >= NON_BLOCK_LIMIT;
+    if (!limitExhausted && !backstop) {
+      return { next: { ...state, nonBlockStopCount: state.nonBlockStopCount + 1, lastCountedFingerprint: fingerprint }, result: { route: 'nonblock', blockCount: state.blockCount } };
+    }
+    if (!canRelease) return { next: { ...state, lastCountedFingerprint: fingerprint }, result: { route: 'uncorroborated', blockCount: state.blockCount, noProgress: true } };
+    const trigger = limitExhausted ? JUDGE_DIAGNOSTICS.nonblockLimitExhausted.code : JUDGE_DIAGNOSTICS.nonblockBackstopExhausted.code;
+    return { next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint }, result: { route: 'nonblockRelease', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount, trigger } };
   });
+  return dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostics, counts);
+}
+
+/** block 档不合规的总入口：prompt_id 在场走指纹路由，缺席走 routeBlock（= 改动前行为）+ gate-fingerprint-partial。 */
+function routeBlockEnforcement(projectRoot, sessionId, result, payload, extraDiagnostics = []) {
+  // 🔴 有默认值（IW-1）：本文件 main 的顶层 catch 会把「忘传」抛出的 TypeError 兜成 exit 0 放行，故不做 required fail-loud
+  const verdict = result.verdict;
+  const counts = {
+    storageUnavailableFeedbackCount: result.storageUnavailableFeedbackCount,
+    blockFeedbackCount: result.blockFeedbackCount,
+    entryCount: result.assistantEntriesSinceEarliestFix,
+  };
+  const fingerprint = computeEvidenceFingerprint({
+    promptId: payload ? payload.prompt_id : undefined,
+    missing: verdict.missing,
+    ledgerDelegationCount: result.ledgerDelegationCount,
+    latestFixLineIndex: result.latestFixLineIndex,
+  });
+  if (fingerprint === null) {
+    return routeBlock(projectRoot, sessionId, verdict, [...extraDiagnostics, JUDGE_DIAGNOSTICS.gateFingerprintPartial.code], counts);
+  }
+  return routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, { ...counts, fingerprint });
 }
 
 /**
@@ -812,19 +1045,17 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], coun
  *
  * @param {{ feedbackCount:number,
  *           errors:{path:string|null,stage:string|null,code:string|null,blocker:string|null}[]|undefined,
- *           extraDiagnostics:string[], inFlightDeferCount:number, nonBlockStopCount:number }} opts
+ *           extraDiagnostics:string[] }} opts
  * @returns {number} 退出码（0 = 上界耗尽降级放行；2 = fail-closed 阻断）
  */
 function routeStorageUnavailable(projectRoot, sessionId, verdict, {
-  feedbackCount, errors, extraDiagnostics, inFlightDeferCount, nonBlockStopCount,
+  feedbackCount, errors, extraDiagnostics,
 }) {
   // 闸门 1（唯一上界）：反馈计数触顶 → 既有降级放行终态，形态不改，只多一个 trigger 码。
   if (feedbackCount >= BLOCK_LIMIT) {
     return releaseDegraded(projectRoot, sessionId, verdict, {
       alreadyRecorded: false,
       storageUnavailable: true,
-      inFlightDeferCount,
-      nonBlockStopCount,
       // 🔴 合并须保留上游：硬编码单元素数组会把上游诊断码（如在途预算耗尽）整个丢掉
       extraDiagnostics: [...new Set([...extraDiagnostics, JUDGE_DIAGNOSTICS.storageUnavailableBlockBudgetExhausted.code])],
     });
@@ -951,19 +1182,22 @@ function buildStorageUnavailableFeedback(projectRoot, verdict, errors, mergedDia
  * @returns {number} 恒 0
  */
 function releaseDegraded(projectRoot, sessionId, verdict, {
-  alreadyRecorded, storageUnavailable, inFlightDeferCount = 0,
-  // F270 P3：整体覆写须原样带回。刻意**无默认值**（F238 教训）：新调用点忘传时这里
-  // undefined 会被 saveBlockState 归一为 0/null 抹平——归一层已兜底不炸，但 required 化
-  // 让 lint/review 面能看见"忘传"，而默认值会把抹平静默化。
-  nonBlockStopCount,
+  alreadyRecorded, storageUnavailable,
   extraDiagnostics: upstreamDiagnostics = [],
+  // F288 卡 B：终态与审计里的 blockCount 传**真实**计数（number，键不消失——record-workflow-run 只保留 number；第 3 轮裁决 3）
+  blockCount = BLOCK_LIMIT,
+  // nonBlock 耗尽放行的专用终态文案 + 触发码（与 blockCount 达上限的放行**可区分**，F257 缺陷 2：两条放行路径可见性对等）
+  terminalWarning = null,
+  trigger = null,
 }) {
   const extraDiagnostics = [
     ...upstreamDiagnostics,
     ...(storageUnavailable ? [STATE_STORAGE_DIAGNOSTICS.unavailable] : []),
+    ...(trigger ? [trigger] : []),
   ];
-  const blockCount = BLOCK_LIMIT;
-  // 存储不可用无法读写幂等标记 → 允许重复终态（宁可可审计不可静默丢失，research.md D2/D4）
+  // 存储不可用无法读写幂等标记 → 允许重复终态（宁可可审计不可静默丢失，research.md D2/D4）。
+  // F288 卡 B：degradedRecorded 的 test-and-set 已在调用方的锁内 mutation 完成（R2-8：锁内决定谁写终态，锁外真正去写），
+  // 且 alreadyRecorded 只在 runs 账本里确有 failed 记录时才成立（6b：预置标记抑制不了终态）。本函数不再写状态文件。
   const shouldWriteTerminal = storageUnavailable || !alreadyRecorded;
 
   if (shouldWriteTerminal) {
@@ -973,32 +1207,27 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
         workflowId: 'spec-driver-fix',
         runId: sessionId,
         result: 'failed',
-        warnings: [`${PREFIX_DEGRADED} fix 会话在 ${BLOCK_LIMIT + 1} 次不合规尝试后降级放行，缺失: ${verdict.missing.join(', ')}`],
+        // 对抗复审 B-W4：不写「N 次尝试」——K-14 拆条 / 双注册下 Stop 数不可从状态得知，真实 blockCount 见下方 complianceVerdict
+        warnings: [terminalWarning || `${PREFIX_DEGRADED} fix 会话达到阻断上限后降级放行，缺失: ${verdict.missing.join(', ')}`],
         complianceVerdict: {
           closureForm: verdict.closureForm,
           compliant: verdict.compliant,
           missing: verdict.missing,
           degraded: true,
-          blockCount,
+          blockCount: Number.isInteger(blockCount) ? blockCount : BLOCK_LIMIT,
         },
       });
     } catch {
       // 终态写入失败不得让降级路由崩溃（FR-013 精神）
-    }
-    // 首次降级成功后置幂等标记（存储可用时才有意义）
-    if (!storageUnavailable) {
-      // 同样是整体覆写：在途预算须原样带回（见 saveBlockState JSDoc）
-      saveBlockState(projectRoot, sessionId, {
-        blockCount, degradedRecorded: true, inFlightDeferCount,
-        nonBlockStopCount,   // F270 P3：原样带回，防抹平
-      });
     }
   }
 
   appendAuditEvent(projectRoot, buildAuditEvent({
     sessionId, enforcement: 'block', verdict, blockCount, degraded: true, extraDiagnostics,
   }));
-  process.stderr.write(`${PREFIX_DEGRADED} ${buildFeedbackText(verdict.missing, { degraded: true, diagnostics: extraDiagnostics })}\n`);
+  // F288 对抗复审 I-4 / F289 W-8：nonBlock 耗尽放行的 blockCount 可能为 0，首行不得说「已达阻断上限(2 次)」
+  const degradedPrefixLine = trigger ? `${nonBlockExhaustionReason(trigger)}，本次降级放行——以下缺口仍未补齐，已落盘降级审计记录：` : undefined;
+  process.stderr.write(`${PREFIX_DEGRADED} ${buildFeedbackText(verdict.missing, { degraded: true, degradedPrefixLine, diagnostics: extraDiagnostics })}\n`);
   return 0;
 }
 
@@ -1210,20 +1439,24 @@ function runHook(projectRoot, payload) {
     deferExtraDiagnostics.push(inFlightVerdict.diagnostic);
   }
   if (hasInFlight && isDeferrableMissingSet(result.verdict.missing)) {
-    const loaded = loadBlockState(projectRoot, sessionId);
     const entryCount = typeof result.assistantEntriesSinceEarliestFix === 'number'
       ? result.assistantEntriesSinceEarliestFix
       : Number.POSITIVE_INFINITY;                    // 计量缺席 → 视同预算耗尽（fail-closed）
-    const countBudgetLeft = loaded.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT;  // 闸门二（可被抹除）
     const entryBudgetLeft = entryCount < EARLIEST_FIX_ENTRY_DEFER_LIMIT;         // 闸门三（单调，抹不掉）
-    if (countBudgetLeft && entryBudgetLeft) {
+    // F288 卡 B · G1：闸门二的读 + 计数写回在同一次锁内 mutation（推迟不动阻断预算：mutator 只改自己那个字段，
+    // 5 字段手工透传与 `inFlightDeferCount = 0` 默认值 fail-open 一并消失）
+    const deferMutation = mutateBlockState(projectRoot, sessionId, (state) => {
+      const countBudgetLeft = state.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT;  // 闸门二（可被抹除）
+      if (countBudgetLeft && entryBudgetLeft) {
+        return { next: { ...state, inFlightDeferCount: state.inFlightDeferCount + 1 }, result: { deferred: true, countBudgetLeft } };
+      }
+      return { next: null, result: { deferred: false, countBudgetLeft } };
+    });
+    const countBudgetLeft = Boolean(deferMutation.result && deferMutation.result.countBudgetLeft);
+    deferExtraDiagnostics.push(...(deferMutation.diagnostics || []).filter((code) => code !== STATE_STORAGE_DIAGNOSTICS.unavailable));
+    if (deferMutation.result && deferMutation.result.deferred) {
       // 先持久化再推迟：计数写不进去就等于没有上界，此时宁可照常裁决
-      const saved = saveBlockState(projectRoot, sessionId, {
-        blockCount: loaded.blockCount,               // 推迟不动阻断预算（整体覆写，须原样带回）
-        degradedRecorded: loaded.degradedRecorded,
-        inFlightDeferCount: loaded.inFlightDeferCount + 1,
-        nonBlockStopCount: loaded.nonBlockStopCount,             // F270 P3：原样带回，防抹平
-      });
+      const saved = deferMutation;
       if (saved.ok) {
         // 审计提档：推迟不再是零终态痕迹的静默通道（F257 缺陷 2）
         recordDeferTerminal(projectRoot, sessionId, result.verdict, entryCount);
@@ -1254,12 +1487,9 @@ function runHook(projectRoot, payload) {
     return 0;
   }
 
-  // enforcement=block
-  return routeBlock(projectRoot, sessionId, result.verdict, deferExtraDiagnostics, {
-    // F276 卡 C：`!saved.ok` 分支的上界计量源。routeBlock 侧对「缺席 / 非有限数」做 fail-closed 归一
-    // （按 0 记 ⟹ 一律阻断），why 不用「忘传即炸」见其 JSDoc（IW-1：顶层 catch 会把 TypeError 兜成放行）。
-    storageUnavailableFeedbackCount: result.storageUnavailableFeedbackCount,
-  });
+  // enforcement=block：F288 卡 B · G2 指纹路由总入口（prompt_id 在场走指纹三分；缺席 = 改动前 routeBlock + gate-fingerprint-partial）。
+  // 🔴 指纹路由只在 block 档生效（R2-6）：warn 分支在上方已 return 0，指纹既不参与路由也不写回。
+  return routeBlockEnforcement(projectRoot, sessionId, result, payload, deferExtraDiagnostics);
 }
 
 // ────────────────────────────────────────

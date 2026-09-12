@@ -30,7 +30,11 @@ EOF
 | 合规收口 | 0 | （空） | （空） |
 | `enforcement=warn` 且不合规 | 0 | （空） | `[FIX-COMPLIANCE][WARN] {反馈文本}` |
 | `enforcement=block` 且不合规，`blockCount < 2` | **2** | （空） | `[FIX-COMPLIANCE] {反馈文本：缺失项 + 补救指引}` |
-| `enforcement=block` 且不合规，`blockCount >= 2`（降级） | 0 | （空） | `[FIX-COMPLIANCE][GATE-DEGRADED] {反馈文本}` |
+| `enforcement=block` 且不合规，`blockCount >= 2`（降级；**须放行佐证**，见下方 F288 节） | 0 | （空） | `[FIX-COMPLIANCE][GATE-DEGRADED] {反馈文本}` |
+| `enforcement=block` 且不合规，payload 带 `prompt_id` 且证据状态**无进展**（F288 指纹路由 nonBlock 分支，`nonBlockStopCount < 2`） | **2** | （空） | `[FIX-COMPLIANCE] {反馈文本}`（审计 `gate-fingerprint-no-progress`，不计 `blockCount`） |
+| 同上但 `nonBlockStopCount >= 2` 或 entry backstop（且放行佐证已够） | 0 | （空） | `[FIX-COMPLIANCE][GATE-DEGRADED] {反馈文本}`（审计 `degraded:true` + `nonblock-limit-exhausted` / `nonblock-backstop-exhausted`） |
+| 任一降级放行条件成立但**放行佐证不足**（transcript 里 harness 回灌的本判定器阻断反馈 < 2；assistant entry 数**不是**佐证） | **2** | （空） | `[FIX-COMPLIANCE] {反馈文本}`（审计 `state-budget-uncorroborated`） |
+| `enforcement=block` 且不合规，判定器自身 bug（状态 mutator 抛错 / 未知路由） | **2** | （空） | `[FIX-COMPLIANCE] {反馈文本}`（审计 `internal-error`、`blockCount:null`；不冒充存储故障；佐证 ≥ 2 ⇒ 降级放行且仍带 `internal-error`） |
 | 判定过程异常（transcript 缺失/超限/解析失败/payload 非法/内部异常） | 0 | （空） | （可选诊断，非强制）；**必须** best-effort 落盘一条 `fix-compliance-verdict` 事件（`compliant: null` + 具体 diagnostics，FR-013 loud 半边）；仅 `enforcement=off` 例外（零接触优先，off 短路发生在任何 transcript 读取与 fail-open 分支之前——FR-015 判定顺序第 2 步） |
 | `enforcement=block` 或 `warn` 且不合规，但检出**在途委派**且**三道闸门均通过**（判定时机未到，见下方在途判据） | 0 | （空） | `[FIX-COMPLIANCE][WARN] {反馈文本 + 诊断: delegation-in-flight}` |
 
@@ -341,6 +345,35 @@ harness 的成功回执；放宽的只是"哪个编号"，不是"是否真写过
   静默采信，而非阻止主动冒用。
 - **写入内容质量不在本判据管辖内**（写一份空壳制品亦构成见证）——属既有判据强度问题，
   由 `classifyClosureForm` / `judgeCompliance` 承担。
+
+## 指纹路由、状态锁与放行佐证（F288 卡 B）
+
+**状态锁（G1）**：判定器对状态文件的每次 read-modify-write 都经 `mutateBlockState`（`<状态目录>/<sessionId>.lock`，
+`link` 原子创建、锁包住 load、临界区不裹 IO）。陈旧锁（持锁 pid 不存活〔含无权探测的 pid〕、墙钟 > 300s、`startedAt` 在未来、
+或内容不可解析且 mtime ≥ 2s）被改名后接管并落 `state-lock-taken-over`（`.lock` 被占成目录时每次 Stop 残留一个 `.lock.stale.*` 目录，登记不修）；
+有界重试（≈480ms）耗尽落 `state-lock-unavailable` 并**降级为无锁 RMW**——锁的可得性不改变裁决方向。锁只由持有者按 lockId
+比对后 unlink；`resetBlockState` 不需要互斥、不删锁。
+
+**证据状态指纹（G2）**：`sha256(prompt_id, sorted(missing), 账本委派条目数, latestFixLineIndex)`，只在 `enforcement=block`
+且 payload 带 `prompt_id` 时生效；缺席 ⇒ 按改动前 routeBlock 处理 + `gate-fingerprint-partial`。互斥三分：首次 / 指纹相同 ⇒ nonBlock
+（不计 `blockCount`，`nonBlockStopCount +1`，exit 2）；指纹变化 ⇒ routeBlock（`blockCount +1`）。所有分支在同一次锁内
+mutation 写回 `lastCountedFingerprint`（null 是吸收态，不写回则 routeBlock 结构性不可达）。指纹只用于收紧不用于放宽。
+逐轮序列：冻结暂停 `exit2(nb=1) → exit2(nb=2) → exit0`（`blockCount` 零增量）；有进展 `exit2(nb=1) → exit2(b=1) → exit2(b=2) → exit0`；
+最短完全绕过仍是 2 次 exit 2 后放行（`NON_BLOCK_LIMIT = BLOCK_LIMIT = 2`，放行地板不变）。
+
+**放行佐证（6b，状态文件不可伪造性的替代物）**：状态文件在被判方写域。两条降级放行（`blockCount` 达上限 / nonBlock 耗尽）
+都要求 transcript 上 harness 回灌的本判定器阻断反馈条目 ≥ `BLOCK_LIMIT`（每条 = 一次真实 exit 2 往返）；否则继续阻断
+（exit 2 + `state-budget-uncorroborated`，计数不再推进）。**assistant entry ≥ 420 不是佐证**（对抗复审 C-1：entry 是被判方产出面，
+420 次工具调用即可自产；它只是 nonBlock 跑道的耗尽触发，耗尽后仍须佐证）。终态去重只查 runs 账本（`hasFailedRunRecord`）：
+账本与状态文件同写域，伪造一条 failed 行再事后删除即可抑制判定器的终态——终态可见性**不是**安全边界，放行地板由佐证承担。
+已登记代价：harness 懒刷盘让佐证滞后 ⇒ 多吃一次阻断（fail-closed）；**harness 不回灌反馈的环境（Codex 方言回灌形态未采样）
+会被阻断到底**——每个 Stop loud，逃生口只有 `enforcement: warn`（残余 R-6，与卡 C storage-unavailable 路径同一口径）；
+自注册 Stop hook 投喂反馈条目仍是既有残余（每条 = 一次自己被阻断的往返，压不低地板）。
+**诚实有进展的路径为 `2,2,2,0`**（首个 Stop 恒落 nonBlock：无历史指纹无法判进展）——比改动前多吃一次 exit 2，FR-006「2 次补救」
+口径随之漂移为「2 次有进展补救 + 1 次首停」，如实登记。
+
+**耗尽放行的终态**：`record-workflow-run` 写 `result:'failed'`、`complianceVerdict.blockCount` 为**真实计数（number，键不消失）**、
+审计 `degraded:true`，与 `blockCount` 达上限的放行可由 `nonblock-*` 触发码区分（两条放行路径可见性对等）。
 
 ## 不变量
 
