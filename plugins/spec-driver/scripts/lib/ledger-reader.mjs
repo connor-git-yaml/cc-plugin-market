@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import { classifyDelegationRole } from './fix-compliance-core.mjs';
 import { ledgerPathFor } from './ledger-writer.mjs';
+import { DELEGATION_TOOL_NAMES } from './delegation-tool-names.mjs';
 
 /** 账本状态：缺席（文件不存在/不可读）vs 存在（可能含坏行） */
 export const LEDGER_ABSENT = 'ledger-absent';
@@ -56,11 +57,11 @@ export const LEDGER_DIAGNOSTICS = Object.freeze({
 });
 
 /**
- * 委派工具名（与 core 的 DELEGATION_TOOL_NAMES 同口径，此处不 import 私有常量，硬编码两项）。
+ * 委派工具名（F283：与 core / writer 共用 ./delegation-tool-names.mjs 这一份，此处只转发导出）。
  * 导出供 hooks.json 的 matcher 同步守卫**派生**校验——matcher 收窄为 `Agent|Task` 后，
  * 两者失配会让账本静默漏采委派（对抗 E W-1 实测：改 matcher 零测试变红）。
  */
-export const DELEGATION_TOOL_NAMES = new Set(['Agent', 'Task']);
+export { DELEGATION_TOOL_NAMES };
 
 /**
  * 读账本委派证据。

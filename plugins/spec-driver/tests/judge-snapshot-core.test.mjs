@@ -340,8 +340,8 @@ describe('resolveActiveSnapshot — FR-007 四步优先级 + W1 边界', () => {
 });
 
 describe('JUDGE_FILE_SET — 常量断言', () => {
-  it('长度为 10（F270 P3 +in-flight-verdict / P4 +ledger-reader+writer），内容一致（Set 比较，顺序无关）', () => {
-    assert.equal(JUDGE_FILE_SET.length, 10);
+  it('长度为 11（F270 P3 +in-flight-verdict / P4 +ledger-reader+writer / F283 +delegation-tool-names），内容一致（Set 比较，顺序无关）', () => {
+    assert.equal(JUDGE_FILE_SET.length, 11);
     assert.deepStrictEqual(
       new Set(JUDGE_FILE_SET),
       new Set([
@@ -351,6 +351,8 @@ describe('JUDGE_FILE_SET — 常量断言', () => {
         'scripts/lib/fix-compliance-io.mjs',
         // F270 P3：background_tasks 在途三态判定进入判定器 import 闭包
         'scripts/lib/in-flight-verdict.mjs',
+        // F283：委派工具名单源
+        'scripts/lib/delegation-tool-names.mjs',
         // F270 P4：账本读取侧 + 其依赖的采集器路径拼接模块进入闭包
         'scripts/lib/ledger-reader.mjs',
         'scripts/lib/ledger-writer.mjs',
@@ -364,6 +366,6 @@ describe('JUDGE_FILE_SET — 常量断言', () => {
 
   it('Object.freeze 生效：push/赋值不改变内容', () => {
     assert.throws(() => JUDGE_FILE_SET.push('x'));
-    assert.equal(JUDGE_FILE_SET.length, 10);
+    assert.equal(JUDGE_FILE_SET.length, 11);
   });
 });

@@ -315,7 +315,7 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
     );
     // 汇总行必须体现 added-since——旁注方案正是在这里把它整个吞掉的
     assert.ok(
-      r.stdout.includes('增量汇总: 9 unchanged / 1 added-since'),
+      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 added-since`),
       `增量汇总应逐字含 added-since 计数：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);
@@ -393,7 +393,7 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
     assert.ok(r.stderr.includes('不是普通文件'), `stderr 应指明该路径不是普通文件，实际：${r.stderr}`);
   });
 
-  it('S7 本次改动引入的漂移：exit 0 + [introduced] + 增量汇总逐字为「9 unchanged / 1 introduced」', () => {
+  it('S7 本次改动引入的漂移：exit 0 + [introduced] + 增量汇总逐字为「N-1 unchanged / 1 introduced」', () => {
     // 此前两条端到端用例都以「当前 match」收尾，没有任何用例产出过 introduced 行——
     // 把 introduced 一律改判 unchanged 的变异体 0 红，正是因为这条路径从未被跑过。
     const broken = JUDGE_FILE_SET[2];
@@ -411,8 +411,8 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
     assert.ok(line.includes('(基线 match → 当前 mismatch)'), `该行应打印两侧原始 status，实际：${line}`);
     // 逐字钉住汇总行：既守护「汇总行存在」，也守护 DELTA_VOCABULARY 的打印顺序
     assert.ok(
-      r.stdout.includes('增量汇总: 9 unchanged / 1 introduced'),
-      `增量汇总应逐字为「9 unchanged / 1 introduced」：\n${r.stdout}`,
+      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 introduced`),
+      `增量汇总应逐字为「${JUDGE_FILE_SET.length - 1} unchanged / 1 introduced」：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);
   });
@@ -440,7 +440,7 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
       `该行应打印两侧原始 status，实际：${line}`,
     );
     assert.ok(
-      r.stdout.includes('增量汇总: 9 unchanged / 1 added-since'),
+      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 added-since`),
       `汇总行必须体现 added-since：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);

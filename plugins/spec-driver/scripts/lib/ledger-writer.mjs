@@ -33,6 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sanitizeSessionId } from './fix-compliance-io.mjs';
 import { isInvokedDirectly } from './is-invoked-directly.mjs';
+import { DELEGATION_TOOL_NAMES } from './delegation-tool-names.mjs';
 
 /** 账本目录（相对 projectRoot），与状态目录 `.fix-compliance-state` 同族并列 */
 export const LEDGER_SUBDIR = ['.specify', 'runs', '.fix-compliance-ledger'];
@@ -43,8 +44,7 @@ export const LEDGER_MAX_BYTES = 1_048_576;
 /** 自诊断文件名（与账本同目录；点前缀避开数据文件通配） */
 const SELFDIAG_BASENAME = '.ledger-selfdiag.jsonl';
 
-/** 委派类工具名：从 tool_input 提取 subagent_type 全值（FR-048 去重键需全值不截断） */
-const DELEGATION_TOOL_NAMES = new Set(['Agent', 'Task']);
+// 委派类工具名：F283 起唯一事实源在 ./delegation-tool-names.mjs；从 tool_input 提取 subagent_type 全值（FR-048 去重键需全值不截断）
 
 /** 账本数据文件绝对路径 */
 export function ledgerPathFor(projectRoot, sessionId) {

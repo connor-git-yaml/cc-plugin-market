@@ -83,39 +83,8 @@ export const CODEX_EVENT_PRODUCT_SET = Object.freeze([
   'Stop',
 ]);
 
-/**
- * 我方 hook 脚本的**完整相对后缀**（归属锚点，FR-011.4）。
- *
- * 🔴 用 `command` 里的脚本路径做锚点，而**不是**往 JSON 里塞自定义字段 —— `_grounding.md` §8.1
- * 实测未知字段当前被静默忽略，但「未来 Codex 是否严格拒绝未知字段」属未确证风险。
- *
- * 🔴 为什么是 `[父目录, 文件名]` 二元组而不是单纯的 basename：
- * 归属判定的**误认方向会删除第三方数据**，是本模块唯一不可逆的失败方向。只按 basename +
- * 「路径里某处有 `spec-driver` 分量」判定过宽，已实测可被
- * `bash /opt/othertool/spec-driver/postinstall.sh`、
- * `bash /x/spec-driver/hooks/../../evil/postinstall.sh` 等第三方命令命中。
- * 收紧为「后缀必须精确等于 `<scripts|hooks>/<脚本名>`，且 `spec-driver` 根分量必须出现在该
- * 后缀之前，且整个 token 不含 `..`」后，上述形态全部落回第三方侧。
- */
-export const OWNED_HOOK_SCRIPT_SUFFIXES = Object.freeze([
-  Object.freeze(['scripts', 'postinstall.sh']),
-  Object.freeze(['hooks', 'pre-tool-use-guard.sh']),
-  Object.freeze(['hooks', 'post-tool-use-format.sh']),
-  // F270 P5：会话证据账本采集器（PostToolUse）。
-  // matcher 自集成 review 起收窄为 `Agent|Task`：D-1 方向 X 下账本**只承担委派证据**，
-  // reader 本就只消费 DELEGATION_TOOL_NAMES={Agent,Task}，全量触发是纯开销——实测端到端
-  // 43-63ms/次且 PostToolUse 阻塞后续工具，300 次调用即 13s+ 串行叠加；同时每次工具调用
-  // 都写盘会放大 saveBlockState 一侧本就未解决的并发面（病根 v）。
-  //
-  // ⚠️ 收窄的代价（对抗 D WARNING-2，如实登记而非只写收益）：零委派会话此后**不再产生账本
-  // 文件**，于是「文件不存在＝采集器可能没装/没生效」与「仅哨兵＝采集器活着、本段确实无委派」
-  // 两态坍缩——而零委派会话正是 F208 门禁要抓的坍塌会话本体。当前无判定影响（两态都产出空
-  // delegations、结论一致），但后续实现 FR-043/044 活性自检时**不能**依赖账本文件的存在性做
-  // 判据，需改用 SessionStart 侧哨兵或等价机制。同理 `AskUserQuestion` 也不再进账本。
-  Object.freeze(['hooks', 'post-tool-use-ledger.sh']),
-  Object.freeze(['hooks', 'stop-task-check.sh']),
-  Object.freeze(['hooks', 'stop-fix-compliance-check.sh']),
-]);
+// OWNED_HOOK_SCRIPT_SUFFIXES：F283 起由 OWNED_HOOK_EXPECTED_EVENT 派生（见下方定义），不再手写第二份表。
+
 
 /**
  * 我方每条 owned hook 脚本**期望挂载的事件**（F264）。
@@ -127,7 +96,9 @@ export const OWNED_HOOK_SCRIPT_SUFFIXES = Object.freeze([
  * 事件集合是 handler 集合的**有损投影**，用投影做完整性判据必然漏判。
  *
  * key 为 `<父目录>/<脚本名>`（与 `OWNED_HOOK_SCRIPT_SUFFIXES` 同一口径），value 为期望事件。
- * 🔴 新增 owned hook 时**必须**同时登记到这里，否则它会被判成 `product-handler-misplaced`。
+ * 🔴 新增 owned hook 时**必须**登记到这里（F283 起这是唯一登记点：后缀表由本表派生），否则 generator 对该脚本
+ * fail-loud「未登记脚本」，装不进 Codex。**禁止直接删键退役**：删键会让已装进用户 $CODEX_HOME 的历史条目永久失去归属
+ * （升版不替换、`--remove` 不回收、validate 判 pass 归为第三方）——退役须新增「参与归属、不参与期望」的退役表机制（F283 复审 W-3，M11）。
  */
 export const OWNED_HOOK_EXPECTED_EVENT = Object.freeze({
   'scripts/postinstall.sh': 'SessionStart',
@@ -138,6 +109,55 @@ export const OWNED_HOOK_EXPECTED_EVENT = Object.freeze({
   'hooks/stop-task-check.sh': 'Stop',
   'hooks/stop-fix-compliance-check.sh': 'Stop',
 });
+
+/**
+ * 我方 hook 脚本的**完整相对后缀**（归属锚点，FR-011.4）。
+ *
+ * 🔴 F283：本表**由 `OWNED_HOOK_EXPECTED_EVENT` 的键派生**（`<父目录>/<脚本名>` → `[父目录, 脚本名]`），
+ * 登记点只有一处——此前两表各写一份、只有「删」方向有守卫（product-handler-unregistered），
+ * 「加」方向（canonical 新增脚本却漏登记）静默穿过 generator 装进用户 $CODEX_HOME（F270「守卫抓删不抓加」同型）。
+ * 派生后新脚本要么在 EXPECTED_EVENT 登记（同时获得归属与期望事件），要么被 generator fail-loud 拒绝。
+ *
+ * 🔴 用 `command` 里的脚本路径做锚点，而**不是**往 JSON 里塞自定义字段 —— `_grounding.md` §8.1
+ * 实测未知字段当前被静默忽略，但「未来 Codex 是否严格拒绝未知字段」属未确证风险。
+ *
+ * 🔴 为什么是 `[父目录, 文件名]` 二元组而不是单纯的 basename：
+ * 归属判定的**误认方向会删除第三方数据**，是本模块唯一不可逆的失败方向。只按 basename +
+ * 「路径里某处有 `spec-driver` 分量」判定过宽，已实测可被
+ * `bash /opt/othertool/spec-driver/postinstall.sh`、
+ * `bash /x/spec-driver/hooks/../../evil/postinstall.sh` 等第三方命令命中。
+ * 收紧为「后缀必须精确等于 `<scripts|hooks>/<脚本名>`，且 `spec-driver` 根分量必须出现在该
+ * 后缀之前，且整个 token 不含 `..`」后，上述形态全部落回第三方侧。
+ * F270 P5：会话证据账本采集器（PostToolUse）。
+ * matcher 自集成 review 起收窄为 `Agent|Task`：D-1 方向 X 下账本**只承担委派证据**，
+ * reader 本就只消费 DELEGATION_TOOL_NAMES={Agent,Task}，全量触发是纯开销——实测端到端
+ * 43-63ms/次且 PostToolUse 阻塞后续工具，300 次调用即 13s+ 串行叠加；同时每次工具调用
+ * 都写盘会放大 saveBlockState 一侧本就未解决的并发面（病根 v）。
+ *
+ * ⚠️ 收窄的代价（对抗 D WARNING-2，如实登记而非只写收益）：零委派会话此后**不再产生账本
+ * 文件**，于是「文件不存在＝采集器可能没装/没生效」与「仅哨兵＝采集器活着、本段确实无委派」
+ * 两态坍缩——而零委派会话正是 F208 门禁要抓的坍塌会话本体。当前无判定影响（两态都产出空
+ * delegations、结论一致），但后续实现 FR-043/044 活性自检时**不能**依赖账本文件的存在性做
+ * 判据，需改用 SessionStart 侧哨兵或等价机制。同理 `AskUserQuestion` 也不再进账本。
+ */
+/**
+ * 键形状断言（F283 对抗复审 W-2）：`<父目录>/<脚本名>` 必须恰两段非空——三段键会把中间的**目录名**派生成脚本锚点
+ * （`isOwnedEntry('bash /x/spec-driver/hooks/sub') === true` ⇒ 第三方目录路径被认领、落在误删方向），一段键派生出
+ * `[name, undefined]` 永不命中。模块加载即抛，不让畸形键活到运行期。
+ * @param {readonly string[]} keys
+ * @returns {readonly (readonly [string, string])[]}
+ */
+export function deriveOwnedSuffixes(keys) {
+  return Object.freeze(keys.map((key) => {
+    const segments = key.split('/');
+    if (segments.length !== 2 || segments.some((seg) => seg.length === 0)) {
+      throw new Error(`OWNED_HOOK_EXPECTED_EVENT 的键必须是 <父目录>/<脚本名> 两段非空，实际为 ${JSON.stringify(key)}`);
+    }
+    return Object.freeze(/** @type {[string, string]} */ ([segments[0], segments[1]]));
+  }));
+}
+
+export const OWNED_HOOK_SCRIPT_SUFFIXES = deriveOwnedSuffixes(Object.keys(OWNED_HOOK_EXPECTED_EVENT));
 
 /**
  * 我方的 **Claude adapter 独有** hook 脚本（Codex 全集中无对应事件）。
@@ -254,25 +274,55 @@ function splitCommandTokens(command) {
  *   归属判定就等于放宽「可以删谁的数据」，属数据丢失面。
  * @returns {string|null} 命中的完整路径 token
  */
+/** 单个 token 是否是「后缀命中 + 根分量在前 + 不含 `..`」的我方脚本路径。 */
+function tokenIsScriptPath(token, suffixes, rootNames) {
+  const segments = token.split('/');
+  // 至少 `<根>/<父目录>/<脚本名>` 三段，否则不可能同时满足后缀与根分量在前
+  if (segments.length < 3) return false;
+  if (segments.includes('..')) return false;
+  const parent = segments[segments.length - 2];
+  const basename = segments[segments.length - 1];
+  if (!suffixes.some(([dir, name]) => dir === parent && name === basename)) return false;
+  // 根分量必须严格出现在 `<父目录>/<脚本名>` 之前
+  return segments.slice(0, segments.length - 2).some((seg) => rootNames.includes(seg));
+}
+
 function findScriptPath(command, suffixes, allowPlaceholderRoot = false) {
   if (typeof command !== 'string' || command.length === 0) return null;
   const rootNames = allowPlaceholderRoot
     ? [OWNED_PATH_COMPONENT, PLACEHOLDER_ROOT_COMPONENT]
     : [OWNED_PATH_COMPONENT];
-
   for (const token of splitCommandTokens(command)) {
-    const segments = token.split('/');
-    // 至少 `<根>/<父目录>/<脚本名>` 三段，否则不可能同时满足后缀与根分量在前
-    if (segments.length < 3) continue;
-    if (segments.includes('..')) continue;
-    const parent = segments[segments.length - 2];
-    const basename = segments[segments.length - 1];
-    if (!suffixes.some(([dir, name]) => dir === parent && name === basename)) continue;
-    // 根分量必须严格出现在 `<父目录>/<脚本名>` 之前
-    if (!segments.slice(0, segments.length - 2).some((seg) => rootNames.includes(seg))) continue;
-    return token;
+    if (tokenIsScriptPath(token, suffixes, rootNames)) return token;
   }
   return null;
+}
+
+/** 解释器 / 前缀 token：它们之后的第一个 token 才是被执行的脚本。 */
+const INTERPRETER_TOKENS = new Set(['bash', 'sh', 'zsh', 'dash', 'node', 'env', 'exec', 'nohup']);
+/** 前导 `NAME=value` 赋值序列（value 允许简单引号包裹或无空白裸值） */
+const LEADING_ENV_ASSIGNMENTS = /^(?:\s*[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s]*)\s+)*/;
+
+/**
+ * F283（对抗复审 W-1 两路）：**准入闸**专用判据——「命令里任一 token 命中」（`isOwnedEntry`）是回收闸的口径，方向是
+ * 宁可多认领；准入面（generator 装什么进 Codex）对象是我方 canonical，不承担误删第三方的不对称风险，
+ * 必须更严：跳过 `X=…` 环境赋值与解释器 token 后，**第一个被执行的脚本路径**必须是我方登记脚本。
+ * 这样「包装器 + 参数里提及我方路径」（`bash …/wrapper.sh …/stop-task-check.sh`）、「注释 / env 里提及」都过不了。
+ * 只在**展开后**的产物上判（不认占位符根）：引号 / 转义拼出的 `"$"{CLAUDE_PLUGIN_ROOT}` 展开后仍带 `${`，
+ * 不含 `spec-driver` 根分量 ⇒ 拒绝——判据与「装进去的字面量」是同一个东西。
+ * @param {unknown} command 展开后的 handler.command
+ * @returns {boolean}
+ */
+export function isOwnedExecutableEntry(command) {
+  if (typeof command !== 'string' || command.length === 0) return false;
+  // 先剥前导环境赋值：splitCommandTokens 把 `=` 当分隔符，`FOO=1` 会被拆成 `FOO` / `1`，事后认不出来
+  const stripped = command.replace(LEADING_ENV_ASSIGNMENTS, '');
+  const tokens = splitCommandTokens(stripped);
+  let i = 0;
+  while (i < tokens.length && (INTERPRETER_TOKENS.has(tokens[i]) || /^-/.test(tokens[i]))) i += 1;
+  const script = tokens[i];
+  if (script === undefined) return false;
+  return tokenIsScriptPath(script, OWNED_HOOK_SCRIPT_SUFFIXES, [OWNED_PATH_COMPONENT]);
 }
 
 /**
@@ -420,7 +470,16 @@ export function validateCodexHooksDocument(doc, options = {}) {
     const command = isPlainObject(handler) ? handler.command : undefined;
     if (isOwnedEntry(command, ownership)) ownedEvents.add(event);
     else if (isClaudeOnlyEntry(command, ownership)) claudeOnlyEvents.add(event);
-    else foreignEvents.add(event);
+    else {
+      foreignEvents.add(event);
+      // F283（对抗复审 I-2）：canonical 里挂在**产品事件**下的、既非 owned 也非 Claude-only 的 handler 就是
+      // 未登记脚本——generator 会把它装进 Codex，故与准入闸同口径 fail，两道门不得一松一紧。
+      // 非产品事件（如 PermissionRequest）下的第三方条目不会被 generator 展开，沿用 F264「第三方条目不参与
+      // handler 级判据」的契约，不在此判 fail。
+      if (options.canonicalSource === true && CODEX_EVENT_PRODUCT_SET.includes(event)) {
+        fail('product', 'canonical-unregistered-script', { event, command });
+      }
+    }
   }
   // 无 handler 的空事件键也参与 schema 层判定（它对 Codex 合法但不触发任何东西）
   for (const event of Object.keys(isPlainObject(doc.hooks) ? doc.hooks : {})) {
@@ -476,10 +535,9 @@ export function validateCodexHooksDocument(doc, options = {}) {
     if (suffixKey === null) continue;
     const expectedEvent = OWNED_HOOK_EXPECTED_EVENT[suffixKey];
     if (expectedEvent === undefined) {
-      // 归属判定认得出（在 OWNED_HOOK_SCRIPT_SUFFIXES 里），却没登记期望事件 —— 两张表脱节。
-      // 这是我方自己的登记缺口，fail-loud 好过静默放过一条无人校验的 hook。
-      // ⚠️ 诚实标注（F264 / 第二轮 W4.3）：两张表当前 6/6 完全对齐，本分支**结构性不可达**，
-      // 是给"将来只改了一张表"准备的前瞻分支 —— **不要**把它算进"已验证的守护力"。
+      // 归属判定认得出，却没登记期望事件。F283 起后缀表由 OWNED_HOOK_EXPECTED_EVENT 派生（suffixKey ≡ 键），
+      // 合法键下本分支**结构性不可达**（对抗复审 fuzz 40 万 token 零命中）；只在畸形键下可达，而畸形键已被
+      // deriveOwnedSuffixes 在模块加载时拒绝。保留分支只为防御性兜底，**不要**把它算进"已验证的守护力"。
       fail('product', 'product-handler-unregistered', { event, script: suffixKey });
       continue;
     }

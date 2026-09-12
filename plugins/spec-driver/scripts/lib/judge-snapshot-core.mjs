@@ -20,6 +20,8 @@ export const JUDGE_FILE_SET = Object.freeze([
   'scripts/lib/fix-compliance-io.mjs',
   // F270 P3：background_tasks 在途三态判定进入判定器 import 闭包（FR-038）。
   'scripts/lib/in-flight-verdict.mjs',
+  // F283：委派工具名单源模块被 core / ledger-writer / ledger-reader 三方 import，进入闭包。
+  'scripts/lib/delegation-tool-names.mjs',
   // F270 P4：判定器读账本委派证据（D-1 方向 X）进入闭包。
   // 注意：账本**采集器** ledger-writer.mjs 仍不在此集——它是 PostToolUse 采集侧、不被判定器
   // import；只有**读取侧** ledger-reader 进闭包。ledger-reader import ledger-writer 的

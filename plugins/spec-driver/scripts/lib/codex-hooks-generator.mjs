@@ -31,6 +31,7 @@ import {
   CODEX_EVENT_PRODUCT_SET,
   OWNED_PATH_COMPONENT,
   isClaudeOnlyEntry,
+  isOwnedExecutableEntry,
   validateCodexHooksDocument,
 } from './codex-hooks-schema.mjs';
 
@@ -173,7 +174,21 @@ export function generateCodexHooks({ canonical, pluginRoot } = {}) {
                 '或把它纳入产品集并给出 Codex 侧实现',
             );
           }
-          return { ...handler, command: expand(handler.command) };
+          // 🔴 F283：守卫抓删不抓加（F270 教训）——既非 owned 也非 Claude-only 的**未登记**脚本此前会静默
+          // 穿过本循环与两层门禁装进 $CODEX_HOME/hooks.json，装完 `isOwnedEntry=false` ⇒ `--remove` 不回收、
+          // `validate --baseline` 把它当第三方数据保全。登记点只有一处：OWNED_HOOK_EXPECTED_EVENT（后缀表由它派生）。
+          // 判据（对抗复审两路 W-1）：在**展开后**的产物上判「第一个被执行的脚本路径是我方登记脚本」——
+          // 包装器 + 参数提及、注释 / env 提及、引号 / 转义拼出的占位符（展开后仍带 `${`）全部拒绝；
+          // 判据与装进去的字面量是同一个东西，不再依赖 tokenizer 与 expand 两套语义一致。
+          const expanded = expand(handler.command);
+          if (!isOwnedExecutableEntry(expanded)) {
+            throw new Error(
+              `generateCodexHooks: 事件 ${event} 下挂了未登记脚本 (${handler.command}) —— ` +
+                '第一个被执行的脚本路径必须是 OWNED_HOOK_EXPECTED_EVENT 登记的 <父目录>/<脚本名>（归属表单源），' +
+                '否则装进 Codex 后无法回收',
+            );
+          }
+          return { ...handler, command: expanded };
         }),
       };
     });

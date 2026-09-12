@@ -61,6 +61,15 @@ describe('F270 P4 · readLedgerDelegations', () => {
     assert.equal(r.delegations[0].source, 'ledger');
   });
 
+  it('Task 别名与 Agent 同为委派类（对抗复审 W-4：reader 消费点此前对 Task 零覆盖）', () => {
+    writeRaw('s1t', [
+      { ...agentEntry('t1', 'spec-driver:verify', '2026-09-01T10:02:00.000Z'), tool_name: 'Task' },
+    ]);
+    const r = readLedgerDelegations(tmp, 's1t', { sinceTs: '2026-09-01T00:00:00.000Z' });
+    assert.equal(r.delegations.length, 1);
+    assert.equal(r.delegations[0].subagentType, 'spec-driver:verify');
+  });
+
   it('坏行跳过并计数（FR-010，不使整本失效）', () => {
     writeRaw('s2', [
       agentEntry('a1', 'spec-driver:implement', '2026-09-01T10:00:00.000Z'),

@@ -26,6 +26,7 @@ import {
   classifyReproEvidence,           // judgeCompliance 复用
   toSingleMatchProbe,              // 章节判据函数构造单次匹配探针（不 re-export，新符号无兼容约束）
 } from './fix-compliance-execution-record.mjs';
+import { DELEGATION_TOOL_NAMES } from './delegation-tool-names.mjs';
 
 // ────────────────────────────────────────
 // 常量
@@ -376,8 +377,7 @@ const VERIFY_ROLE_REGEX = /verify|quality-review|spec-review|review|验证|审�
 // no-op 交叉核实类（比 verify 更宽，额外含 核实/确认；codex plan 审查 W-2 堵廉价委派）
 const NOOP_VERIFY_ROLE_REGEX = /verify|spec-review|quality-review|review|验证|审查|核实|确认/i;
 
-/** 委派工具名白名单（Agent=当前 CLI 记录名，Task=历史/未来名，等价对待） */
-const DELEGATION_TOOL_NAMES = new Set(['Agent', 'Task']);
+// 委派工具名白名单：F283 起唯一事实源在 ./delegation-tool-names.mjs（core / ledger-writer / ledger-reader 共用）
 
 /**
  * missing 枚举 → 固定 action 文案映射（contracts/fix-compliance-judge-cli.md）。
