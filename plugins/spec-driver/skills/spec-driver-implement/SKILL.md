@@ -801,7 +801,15 @@ implement:
 
 **并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
-1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
+**spec-review 派发前置（F286，承接 F278/F279 反馈）**：`spec-review` 子代理**没有 Bash**，合规审查的核心是核对"声称达成"与"实测证据"的差距——
+编排器 MUST 先**预跑注入**证据包，再派发：把以下内容写入 `{feature_dir}/verification/evidence-pack.md`（**首行** `baseRef: $(git merge-base origin/master HEAD)`——feature 模式取 trace.md 最后一条 `phase_start_ref: implement=`；这是 verify Layer 1.85 的**唯一合法基线来源**，缺席即该层「未执行（缺席）」）并把路径同时放进 spec-review 与 verify 的上下文注入：
+`git diff --stat <baseRef>` 与改动文件清单、本次门禁结果（build / lint / test 命令与退出码）、新增测试用例名、
+若触及 `BEHAVIOR_VERSION` / pinned 资产则给现值与 A/B 结论、`node $PLUGIN_DIR/scripts/export-reachability.mjs --base <baseRef>` 的输出。
+不开 Bash 白名单（只读 git 白名单方案成本高且仍不覆盖 node --test）。spec-review / quality-review 现各持有仅限 `{feature_dir}/verification/spec-review-report.md` / `quality-review-report.md`
+的 Write 权限，报告直接落盘，不再手工转录。**返回处理（B-W4）**：(1) `test -f` 两份报告，缺席记「报告缺席」并按 NEEDS FIX 侧进 GATE_VERIFY 合并结果；
+(2) 派发前后各取一次 `git status --porcelain`，除这两份报告外出现新改动即判**越界写入**——回滚该改动并记 WARNING。
+
+1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + evidence-pack.md 路径 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
 2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查（含架构合理性与可读性）", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
 
 `quality-review` 在本阶段必须显式检查：
@@ -814,7 +822,7 @@ implement:
 
 #### Phase 5c: 工具链验证 + 验证证据核查
 
-读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 5a/5b 报告路径 + config.verification + GATE_TASKS 冻结值注入块（矩阵 sha256 + 复算命令 + 基准 commit，见「冻结值字段格式」）}", model: "{config.agents.verify.model}")。
+读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 5a/5b 报告路径 + config.verification + GATE_TASKS 冻结值注入块（矩阵 sha256 + 复算命令 + 基准 commit，见「冻结值字段格式」） + evidence-pack.md 路径（含 baseRef）}", model: "{config.agents.verify.model}")。
 
 #### 质量门（GATE_VERIFY）
 

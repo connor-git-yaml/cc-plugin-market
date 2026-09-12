@@ -1,6 +1,7 @@
 # spec-review 子代理制品 Schema
-# 注意：spec-review 不生成文件，报告通过返回消息传递给编排器
-output_path: "# 无文件输出——合规审查报告通过返回消息传递"
+# F286：报告同时落盘（子代理获得仅限该文件的 Write 权限）并通过返回消息传递；此前"不生成文件"与 SKILL 要求
+# 产出 verification/spec-review-report.md 的任务契约不匹配（F279 反馈），完整审查会随会话流失。
+output_path: "{feature_dir}/verification/spec-review-report.md"
 required_sections:
   - "## Spec 合规审查报告"
   - "### 逐条 FR 状态"

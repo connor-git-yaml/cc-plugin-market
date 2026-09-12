@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Bash, Grep, Glob, mcp__plugin_spectra_spectra__impact, mcp__plugin_spectra_spectra__context]
+tools: [Read, Write, Bash, Grep, Glob, mcp__plugin_spectra_spectra__impact, mcp__plugin_spectra_spectra__context]
 effort: medium
 ---
 
@@ -117,6 +117,10 @@ effort: medium
 4. **生成质量审查报告**
 
 ## 输出
+
+- **落盘**（F286，与 spec-review 对称）：把下方报告**原样**写入 `{feature_dir}/verification/quality-review-report.md`。
+  `Write` 权限**仅限**该文件——不得写任何源码、spec / plan / tasks 制品或其它路径；编排器据此落盘核对（派发前后
+  `git status --porcelain` 对比，除该文件外的改动判越界写入）。
 
 - 返回给编排器：
 

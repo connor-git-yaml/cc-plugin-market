@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Grep, Glob, mcp__plugin_spectra_spectra__impact, mcp__plugin_spectra_spectra__context]
+tools: [Read, Write, Grep, Glob, mcp__plugin_spectra_spectra__impact, mcp__plugin_spectra_spectra__context]
 effort: medium
 ---
 
@@ -97,6 +97,13 @@ effort: medium
 
 ## 输出
 
+- **落盘**（F286，承接 F279 反馈「审查子代理被要求产出报告文件却没有写文件的能力」）：把下方报告**原样**写入
+  `{feature_dir}/verification/spec-review-report.md`。`Write` 权限**仅限**该文件——不得写任何源码、spec / plan / tasks
+  制品或其它路径；编排器据此落盘核对，不再依赖手工转录（完整的合规审查曾因此随会话流失）。
+- **证据来源**：本子代理没有 Bash。实测证据（`git diff --stat`、门禁结果、新增用例名、`BEHAVIOR_VERSION` 现值、A/B 结论等）
+  由编排器**预跑注入**到 `{feature_dir}/verification/evidence-pack.md`（SKILL 的 spec-review 派发前置步骤）；本子代理 Read 它并在
+  证据栏引用其原文。证据包缺席时，把"无实测证据、只能读代码判定"作为**全局受限声明**写在报告首节，并把依赖实测的 FR 归入
+  「未核验」——不得读代码脑补出"已核验"。
 - 返回给编排器：
 
 ```text

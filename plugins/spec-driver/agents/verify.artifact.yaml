@@ -8,4 +8,8 @@ optional_sections:
   - "## Layer 1.5: 验证铁律合规"
   - "## Layer 1.75: 深度检查"
   - "## Layer 1.8: 残留扫描"
+  # F286（F277 FR-010~013 承接）：feature / story / implement 强制、fix / refactor 条件（有代码改动或延期承诺时）——
+  # 无校验器消费本合同（纯登记，对抗复审 B-W1）：mode 强制规则写在 agents/verify.md Layer 1.85 首句，合同层登记为可选章节以兼容 doc / sync 模式。
+  - "## Layer 1.85: 导出符号生产可达性"
+  - "## Layer 1.86: 向后兼容类 SC 的 A/B 记录"
   - "## Layer 1.9: 文档一致性"

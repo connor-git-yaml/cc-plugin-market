@@ -1,6 +1,7 @@
 # quality-review 子代理制品 Schema
 # 注意：quality-review 不生成文件，报告通过返回消息传递给编排器
-output_path: "# 无文件输出——质量审查报告通过返回消息传递"
+# F286：报告同时落盘（子代理获得仅限该文件的 Write 权限）并通过返回消息传递（与 spec-review 对称）
+output_path: "{feature_dir}/verification/quality-review-report.md"
 required_sections:
   - "## 代码质量审查报告"
   - "### 六维度评估"

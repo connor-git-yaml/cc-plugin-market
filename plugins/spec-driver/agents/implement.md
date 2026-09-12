@@ -229,6 +229,15 @@ verify 的 `tools` 无 `Write` / `Edit`，但它**持有 `Bash`**——而 `Bash
    - 每完成一个任务，立即更新 tasks.md 中的 checkbox
    - 如果任务无法完成（依赖缺失、规范不明确），记录原因并继续下一个任务
 
+   **RED 级取证落盘（F286，承接 F279 反馈：63 次调用后断连，红先行证据永久丢失）**
+
+   每完成一个「红先行 → 变绿」的任务，**立即**把本任务的红先行证据 append 到 `{feature_dir}/verification/red-first-evidence.md`
+   （**append-only** 文件，首行标题「## 红先行取证」；与下文**覆盖**写入的 `implementation-notes.md` 分离——对抗复审 B-W3：
+   放同一文件会被 Phase 级覆盖抹掉）。每段含任务 ID、跑红的命令、FAIL 输出摘录 ≤ 10 行、转绿的命令与 PASS 摘录；
+   verify 阶段的 Layer 1.86 先读该文件。这是唯一在会话中断后
+   仍幸存的证据；攒到最后一次性写等于押注不断连。若证据仍丢失，verify 阶段按 F279 SOP 补替代证明：
+   新测试 × `git show <baseRef>:<src>` 旧实现应 FAIL、× 新实现应 PASS（两次输出都贴进验证报告）。
+
    **Phase 级进度落盘（默认约定）**
 
    每完成一个 Phase（不是每个任务），立即把进度快照写盘。落盘目标与写入方式 MUST 如下：

@@ -46,6 +46,16 @@
 - **不通过侧合计**: {F}（未实现 + 未执行（缺席）+ 未对账 + 已违反 + 未核验）
 - **覆盖率**: {M ÷ N1 × 100}%（换算式与计数单位须写全）
 
+## Layer 1.85: 导出符号生产可达性
+
+{适用范围：feature / story / implement 强制；fix / refactor 有代码改动或延期承诺时；doc / sync 写「不适用」。}
+
+{粘贴 `scripts/export-reachability.mjs --base <baseRef>` 的完整输出：契约字段（baseRef 来自 evidence-pack.md 首行）/ 新增导出符号表 / 报警处置表（每条三支择一 + 可核对落点）/ 固定口径句。零新增导出符号也要附命令与原始输出。}
+
+## Layer 1.86: 向后兼容类 SC 的 A/B 记录（如适用）
+
+{先读 verification/red-first-evidence.md；逐字节不变 / 向后兼容类 SC 的同时刻 A/B（两侧命令 + 归一化规则 + 结论）；红先行证据缺席时的替代证明（新测试 × 旧实现 FAIL / × 新实现 PASS 两次输出）。不适用写「不适用」。}
+
 ## Layer 2: Native Toolchain
 
 {以下各节按检测到的语言/构建系统动态生成}

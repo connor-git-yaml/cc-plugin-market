@@ -47,7 +47,7 @@
   审查类子代理被要求写文件，却没有写文件的能力。改进方向：给审查类 agent 补受限 Write 权限
   （仅限 `{feature_dir}/verification/`），或把 SKILL 里"产出报告文件"的措辞改为"返回报告正文，
   由编排器落盘"。当前状态下若编排器不主动转录，一份完整的合规审查会**直接随会话流失**。
-  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（FR-010~013 承接：审查类 agent 的写盘/证据能力契约）
+  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（FR-010~013 承接：审查类 agent 的写盘/证据能力契约）；**F286 已落地**（`spec-review.md` tools 加 Write、仅限 `verification/spec-review-report.md`；artifact output_path 改真实路径）
 - [流程顺畅度][Spec Driver 编排] `spec-driver:implement` 子代理在 **63 次工具调用 / 约 19 分钟**后
   遭遇 `API Error: Connection lost mid-response`。代码改动已完整落盘且通过全部验收，但它**未能写出
   实现笔记**，导致"红先行是否真的逐条先见 FAIL"的过程证据**永久丢失、无法追认**。
@@ -55,7 +55,7 @@
   改进方向：长任务子代理应**边做边落盘取证**（每完成一个 RED 任务就 append 一段），
   而不是把全部证据攒到最后一次性写——否则中断即全失。本卡的补救是改用一种**可复现的替代证明**
   （新测试 × `git show HEAD:` 旧实现 → 观察 FAIL），效果反而更强，可考虑固化为 SOP。
-  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（长任务子代理边做边落盘取证；「新测试 × git show HEAD: 旧实现」替代证明固化为 SOP）
+  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（长任务子代理边做边落盘取证；「新测试 × git show HEAD: 旧实现」替代证明固化为 SOP）；**F286 已落地**（`implement.md` RED 级取证逐任务 append；`verify.md` Layer 1.86 F279 SOP）
 - [结果准确性][Spec Driver plan 阶段] plan 子代理给出的一条裁决**建立在事实错误的论证上**，
   且该错误**通过了 spec-review**（同构审查），最终被**异构对抗审查**推翻：它主张排除
   `graph.graph.fingerprint`，理由是"已有 `fingerprintUnchanged` 这条独立通道"——但那条通道比的是
@@ -103,7 +103,7 @@
   编排器复验后确认反驳成立。教训可泛化：**"逐字节不变"类验收判据不得钉死绝对值快照，必须用同时刻 A/B**
   ——因为被测输出常含本机绝对路径与安装态。改进方向：把这条写进 spec-driver 的 verify 阶段指引
   （"向后兼容类 SC 的验证手段模板"），归口 P1-K 引擎硬化。
-  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（verify 阶段「向后兼容类 SC 验证手段模板」：逐字节判据禁钉快照、必用同时刻 A/B）
+  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（verify 阶段「向后兼容类 SC 验证手段模板」：逐字节判据禁钉快照、必用同时刻 A/B）；**F286 已落地**（`verify.md` Layer 1.86）
 - [流程顺畅度][Spec Driver spec-review] 再现：M10 §5 P1-K 已登记项 —— `spec-driver:spec-review` 子代理
   frontmatter 只给 Read/Grep/Glob（无 Bash），本卡首次派发时它开口第一句就是"我没有 Bash，无法跑
   `git diff`/`node --test`，只能读文件并标注证据受限"，随即 API 断连。**合规审查的核心工作恰恰是
@@ -112,7 +112,7 @@
   `BEHAVIOR_VERSION` 现值、新增用例名、门禁结果、SC-004 的 A/B 结论打成证据包文件让它 Read）后可用。
   → 印证 P1-K 已记的两条方案（只读 git 白名单 / 编排器预跑注入）中**后者可行且成本低**，建议直接采纳
   为 spec-review 的标准前置，而不是给它开 Bash 白名单。
-  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（spec-review 标准前置=编排器预跑注入证据包，不开 Bash 白名单）
+  ↳ **处置（2026-09-12 milestone-next，按推荐项处置·可翻案）**：已分流 → F277 移交卡（spec-review 标准前置=编排器预跑注入证据包，不开 Bash 白名单）；**F286 已落地**（feature / story / implement / fix 四个 SKILL 派发前置段 + `evidence-pack.md` 路径注入）
 - [流程顺畅度][Spec Driver 编排] 子代理长 transcript 的 **API 断连死亡率**在本卡再次凸显：
   plan 阶段的 `spec-driver:plan` 子代理连续两次 `Connection lost mid-response`
   （第一次死在写盘前、第二次死在 plan.md 与 tasks.md 之间），耗掉约 156k + 一轮 SendMessage 恢复；

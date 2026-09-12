@@ -283,6 +283,38 @@ effort: medium
    - 如果迁移了文件，确认旧位置无孤立文件
    - 发现残留 → 标记为 RESIDUAL_FOUND，列出残留位置
 
+### Layer 1.85: 新增导出符号生产可达性（F277 FR-010 ~ FR-013 · F286 承接）
+
+要拦的病：只被测试引用的死代码穿过全绿测试（F270 `routeNonBlock` 形态：生产零接线、单测全绿）。
+
+**适用范围**：feature / story / implement 模式**强制**；fix / refactor 在有代码改动或延期承诺时执行；doc / sync 记「不适用」（不是缺席）。
+   本层没有合同层校验器（`verify.artifact.yaml` 只登记章节），强制性由本句与合并律映射表承担。
+
+6a. **执行检查（纯词法，FR-012）**
+   - 有脚本时：`node $PLUGIN_DIR/scripts/export-reachability.mjs --project-root . --base <baseRef>`，
+     把输出**整段**贴进报告本节。`<baseRef>` = 编排器预跑注入的 `{feature_dir}/verification/evidence-pack.md` **首行** `baseRef:`
+     （编排器按 `git merge-base origin/master HEAD` 计算；feature 模式可取 `trace.md` 最后一条 `phase_start_ref: implement=`）。
+     evidence-pack 缺席或无 `baseRef:` 行 ⇒ 本检查计「未执行（缺席）」；**禁止自行现推、禁止默认为 `HEAD`**——基线未定义时
+     输入是空集、检查会静默通过（FR-010 契约字段；脚本对解析后等于 HEAD 且工作树干净的基线直接 exit 2）。
+   - 无脚本 / 无 Harness 时（FR-043）按同一口径手工执行并记录：`git diff --name-only <baseRef>` 与
+     `git ls-files --others --exclude-standard` 圈定改动文件 → 从新增行抽取 `export` 符号名（改值 / 改签名的既有导出不算新增）
+     → 对每个新符号在生产侧（非测试文件）`grep -nw <name>`，只计**定义文件自身、或 import 了定义文件的文件**里的非声明 / 非注释行；
+     **import / re-export 行（含多行 `import {…} from` 块）不算使用**（一行死 import 洗不白报警）；他文件碰巧同名的声明 / 调用不算。
+   - 三个契约字段（baseRef / 比较命令 / 比较范围）缺一即本检查计「未执行（缺席）」；「零新增导出符号」必须附命令与原始输出。
+6b. **处置每条报警（FR-013）**：在报告本节的处置表里，每条报警在「接线遗漏 / 有意的预留 / 应删除」三支择一并给**可核对落点**：
+   - 接线遗漏 → 指向本次补上的接线位置（文件:行）；
+   - 有意的预留 → **必须同时**在 `tasks.md` 派生一条归属明确 Phase 的延期承诺任务（含回溯指针与勾选状态）；未派生该任务时该处置**无效**、报警按未处置计——这一支正是 F270 当时可以给出的说法，不得成为自选逃生舱；
+   - 应删除 → 指向删除动作（本次 diff 里的删除，或派生的删除任务）。
+   仅写理由不给落点视为未处置。**任一报警未处置 ⇒ 合并律判不通过（NEEDS FIX）**。
+6c. **固定口径随行**：脚本输出末尾那句「本检查仅拦无意遗漏，不拦有意规避……」必须原样保留在本节（FR-012：能力边界写在检查项自身的输出处，不得只写在免责节）。
+
+### Layer 1.86: 向后兼容 / 逐字节不变类 SC 的验证手段（F278 反馈 → F286 成文）
+
+- **先读 `{feature_dir}/verification/red-first-evidence.md`**（implement 逐任务 append 的红先行取证，append-only 文件）；缺席或不完整才走下面的替代证明。
+- **禁止钉死绝对值快照**（sha256 / 逐字输出）作为判据：被测输出常含本机绝对路径与安装态，会话中途 `.spec-driver-path` 切版本即失效（F278 实证）。
+- **必用同时刻 A/B**：`git show <baseRef>:<file>` 取改动前实现放到 scratch，与改动后实现在**同一时刻**各跑一次，比对归一化后的输出；报告写明 A/B 两侧的命令与归一化规则。
+- **红先行证据丢失时的替代证明（F279 SOP）**：新测试 × 旧实现（`git show <baseRef>:<src>` 覆盖到副本）应 FAIL、× 新实现应 PASS，两次输出都贴进报告；比"声称先见了 FAIL"更强，也不依赖子代理 transcript 幸存。
+
 ### Layer 1.9: 文档一致性检查（新增）
 
    如果本次改动涉及架构级变更（新增/删除模块、修改公共接口），检查：
@@ -349,7 +381,7 @@ effort: medium
    - 确保 `{feature_dir}/verification/` 目录存在
    - **加载报告模板**: 检查 `.specify/templates/verification-report-template.md` 是否存在，如存在则使用项目级模板，否则使用 `$PLUGIN_DIR/templates/verification-report-template.md`
    - 按模板写入 `{feature_dir}/verification/verification-report.md`
-   - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 1.75 深度检查 + Layer 1.8 残留扫描 + Layer 1.9 文档一致性 + Layer 2 各语言结果 + 总体摘要
+   - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 1.75 深度检查 + Layer 1.8 残留扫描 + Layer 1.85 导出符号生产可达性（含处置表）+ Layer 1.86 向后兼容类 SC 的 A/B 记录（如适用）+ Layer 1.9 文档一致性 + Layer 2 各语言结果 + 总体摘要
 
 8. **触发质量门**
    - **合并律判不通过 → GATE_VERIFY 停下，标记 NEEDS FIX**（合并律见下文「交付判定合并律」）。**本行是合并结论接到下游动作的唯一落点**：合并律只规定「交付整体判不通过」，若不在此接线，一次工具链全绿而合并律判不通过的交付会按下面第三行合法输出 READY FOR REVIEW。**「工具链失败」的唯一例外**：smoke 轮的 `dist_not_built` SKIPPED 是预期行为、不计入失败（见下文「full 轮出现 `dist_not_built` SKIPPED → infra-failure」节）；full 轮出现同款 SKIPPED 则按 infra-failure 计入失败，不得援引本例外。
@@ -381,6 +413,10 @@ effort: medium
 - 状态: {COMPLIANT / EVIDENCE_MISSING / PARTIAL}
 - 缺失验证类型: {构建/测试/Lint，或"无"}
 - 检测到的推测性表述: {列表，或"无"}
+
+### Layer 1.85: 导出符号生产可达性
+- 状态: {无报警 / 全部已处置 | 报警未处置 | 未执行（缺席） | 不适用}
+- 报警: {N} 条 / 已处置 {M}（处置表见报告本节）
 
 ### Layer 2: 原生工具链
 | 语言 | 构建 | Lint | 测试 |
@@ -511,7 +547,7 @@ effort: medium
 
 #### 既有取值 → 合并律态的显式映射表（逐值必查）
 
-> 本表覆盖本文件四套既有取值词表的**全部 10 个取值**（换算式：Layer 1.5 三取值 3 + Layer 1.8 一取值 1 + Layer 1.9 一取值 1 + Layer 2 `status` 四取值 4 + 类别异议 1 = **10**，单位：取值）。**缺任一既有取值的映射即本合并律未完成**，不得留给执行者临场映射——形态与 `agents/spec-review.md` 的「旧值 → 新值显式映射表」同型。
+> 本表覆盖本文件五套既有取值词表的**全部 14 个取值**（换算式：Layer 1.5 三取值 3 + Layer 1.8 一取值 1 + Layer 1.9 一取值 1 + Layer 2 `status` 四取值 4 + 类别异议 1 + Layer 1.85 四取值 4 = **14**，单位：取值）。**缺任一既有取值的映射即本合并律未完成**，不得留给执行者临场映射——形态与 `agents/spec-review.md` 的「旧值 → 新值显式映射表」同型。
 
 | # | 既有取值 | 出自 | 落侧 | 映射到的合并律态 |
 |---|---------|------|------|----------------|
@@ -525,6 +561,10 @@ effort: medium
 | 8 | `SKIPPED` | Layer 2 | 不通过侧 | 未执行（缺席） |
 | 9 | `UNKNOWN` | Layer 2 | 不通过侧 | 未执行（缺席） |
 | 10 | **类别存疑** | 本文件「类别异议」条款 | 不通过侧 | 类别存疑 |
+| 11 | `无报警 / 全部已处置` | Layer 1.85 导出符号可达性（F286） | **通过侧** | —（不拉红） |
+| 12 | `报警未处置` | Layer 1.85 | 不通过侧 | 报警未处置 |
+| 13 | `未执行（缺席）` | Layer 1.85（evidence-pack 无 baseRef / 契约字段缺一） | 不通过侧 | 未执行（缺席） |
+| 14 | `不适用` | Layer 1.85（doc / sync 模式） | **通过侧** | —（不拉红） |
 
 **第 8 行的唯一例外（须写明，不得默认套用）**：**smoke 轮**的 `SKIPPED` 且 `skipped_reason="dist_not_built"` 按既有 goal_loop 口径记**预期缺席**——它**仍进不通过侧**（该轮的交付结论不得称通过），但**不阻断** goal_loop 的轮次推进（smoke 不 build，该缺席是设计内的）。**full 轮出现同一取值不适用本例外**：按既有契约那是 `infra-failure`，照常拉红。**本例外只放开「阻断」这一个动作，不放开「落侧」**——与「未对账」的两个量同型，两者不得混为一谈。
 
