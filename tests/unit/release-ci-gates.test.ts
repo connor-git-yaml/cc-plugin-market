@@ -133,7 +133,15 @@ describe('F285 · CI 工作流（结构切块 + 不存在性断言）', () => {
     const header = job.slice(0, job.indexOf('    steps:'));
     expect(header).not.toMatch(/^\s{4}(?:if|needs):/m);
     const step = stepBlock('coverage', 'Coverage (thresholds enforced)');
-    expect(runBody(step)).toEqual(['npm run test:coverage']);
+    // F285 首跑假红处置：阈值 / 测试失败仍硬红，只有 birpc onTaskUpdate 签名 + 零失败 + 阈值达标才放行
+    const body = runBody(step);
+    expect(body).toContain('npm run test:coverage > coverage.log 2>&1');
+    expect(body.some((l) => l.includes("grep -qE 'does not meet|ERROR: Coverage for' coverage.log") && l.includes('exit 1'))).toBe(true);
+    expect(body.some((l) => l.includes('failed') && l.includes('exit 1'))).toBe(true);
+    expect(body.some((l) => l.includes('Timeout calling "onTaskUpdate"'))).toBe(true);
+    expect(body[body.length - 1]).toBe('exit "${status}"');
+    // 阈值检查必须排在假红放行之前（否则签名命中会盖过阈值未达）
+    expect(body.findIndex((l) => l.includes('does not meet'))).toBeLessThan(body.findIndex((l) => l.includes('Timeout calling')));
     expect(step).toMatch(/^\s{10}VITEST_MAX_FORKS: ["']1["']$/m);
     expect(step).not.toMatch(/continue-on-error/);
     expect(job).toContain('run: node dist/cli/index.js batch --mode graph-only');
