@@ -29,9 +29,10 @@
     "missing": { "type": "array", "items": { "type": "string" } },
     "blockCount": { "type": ["integer", "null"], "description": "本次判定所处的阻断计数；warn 档恒为 null，block 档在「在途推迟」分支（diagnostics 含 delegation-in-flight）亦为 null——推迟不消耗阻断预算，此时无计数可报；存储不可用阻断分支亦为 null（预算不可知）" },
     "degraded": { "type": "boolean", "description": "true 表示本次为达到阻断上限后的降级放行" },
+    "pendingSectionCount": { "type": ["integer", "null"], "description": "F287 卡 A · G3（FR-032，纯可观测性、不参与判定）：verification-report.md 中含未回填 PENDING 标记（PENDING / (?<!等)待用户 / 待回填 / DEFERRED / ⏸）的**节**数——计数单位是 markdown ATX 标题分隔的节，**不是**「项」；标题行不参与匹配（标记只写在标题 ⇒ 0）；围栏内不计，未闭合围栏自开栏起按正文计。null 三义：报告缺席 / 存在但空（判定侧同按缺席计 missing）/ 超限未计（> 4M 字符）；无 verdict（fail-open）时亦为 null。审计消费方按 B 口径理解（「有事等人」），不要读成「验证项未回填数」（人工真值集 S precision 0.676 / B 0.971，见 specs/287-*/verification/pending-truth-set.md）。" },
     "diagnostics": {
       "type": "array",
-      "description": "F276 卡 C 残余登记：三个 nonblock-* 码当前「已登记但零产出」——其产出方（解锁计时器路由）自始生产零接线，已随卡 C 删除，递增方留给卡 B 接线时重建。刻意保留登记以免卡 B 再加回造成合同 churn；本仓亦刻意不加「enum ⊆ 已产出码」的全局反向守卫（那属卡 A 的 canonical 表范围），否则此三码会立即自伤。",
+      "description": "F276 卡 C 残余登记：三个 nonblock-* 码当前「已登记但零产出」——其产出方（解锁计时器路由）自始生产零接线，已随卡 C 删除，递增方留给卡 B 接线时重建。刻意保留登记以免卡 B 再加回造成合同 churn；本仓亦刻意不加「enum ⊆ 已产出码」的全局反向守卫——卡 A（F287）交付的是正向守卫（judge / core / io / ledger / in-flight 六张表 ⊆ 本 enum，T0-U2）与 judge 表内码必有产出点（T0-U3）；enum → 产出点的反向守卫未交付，此三码与 parse-timeout 仍为「已登记零产出」。",
       "items": {
         "type": "string",
         "enum": [
@@ -62,7 +63,10 @@
           "delegation-in-flight",
           "delegation-in-flight-budget-exhausted",
           "delegation-in-flight-entry-budget-exhausted",
-          "storage-unavailable-block-budget-exhausted"
+          "storage-unavailable-block-budget-exhausted",
+          "verification-report-pending",
+          "snapshot-message-absent",
+          "snapshot-stale"
         ]
       }
     }

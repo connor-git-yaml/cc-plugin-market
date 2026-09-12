@@ -17,9 +17,7 @@
  */
 
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { realpathSync } from 'node:fs';
 import {
   detectFixSkillExpansion,
   detectTranscriptDialect,
@@ -39,9 +37,14 @@ import {
   MISSING_ACTION_TEXT,
   DUAL_PATH_GUIDANCE,
   GATE_DEGRADED_PREFIX_LINE,
+  // F287 卡 A · G4：快照交叉校验的集合构造与三态判据（core 零 I/O 纯函数）
+  buildAssistantTextSet,
+  classifySnapshotMessage,
+  SNAPSHOT_STATES,
 } from './lib/fix-compliance-core.mjs';
 import {
   readHookPayload,
+  IO_DIAGNOSTICS,
   readTranscriptEntries,
   findAndParseConfig,
   appendAuditEvent,
@@ -51,15 +54,64 @@ import {
   loadBlockState,
   saveBlockState,
   resetBlockState,
+  // F287 卡 A · G0：state-storage 码由 io 首发，judge 三处复用只引用不重复登记
+  STATE_STORAGE_DIAGNOSTICS,
 } from './lib/fix-compliance-io.mjs';
-import { classifyInFlightFromPayload, IN_FLIGHT_STATES } from './lib/in-flight-verdict.mjs';
-import { readLedgerDelegations, LEDGER_ABSENT, LEDGER_SUPPLEMENTED_ROLE } from './lib/ledger-reader.mjs';
+import { classifyInFlightFromPayload, IN_FLIGHT_STATES, IN_FLIGHT_DIAGNOSTICS } from './lib/in-flight-verdict.mjs';
+import { readLedgerDelegations, LEDGER_ABSENT, LEDGER_SUPPLEMENTED_ROLE, LEDGER_DIAGNOSTICS } from './lib/ledger-reader.mjs';
 import { recordWorkflowRun } from './record-workflow-run.mjs';
+// F287 卡 A · K-1：入口守卫收敛为共享实现（F246；该 lib 自 F246 起已在 JUDGE_FILE_SET 闭包内，经 record-workflow-run）
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 /** stderr 反馈前缀（FR-010，与既有 stop-task-check.sh 的 `[提醒]` 相区分） */
 const PREFIX_BLOCK = '[FIX-COMPLIANCE]';
 const PREFIX_WARN = '[FIX-COMPLIANCE][WARN]';
 const PREFIX_DEGRADED = '[FIX-COMPLIANCE][GATE-DEGRADED]';
+
+// ────────────────────────────────────────
+// F287 卡 A · G0：judge 侧诊断码 canonical 表 + 用户可见面白名单
+// ────────────────────────────────────────
+
+/**
+ * judge **自身首发**的诊断码。只收本文件产出的码；core（ARTIFACT_DIAGNOSTICS / FOREIGN_DIALECT_DIAGNOSTICS）、
+ * io（IO_DIAGNOSTICS / STATE_STORAGE_DIAGNOSTICS）、ledger（LEDGER_DIAGNOSTICS）、in-flight（IN_FLIGHT_DIAGNOSTICS）各自的表
+ * 不在此重复登记——两表对同一码各持一份就是新的漂移面。所有产出点一律引用表项（`JUDGE_DIAGNOSTICS.<key>.code`），
+ * 禁止裸字面量与模板串拼接（守卫从表派生：⊆ schema enum / 表内码必有产出点 / 表外零裸字面量）。
+ *
+ * `userFacing`：是否允许进用户 stderr 文案——`buildFeedbackText` 是唯一渲染点，按 USER_FACING_DIAGNOSTIC_CODES 过滤。
+ *   - 既有码按改动前**实际可达** buildFeedbackText 与否如实标注（G0 是零裁决变更：可见面差集 = 仅本卡新码）；
+ *   - 新码默认不可见：缺列 = 落进未定义态，由 T0-U1 守卫拒绝；要设 true 必须显式改表并在 T0-U5 逐条点名。
+ */
+const diag = (code, userFacing) => Object.freeze({ code, userFacing });
+export const JUDGE_DIAGNOSTICS = Object.freeze({
+  transcriptEmpty: diag('transcript-empty', false),
+  transcriptFormatUnrecognized: diag('transcript-format-unrecognized', false),
+  featureDirWitnessAbsent: diag('feature-dir-witness-absent', false),
+  featureDirUnresolvable: diag('feature-dir-unresolvable', false),
+  storageUnavailableBlockBudgetExhausted: diag('storage-unavailable-block-budget-exhausted', true),
+  stopHookReentry: diag('stop-hook-reentry', true),
+  delegationInFlight: diag('delegation-in-flight', true),
+  delegationInFlightBudgetExhausted: diag('delegation-in-flight-budget-exhausted', true),
+  delegationInFlightEntryBudgetExhausted: diag('delegation-in-flight-entry-budget-exhausted', true),
+  internalError: diag('internal-error', false),
+  // G4 快照交叉校验（纯诊断码：不改路由、不进任何预算桶）。与 F236 的 `judge-snapshot-*`（插件安装快照漂移）同名不同物。
+  snapshotMessageAbsent: diag('snapshot-message-absent', false),
+  snapshotStale: diag('snapshot-stale', false),
+});
+
+/**
+ * 能进用户 stderr 文案的诊断码全集 = judge 表 userFacing:true ∪ 透传自 io / ledger / in-flight 表、改动前即可达
+ * buildFeedbackText 的码（原样保留——F276 第 3 轮 W-4：白名单只查 judge 表会让 io/ledger 的既有可见码静默消失）。
+ * in-flight 三码里只有 undetermined 曾进文案（F270 P3 收窄），detected / none 不进。
+ * 可见面集合任何变动都必须在 T0-U5 逐条点名。
+ */
+export const USER_FACING_DIAGNOSTIC_CODES = Object.freeze([
+  ...Object.values(JUDGE_DIAGNOSTICS).filter((d) => d.userFacing).map((d) => d.code),
+  STATE_STORAGE_DIAGNOSTICS.unavailable,
+  ...Object.values(LEDGER_DIAGNOSTICS),
+  IN_FLIGHT_DIAGNOSTICS[IN_FLIGHT_STATES.UNDETERMINED],
+]);
+const USER_FACING_SET = new Set(USER_FACING_DIAGNOSTIC_CODES);
 
 /** 会话内不合规阻断上限（FR-006）：达到后降级放行 */
 export const BLOCK_LIMIT = 2;
@@ -161,15 +213,42 @@ export function parseArgs(argv) {
 }
 
 // ────────────────────────────────────────
-// stdin 读取（同步，避免异步竞态；hook payload 体量极小）
+// stdin 读取（同步，避免异步竞态）
 // ────────────────────────────────────────
 
+/** EAGAIN 有界等待：每次 5 ms、最多 2000 次（≈10 s）；写端始终不续写才放弃（返回已读部分 → 上游判 payload-invalid 落盘） */
+const STDIN_EAGAIN_WAIT_MS = 5;
+const STDIN_EAGAIN_MAX_SPINS = 2000;
+
+/**
+ * 同步读全 stdin。F287 对抗复审 C-1（既有，自 F208 v4.3.0）：`fs.readFileSync(0)` 在管道 fd0 处于非阻塞态时
+ * （本进程 `import 'node:process'` 即触发）读空 64 KB 管道缓冲、写端尚未续写 → 抛 EAGAIN → 被吞成 ''
+ * → payload-invalid → exit 0。wrapper 的 `printf '%s' "$STDIN_PAYLOAD" | node …` 恰是这一形态：被判方只要把
+ * 末条助手消息写长（Stop payload 总字节 > 65536）即可零成本放行整个门禁，留痕仅一条 sessionId=unknown 的
+ * payload-invalid。改为 readSync 循环：EAGAIN 有界等待后重试，读到 EOF（0 字节）才结束；其它错误返回已读内容
+ * （解析失败仍由上游判 payload-invalid 落盘）。回归钉：card-a 测试 C-1（真实 printf | node 管道形态，100 KB payload）。
+ */
 function readStdinSync() {
-  try {
-    return fs.readFileSync(0, 'utf8');
-  } catch {
-    return '';
+  const chunks = [];
+  const buf = Buffer.alloc(64 * 1024);
+  let spins = 0;
+  for (;;) {
+    let n;
+    try {
+      n = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (err) {
+      if (err && err.code === 'EAGAIN' && spins < STDIN_EAGAIN_MAX_SPINS) {
+        spins += 1;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STDIN_EAGAIN_WAIT_MS);
+        continue;
+      }
+      if (err && err.code === 'EOF') break;
+      return Buffer.concat(chunks).toString('utf8');
+    }
+    if (n === 0) break;
+    chunks.push(Buffer.from(buf.subarray(0, n)));
   }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 // ────────────────────────────────────────
@@ -187,7 +266,20 @@ function readStdinSync() {
  *   assistantEntriesSinceEarliestFix?:number,
  * }}
  */
-function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
+/**
+ * F287 G4：把三态映射成诊断码（fresh 为平凡态无码）。集合构造与判据在 core（零 I/O 纯函数）。
+ * @param {unknown} lastAssistantMessage
+ * @param {object[]} entries
+ * @returns {string[]}
+ */
+function snapshotDiagnosticsFor(lastAssistantMessage, entries) {
+  const state = classifySnapshotMessage(lastAssistantMessage, buildAssistantTextSet(entries));
+  if (state === SNAPSHOT_STATES.ABSENT) return [JUDGE_DIAGNOSTICS.snapshotMessageAbsent.code];
+  if (state === SNAPSHOT_STATES.STALE) return [JUDGE_DIAGNOSTICS.snapshotStale.code];
+  return [];
+}
+
+function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, snapshotInput = null) {
   const config = cfg || findAndParseConfig(projectRoot);
   const enforcement = config.enforcement;
   const configDegraded = config.configDegraded;
@@ -208,9 +300,16 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     // 与 transcript-unavailable 同族。不违反 US5：空文件是异常态，不是健康路径的常规形态。
     return {
       enforcement, configDegraded, isFix: false, mode: null,
-      transcriptDiagnostics: ['transcript-empty'], verdict: null,
+      transcriptDiagnostics: [JUDGE_DIAGNOSTICS.transcriptEmpty.code], verdict: null,
     };
   }
+
+  // F287 卡 A · G4：Stop payload 快照交叉校验（纯诊断码：不改路由、不进任何预算桶）。report 模式没有 payload
+  // 快照（snapshotInput === null）不校验；hook 模式键缺席 → snapshot-message-absent，取到且 ∉ 集合 → snapshot-stale，
+  // ∈ 集合为平凡态无码。只走审计通道（judgeCompliance 透传的 diagnostics / fail-open 落盘），绝不进 deferExtraDiagnostics。
+  const snapshotDiagnostics = snapshotInput === null
+    ? []
+    : snapshotDiagnosticsFor(snapshotInput.lastAssistantMessage, entries);
 
   const anchor = detectFixSkillExpansion(entries);
   // F270 P2（病根 iv）：isFix 改**存在性**判据——transcript 内曾出现过 `spec-driver-fix` 字面
@@ -253,7 +352,8 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
       : null;
     return {
       enforcement, configDegraded, isFix: false, mode: anchor.mode,
-      transcriptDiagnostics: dialectCode ? ['transcript-format-unrecognized', dialectCode] : [],
+      transcriptDiagnostics: dialectCode ? [JUDGE_DIAGNOSTICS.transcriptFormatUnrecognized.code, dialectCode] : [],
+      snapshotDiagnostics,   // 误伤面 I2 / 绕过面 I-1：与 feature-dir-unresolvable 早退同口径，fail-open 早退也保留快照可观测量
       verdict: null,
     };
   }
@@ -492,7 +592,8 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     delegations,
     featureDir: { path: resolvedPath, existsOnDisk: featureDirCheck.existsOnDisk },
     fixReport: { exists: fixReport.exists, content: fixReport.content },
-    verificationReport: { exists: verificationReport.exists, nonEmpty: verificationReport.nonEmpty },
+    // F287 G3：增传 content 供 PENDING 计数（core 判据仍是 exists && nonEmpty，content 只喂可观测量）
+    verificationReport: { exists: verificationReport.exists, nonEmpty: verificationReport.nonEmpty, content: verificationReport.content },
     closure,
     executionRecords,
     enforcement,
@@ -501,7 +602,11 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     // 经 buildAuditEvent 进审计事件。
     // 🔴 绝不可放进 transcriptDiagnostics —— 该数组非空即触发 runHook 的 FR-013 fail-open 放行，
     // 会把本次收口反转成一条新的静默放行通道。
-    diagnostics: witnessAbsent ? [...configDiagnostics, 'feature-dir-witness-absent'] : configDiagnostics,
+    diagnostics: [
+      ...configDiagnostics,
+      ...(witnessAbsent ? [JUDGE_DIAGNOSTICS.featureDirWitnessAbsent.code] : []),
+      ...snapshotDiagnostics,
+    ],
   });
 
   // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路（沿用不变）。
@@ -534,8 +639,9 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     // 合规那条补了留痕，本条仍无痕 → 伪造通过与诚实降级在审计流里逐字节相同。
     return {
       enforcement, configDegraded, isFix: true, mode: anchor.mode,
-      transcriptDiagnostics: ['feature-dir-unresolvable'], verdict: null,
+      transcriptDiagnostics: [JUDGE_DIAGNOSTICS.featureDirUnresolvable.code], verdict: null,
       assistantEntriesSinceEarliestFix, ledgerDiagnostics,
+      snapshotDiagnostics,   // F287 G4：fail-open 早退也保留快照可观测量（runHook 并入落盘）
     };
   }
 
@@ -569,8 +675,12 @@ export function buildFeedbackText(missing, opts = {}) {
   if (opts.degraded) segments.push(GATE_DEGRADED_PREFIX_LINE);
   segments.push(...actionLines);
   segments.push('', DUAL_PATH_GUIDANCE);
-  if (Array.isArray(opts.diagnostics) && opts.diagnostics.length > 0) {
-    segments.push('', `诊断: ${opts.diagnostics.join(', ')}`);
+  // F287 G0（R2-7）：唯一渲染点按可见面白名单过滤——内务码（快照 / PENDING 计数等）只进审计事件，不进用户 stderr。
+  const visibleDiagnostics = Array.isArray(opts.diagnostics)
+    ? opts.diagnostics.filter((code) => USER_FACING_SET.has(code))
+    : [];
+  if (visibleDiagnostics.length > 0) {
+    segments.push('', `诊断: ${visibleDiagnostics.join(', ')}`);
   }
   return segments.join('\n');
 }
@@ -596,6 +706,8 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
     blockCount: enforcement === 'block' ? (typeof blockCount === 'number' ? blockCount : null) : null,
     degraded: Boolean(degraded),
     diagnostics: [...diag],
+    // F287 G3（FR-032）：纯可观测量；无 verdict（fail-open）或报告缺席时 null
+    pendingSectionCount: verdict && typeof verdict.pendingSectionCount === 'number' ? verdict.pendingSectionCount : null,
   };
 }
 
@@ -714,12 +826,12 @@ function routeStorageUnavailable(projectRoot, sessionId, verdict, {
       inFlightDeferCount,
       nonBlockStopCount,
       // 🔴 合并须保留上游：硬编码单元素数组会把上游诊断码（如在途预算耗尽）整个丢掉
-      extraDiagnostics: [...new Set([...extraDiagnostics, 'storage-unavailable-block-budget-exhausted'])],
+      extraDiagnostics: [...new Set([...extraDiagnostics, JUDGE_DIAGNOSTICS.storageUnavailableBlockBudgetExhausted.code])],
     });
   }
 
   // 闸门 2（否则一律 fail-closed）：按本次裁决自身语义阻断。
-  const mergedDiagnostics = [...new Set([...extraDiagnostics, 'state-storage-unavailable'])];
+  const mergedDiagnostics = [...new Set([...extraDiagnostics, STATE_STORAGE_DIAGNOSTICS.unavailable])];
   try {
     appendAuditEvent(projectRoot, buildAuditEvent({
       sessionId, enforcement: 'block', verdict,
@@ -848,7 +960,7 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
 }) {
   const extraDiagnostics = [
     ...upstreamDiagnostics,
-    ...(storageUnavailable ? ['state-storage-unavailable'] : []),
+    ...(storageUnavailable ? [STATE_STORAGE_DIAGNOSTICS.unavailable] : []),
   ];
   const blockCount = BLOCK_LIMIT;
   // 存储不可用无法读写幂等标记 → 允许重复终态（宁可可审计不可静默丢失，research.md D2/D4）
@@ -981,14 +1093,16 @@ function runHook(projectRoot, payload) {
   const cfg = findAndParseConfig(projectRoot);
   if (cfg.enforcement === 'off') return 0;
 
-  const result = evaluate(projectRoot, payload.transcript_path, cfg, payload.session_id);
+  const result = evaluate(projectRoot, payload.transcript_path, cfg, payload.session_id, {
+    lastAssistantMessage: payload.last_assistant_message,   // F287 G4：键缺席即 undefined → snapshot-message-absent
+  });
 
   // transcript 不可用/超限 → FR-013 fail-open 放行 + loud 诊断落盘（合并配置层诊断）
   if (result.transcriptDiagnostics.length > 0) {
     // 账本诊断并入：本路径亦可由账本补充触发（见 evaluate 的 featureDirUndetermined 早退）
     tryAppendFailOpenEvent(
       projectRoot, payload.session_id, cfg.enforcement,
-      [...result.transcriptDiagnostics, ...(result.ledgerDiagnostics || [])],
+      [...result.transcriptDiagnostics, ...(result.snapshotDiagnostics || []), ...(result.ledgerDiagnostics || [])],
       cfg.diagnostics,
     );
     return 0;
@@ -1041,7 +1155,7 @@ function runHook(projectRoot, payload) {
   // 终版语义：重入**不改变任何路由**——裁决/预算/终态与非重入逐字一致（=改动前行为），仅把
   // `stop-hook-reentry` 诊断码如实并入本次审计（新增纯可观测性）。非布尔取值同样只影响该码的
   // 缺席，不影响裁决（对上游序列化行为的假设不成立时不做任何判定分支）。
-  const reentryDiagnostics = payload.stop_hook_active === true ? ['stop-hook-reentry'] : [];
+  const reentryDiagnostics = payload.stop_hook_active === true ? [JUDGE_DIAGNOSTICS.stopHookReentry.code] : [];
 
   // F256 盲区 2：判定时机未到——存在在途委派时**有界地**推迟裁决，不消耗阻断预算。
   //
@@ -1118,16 +1232,16 @@ function runHook(projectRoot, payload) {
           blockCount: null, degraded: false,
           // 账本诊断并入（对抗 E WARNING-4）：推迟同时写 `paused` 终态，会话若就此结束，
           // 账本对该次裁决的影响将永不落账——与合规/降级两条路径同一立论。
-          extraDiagnostics: ['delegation-in-flight', inFlightVerdict.diagnostic, ...(result.ledgerDiagnostics || [])],
+          extraDiagnostics: [JUDGE_DIAGNOSTICS.delegationInFlight.code, inFlightVerdict.diagnostic, ...(result.ledgerDiagnostics || [])],
         }));
-        process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing, { diagnostics: ['delegation-in-flight'] })}\n`);
+        process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing, { diagnostics: [JUDGE_DIAGNOSTICS.delegationInFlight.code] })}\n`);
         return 0;
       }
-      deferExtraDiagnostics.push('state-storage-unavailable');
+      deferExtraDiagnostics.push(STATE_STORAGE_DIAGNOSTICS.unavailable);
     } else {
       // 两道预算分别给码：事后可区分"次数用尽"与"会话过长"，两者可同时出现
-      if (!countBudgetLeft) deferExtraDiagnostics.push('delegation-in-flight-budget-exhausted');
-      if (!entryBudgetLeft) deferExtraDiagnostics.push('delegation-in-flight-entry-budget-exhausted');
+      if (!countBudgetLeft) deferExtraDiagnostics.push(JUDGE_DIAGNOSTICS.delegationInFlightBudgetExhausted.code);
+      if (!entryBudgetLeft) deferExtraDiagnostics.push(JUDGE_DIAGNOSTICS.delegationInFlightEntryBudgetExhausted.code);
     }
   }
 
@@ -1205,7 +1319,7 @@ export function main(argv, stdinRaw) {
       // payload 非法 → FR-013 fail-open 放行 + loud 诊断落盘（off 档除外，维持零接触）
       const cfg = findAndParseConfig(args.projectRoot);
       if (cfg.enforcement !== 'off') {
-        tryAppendFailOpenEvent(args.projectRoot, null, cfg.enforcement, ['payload-invalid'], cfg.diagnostics);
+        tryAppendFailOpenEvent(args.projectRoot, null, cfg.enforcement, [IO_DIAGNOSTICS.payloadInvalid], cfg.diagnostics);
       }
       return 0;
     }
@@ -1215,7 +1329,7 @@ export function main(argv, stdinRaw) {
     try {
       const cfg = findAndParseConfig(args.projectRoot);
       if (cfg.enforcement !== 'off') {
-        tryAppendFailOpenEvent(args.projectRoot, null, cfg.enforcement, ['internal-error'], cfg.diagnostics);
+        tryAppendFailOpenEvent(args.projectRoot, null, cfg.enforcement, [JUDGE_DIAGNOSTICS.internalError.code], cfg.diagnostics);
       }
     } catch {
       // 连诊断都写不了 → 仍然放行
@@ -1224,8 +1338,10 @@ export function main(argv, stdinRaw) {
   }
 }
 
-// 仅作为入口脚本直接运行时执行（被 import 时不触发，便于单测）
-if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+// 仅作为入口脚本直接运行时执行（被 import 时不触发，便于单测）。
+// F287 K-1：收敛为共享 `isInvokedDirectly`（F246/F247 全仓唯一实现）——此前手写 realpathSync 单侧比对且无 try：
+// argv[1] 解析失败即抛、被 import 时也可能误判，且与仓内其它 20+ 入口守卫形态不一。
+if (isInvokedDirectly(import.meta.url)) {
   const argv = process.argv.slice(2);
   const stdinRaw = readStdinSync();
   const code = main(argv, stdinRaw);

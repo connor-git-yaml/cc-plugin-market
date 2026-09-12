@@ -22,6 +22,19 @@ import { normalizeTranscriptEntry, resolveEnforcementFromConfig } from './fix-co
  */
 export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
 
+/**
+ * io 层诊断码 canonical 表（F287 卡 A · G0 补：两路对抗复审均指出 io 仍裸发字面量、不在任何表内，
+ * T0-U2 的 ⊆ schema 守卫覆盖不到）。payload-invalid 的真实产出点在 judge（readHookPayload 的 diagnostics
+ * 返回值 judge 不消费，此处引用同一表项只为单源）。
+ */
+export const IO_DIAGNOSTICS = Object.freeze({
+  payloadInvalid: 'payload-invalid',
+  transcriptPathAbsent: 'transcript-path-absent',
+  transcriptUnavailable: 'transcript-unavailable',
+  transcriptTooLarge: 'transcript-too-large',
+  configDegraded: 'config-degraded',
+});
+
 // ────────────────────────────────────────
 // payload 组
 // ────────────────────────────────────────
@@ -36,11 +49,11 @@ export function readHookPayload(stdinRaw) {
   try {
     parsed = JSON.parse(typeof stdinRaw === 'string' ? stdinRaw : '');
   } catch {
-    return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
+    return { ok: false, payload: null, diagnostics: [IO_DIAGNOSTICS.payloadInvalid] };
   }
   const sessionId = parsed && parsed.session_id;
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
-    return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
+    return { ok: false, payload: null, diagnostics: [IO_DIAGNOSTICS.payloadInvalid] };
   }
   // F240 FR-004：transcript_path 在 Codex 的 Stop payload schema 中是 nullable。缺席/为 null 的
   // payload 结构合法，判 payload-invalid 会给出误导性诊断（看着像 payload 坏了，其实只是没给路径）。
@@ -48,7 +61,7 @@ export function readHookPayload(stdinRaw) {
   // 类型非法（既非字符串又非 null）仍是真正的结构错误，维持 payload-invalid。
   const transcriptPath = parsed.transcript_path;
   if (transcriptPath !== undefined && transcriptPath !== null && typeof transcriptPath !== 'string') {
-    return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
+    return { ok: false, payload: null, diagnostics: [IO_DIAGNOSTICS.payloadInvalid] };
   }
   return { ok: true, payload: parsed, diagnostics: [] };
 }
@@ -67,25 +80,25 @@ export function readTranscriptEntries(transcriptPath, maxBytes = MAX_TRANSCRIPT_
   // F240 FR-004：路径压根没给 与 路径给了却读不到 是两种不同的失效，诊断码必须可区分
   // （transcript-path-absent vs transcript-unavailable）。两者退出码同为 0，只是诊断更精确。
   if (typeof transcriptPath !== 'string' || transcriptPath.length === 0) {
-    return { entries: [], diagnostics: ['transcript-path-absent'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptPathAbsent] };
   }
   let stat;
   try {
     stat = fs.statSync(transcriptPath);
   } catch {
-    return { entries: [], diagnostics: ['transcript-unavailable'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptUnavailable] };
   }
   if (!stat.isFile()) {
-    return { entries: [], diagnostics: ['transcript-unavailable'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptUnavailable] };
   }
   if (stat.size > maxBytes) {
-    return { entries: [], diagnostics: ['transcript-too-large'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptTooLarge] };
   }
   let raw;
   try {
     raw = fs.readFileSync(transcriptPath, 'utf8');
   } catch {
-    return { entries: [], diagnostics: ['transcript-unavailable'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptUnavailable] };
   }
   const lines = raw.split('\n').filter((line) => line.trim().length > 0);
   const entries = lines.map((line, index) => {
@@ -99,7 +112,7 @@ export function readTranscriptEntries(transcriptPath, maxBytes = MAX_TRANSCRIPT_
   // 全损坏（非空行存在且全部解析失败）= FR-013 的"格式不可识别"：不能静默当非 fix 会话放行，
   // 必须走 fail-open + loud 诊断路径（codex implement 审查 C-1）。部分损坏维持逐行容错。
   if (entries.length > 0 && entries.every((entry) => entry.parseError)) {
-    return { entries: [], diagnostics: ['transcript-unavailable'] };
+    return { entries: [], diagnostics: [IO_DIAGNOSTICS.transcriptUnavailable] };
   }
   return { entries, diagnostics: [] };
 }
@@ -139,7 +152,7 @@ export function findAndParseConfig(projectRoot) {
     parseFailed = true;
   }
   const resolved = resolveEnforcementFromConfig({ found: true, parseFailed, config });
-  const diagnostics = resolved.configDegraded ? ['config-degraded'] : [];
+  const diagnostics = resolved.configDegraded ? [IO_DIAGNOSTICS.configDegraded] : [];
   return { found: true, parseFailed, config, ...resolved, diagnostics };
 }
 
@@ -256,6 +269,15 @@ export function readArtifactFile(projectRoot, relPath) {
 // ────────────────────────────────────────
 // BlockCountState 组（T023，FR-006 阻断计数持久态；data-model.md §8 + research.md D2/D4）
 // ────────────────────────────────────────
+
+/**
+ * io 侧诊断码表（F287 卡 A · G0）：`state-storage-unavailable` 由本模块（两级存储均不可写）**首发**，
+ * judge 侧三处复用同一码时一律引用本表，不在 `JUDGE_DIAGNOSTICS` 重复登记（两表各持一份 = 新的漂移面）。
+ * 可见性（是否进用户 stderr）由 judge 的 `USER_FACING_DIAGNOSTIC_CODES` 统一裁定，本表不带 userFacing 列。
+ */
+export const STATE_STORAGE_DIAGNOSTICS = Object.freeze({
+  unavailable: 'state-storage-unavailable',
+});
 
 /** 阻断计数状态主目录（相对 projectRoot）：.specify/runs/ 已被仓库既有 .gitignore 整段忽略 */
 const STATE_SUBDIR = ['.specify', 'runs', '.fix-compliance-state'];
@@ -521,7 +543,7 @@ export function saveBlockState(projectRoot, sessionId, state) {
   } catch (err) {
     errors.push(describeWriteFailure(err));
   }
-  return { ok: false, path: null, degraded: true, diagnostics: ['state-storage-unavailable'], errors };
+  return { ok: false, path: null, degraded: true, diagnostics: [STATE_STORAGE_DIAGNOSTICS.unavailable], errors };
 }
 
 /**

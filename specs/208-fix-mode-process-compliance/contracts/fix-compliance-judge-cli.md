@@ -202,6 +202,7 @@ F257 后的准确表述（**有前提、可检验**）：**在 transcript 未被
 | `transcriptDiagnostics` | `string[]` | transcript 层诊断（fail-open 场景非空） |
 | `inFlightDelegations` | `{kind: 'sync'\|'background'\|'send-message', id: string, lineIndex: number}[]` | F256 在途委派事实（上方「在途判据」三条规则的原始命中集合）。**只描述事实，不含闸门判定结果**——三道闸门在 hook 路由中施加，report 模式不落盘也不裁决，故此字段非空**不**等于本次会被推迟 |
 | `assistantEntriesSinceEarliestFix` | `number \| null` | F257 闸门三的计量源：自**最早**一次 `spec-driver-fix` 展开之后的 assistant entry 总数（`null` = 该轮判定未产出计量，如 transcript 层早退）。与 `inFlightDelegations` 同为**事实字段**——report 模式不施加任何闸门、不落盘，故该值 ≥ 420 **不**等于本次会被阻断 |
+| `pendingSectionCount` | `integer \| null` | F287 卡 A · G3 纯可观测量：verification-report.md 含 PENDING 标记的**节**数（单位=节，不是项；null = 报告缺席 / 存在但空 / 超限未计）。同轮 `diagnostics` 可含 `verification-report-pending`（>0 时）；G4 的 `snapshot-message-absent` / `snapshot-stale` 只在 hook 模式产生（report 模式无 payload 快照）。 |
 
 ## 阻断/警告反馈文本合同（FR-010，missing 枚举 → 固定 action 映射）
 

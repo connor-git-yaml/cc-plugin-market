@@ -1350,21 +1350,25 @@ describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () 
  * 以常量形式写死（不做 git stash 前后对拍——CI 不可复现）。任何一行变动即为 Claude 侧回归。
  */
 const CLAUDE_BASELINE = Object.freeze({
-  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  // F287 卡 A · G4（FR-033）：payload 无 last_assistant_message 键（runCli 默认不带）→ 快照交叉校验判「缺席」，
+  // 纯可观测码 snapshot-message-absent 进每条带 verdict 的审计事件（verdict.diagnostics 在前、extra 在后）。
+  // 🔴 零裁决变更证明：status / eventCount / compliant / stderrPrefix / specifyDirCreated 五列**逐字不变**，
+  // 只有 diagnostics 列多了这一个码（与 F270 P3 给 in-flight-undetermined 更新基线同一形态）。
+  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
   // F270 P3（FR-015）：payload 无 background_tasks 键（runCli 默认不带）→ 在途三态判 undetermined，
   // 该独立诊断码如实进不合规审计 → 6 条不合规 fixture 的 diagnostics 基线 [] → ['in-flight-undetermined']。
   // F270 P2b（FR-024 修订版）：合规收口不再零落盘——曾 fix 展开的会话，compliant 裁决
   // 也留恰一条审计事件（R-2 实证的黑洞收口）。两条合规 fixture 的基线随之更新：
   // eventCount 0→1、compliant []→[true]、specifyDirCreated false→true。
   // non-fix-session 不变：从未 fix 展开 = US5 健康路径，仍零落盘。
-  'compliant-noop.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
+  'compliant-noop.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [['snapshot-message-absent']], stderrPrefix: '', specifyDirCreated: true },
   'non-fix-session.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
-  'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
-  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [['snapshot-message-absent']], stderrPrefix: '', specifyDirCreated: true },
+  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['snapshot-message-absent', 'in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
 });
 
 /** 跑一次 CLI 并归约为与 CLAUDE_BASELINE 同构的可观测结局 */

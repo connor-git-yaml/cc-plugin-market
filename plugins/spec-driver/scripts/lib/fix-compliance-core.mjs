@@ -883,6 +883,105 @@ export const DEFERRABLE_MISSING_KEYS = Object.freeze([
 
 const DEFERRABLE_MISSING_SET = new Set(DEFERRABLE_MISSING_KEYS);
 
+// ────────────────────────────────────────
+// F287 卡 A · G3：verification-report PENDING 未回填项计数（纯可观测性，不参与判定）
+// ────────────────────────────────────────
+
+/** core 侧诊断码表：由本模块首发的码。judge 的 USER_FACING_DIAGNOSTIC_CODES 白名单不含它 ⟹ 只进审计事件 */
+export const ARTIFACT_DIAGNOSTICS = Object.freeze({
+  verificationReportPending: 'verification-report-pending',
+});
+
+/**
+ * PENDING 标记词法（F276 R2-13 + 第 3 轮裁决 #5）：
+ *   - `\bPENDING\b`（含 MANUAL-PENDING / PENDING-user）、`待回填`、`\bDEFERRED\b`、`⏸`（带或不带 U+FE0F）
+ *   - `(?<!等)待用户`：排除「等待用户…」类交付散文（190 份真实报告实测：19.8% 的超计来源）
+ *   - 刻意**不做**「同行含 ✅ 不计」（第 3 轮撤回：表格把状态与延期备注写同一 cell，过滤会误杀真 PENDING）
+ *   - 围栏（``` / ~~~）内的行既不当标题也不参与匹配：设计资本按「81 行真实命中围栏内 0 行」不另加匹配面排除，
+ *     但围栏里的 `# 注释`（bash 块常见）会被当成 ATX 标题把一节切成两节、抬高计数——切节与匹配用同一张
+ *     fence mask（复用 computeFenceRegions；未闭合围栏段按 F228 R3-3 反掩码）一并排除，顺带让"报告里引用本正则的代码块"不自触发。
+ * 判据宽松是刻意的：本量**不改判**，误判成本仅为诊断噪声（FR-031 裸 PENDING 收紧已裁剪）。
+ */
+export const PENDING_MARK_REGEX = /\bPENDING\b|(?<!等)待用户|待回填|\bDEFERRED\b|⏸\uFE0F?/u;
+
+const ATX_HEADING_REGEX = /^#{1,6}\s/;
+
+/** 超过此长度（UTF-16 单元）的报告不计（返回 null）：按行拆分在 ≥2^27 行时撞 V8 FixedArray 上限 fatal、wrapper 兜成 exit 0（绕过面 W-1）。 */
+export const PENDING_SCAN_MAX_CHARS = 4 * 1024 * 1024;
+
+/**
+ * 计数单位 = **节**（markdown ATX 标题分隔的块；标题前的前言也算一节），**不是**「项」数：同一节内多行命中只计 1；
+ * 标题行本身不参与匹配（「## DEFERRED 清单」这类标题不算一条未回填项——标记只写在标题、正文不带 ⇒ 计 0）；
+ * 围栏内的行整体跳过；**未闭合围栏**自开栏行起一律按未 fenced 处理（与本文件 stripReconSubblock / stripCodeRegions 的
+ * F228 R3-3 处置同口径——否则 LLM 漏关一个围栏就把后半篇整段吞成 0 且零诊断，误伤面复审 W1）。
+ * 超过 PENDING_SCAN_MAX_CHARS 返回 null（未计），与「报告缺席」共用 null。
+ * @param {string} content
+ * @returns {number|null}
+ */
+export function countPendingSections(content) {
+  if (typeof content !== 'string' || content.length === 0) return 0;
+  if (content.length > PENDING_SCAN_MAX_CHARS) return null;
+  const lines = content.split('\n');
+  const { mask: fenceMask, unclosedFrom } = computeFenceRegions(lines);
+  let count = 0;
+  let sectionHit = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (fenceMask[i] && !(unclosedFrom !== -1 && i >= unclosedFrom)) continue;
+    const line = lines[i];
+    if (ATX_HEADING_REGEX.test(line)) {
+      if (sectionHit) count += 1;
+      sectionHit = false;
+      continue;
+    }
+    if (!sectionHit && PENDING_MARK_REGEX.test(line)) sectionHit = true;
+  }
+  return sectionHit ? count + 1 : count;
+}
+
+// ────────────────────────────────────────
+// F287 卡 A · G4：Stop payload `last_assistant_message` 与 transcript 的交叉校验（纯诊断码）
+// ────────────────────────────────────────
+
+export const SNAPSHOT_STATES = Object.freeze({ ABSENT: 'absent', FRESH: 'fresh', STALE: 'stale' });
+
+/**
+ * 每条 assistant 条目的 `textBlocks.join('\n').trim()` 集合（输入是 `normalizeTranscriptEntry` 之后的条目，
+ * 与本模块其它 transcript 判据同一形态；tool_result 文本在归一化时已被排除出 textBlocks，不会混入）。
+ * 判据用**集合归属**而非裸子串 / 尾部相等：真实语料实测末行不是 assistant 条目 99.7%（360 份）/ 99.8%（454 份），
+ * join 后含换行让裸子串比对失败 10.9% / 10.8%。无 text 块的条目不入集。
+ * @param {{ role?:string, textBlocks?:string[], parseError?:boolean }[]} entries
+ * @returns {Set<string>}
+ */
+export function buildAssistantTextSet(entries) {
+  const set = new Set();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || entry.parseError === true || entry.role !== 'assistant') continue;
+    const texts = (Array.isArray(entry.textBlocks) ? entry.textBlocks : []).filter((t) => typeof t === 'string');
+    if (texts.length === 0) continue;
+    const joined = texts.join('\n').trim();
+    if (joined.length > 0) set.add(joined);
+  }
+  return set;
+}
+
+/**
+ * 三态：键缺席 / 非字符串 / 空串（trim 后）→ absent；∈ 集合 → fresh；∉ 集合 → stale（两侧均 trim）。
+ * 空串归 absent（两路对抗复审 W-5 / I3）：harness 末轮无 text block 时可能送空串，它是「无文本」不是「陈旧」；
+ * 空串从不入集，判 stale 会把设计自己警告的「>90% 恒真」推实。
+ * 诚实登记：该量度量的是 **harness 刷盘行为**（主 transcript 懒刷盘可滞后 25+ 分钟，F262 实证），
+ * **不是**病根 i 的残余误伤率——只能说"缺席与陈旧在审计流中可区分"。
+ * @param {unknown} lastAssistantMessage
+ * @param {Set<string>} assistantTextSet
+ * @returns {'absent'|'fresh'|'stale'}
+ */
+export function classifySnapshotMessage(lastAssistantMessage, assistantTextSet) {
+  if (typeof lastAssistantMessage !== 'string') return SNAPSHOT_STATES.ABSENT;
+  const needle = lastAssistantMessage.trim();
+  if (needle === '') return SNAPSHOT_STATES.ABSENT;
+  const set = assistantTextSet instanceof Set ? assistantTextSet : new Set();
+  return set.has(needle) ? SNAPSHOT_STATES.FRESH : SNAPSHOT_STATES.STALE;
+}
+
 /**
  * 这组缺口是否**整体**可由在途工作关闭（全称判定，非存在判定）。
  *
@@ -1843,15 +1942,16 @@ export function classifyClosureForm(fixReportContent) {
  *   delegations: {roleClass:string, subagentType:string|null, description:string|null, noopVerify?:boolean}[],
  *   featureDir: { path:string|null, existsOnDisk:boolean },
  *   fixReport: { exists:boolean, content:string|null },
- *   verificationReport: { exists:boolean, nonEmpty:boolean },
+ *   verificationReport: { exists:boolean, nonEmpty:boolean, content?:string|null },
  *   enforcement: string, configDegraded: boolean, diagnostics: string[],
  * }} input
- * @returns {{ closureForm:string, compliant:boolean, missing:string[], delegationCounts:object, enforcement:string, configDegraded:boolean, diagnostics:string[] }}
+ * @returns {{ closureForm:string, compliant:boolean, missing:string[], delegationCounts:object, enforcement:string, configDegraded:boolean, diagnostics:string[], pendingSectionCount:number|null }}
+ *   pendingSectionCount（F287 卡 A · G3）：verification-report 含 PENDING 标记的**节**数（不是项数），纯可观测量；报告缺席 / 存在但空 / 超限未计时 null。
  */
 export function judgeCompliance(input) {
   const {
     delegations = [], featureDir = { path: null, existsOnDisk: false },
-    fixReport = { exists: false, content: null }, verificationReport = { exists: false, nonEmpty: false },
+    fixReport = { exists: false, content: null }, verificationReport = { exists: false, nonEmpty: false, content: null },
     executionRecords = [], closure: providedClosure,
     enforcement = 'block', configDegraded = false, diagnostics = [],
   } = input || {};
@@ -1917,6 +2017,16 @@ export function judgeCompliance(input) {
     }
   }
 
+  // F287 卡 A · G3：PENDING 未回填项计数——纯可观测量：不进 missing、不改 compliant（FR-032；FR-031 收紧已裁剪）。
+  // 🔴 绝不把 PENDING 转成新的 missing 键：新键不入 DEFERRABLE_MISSING_KEYS ⟹ isDeferrableMissingSet 全称判定
+  // 关闭整条推迟通道；buildFeedbackText 的 .filter(Boolean) ⟹ 空阻断（变异 M3-a 专钉）。
+  // null 三义（误伤面 W4 / 绕过面 I-7）：报告缺席、存在但空（判定侧同样按缺席计 missing）、超限未计（PENDING_SCAN_MAX_CHARS）。
+  const pendingSectionCount = (verificationReport && verificationReport.exists && verificationReport.nonEmpty && typeof verificationReport.content === 'string')
+    ? countPendingSections(verificationReport.content)
+    : null;
+  const outDiagnostics = Array.isArray(diagnostics) ? [...diagnostics] : [];
+  if (pendingSectionCount !== null && pendingSectionCount > 0) outDiagnostics.push(ARTIFACT_DIAGNOSTICS.verificationReportPending);
+
   return {
     closureForm,
     compliant: missing.length === 0,
@@ -1924,7 +2034,8 @@ export function judgeCompliance(input) {
     delegationCounts: counts,
     enforcement,
     configDegraded,
-    diagnostics: Array.isArray(diagnostics) ? [...diagnostics] : [],
+    diagnostics: outDiagnostics,
+    pendingSectionCount,
   };
 }
 
