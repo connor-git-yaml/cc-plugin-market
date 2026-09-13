@@ -1,6 +1,7 @@
 ---
 title: Milestone M10 — 先发布、诚实的图、换证据源的门禁
-status: planning
+status: closed
+closed: "2026-09-14 代码面收官（主线程代用户判断·可翻案）；发布验收 / 环境前置为用户动作门，M11 种子见 §13"
 created: 2026-08-24
 parent_milestone: milestone-M9-codex-trusted-live-graph.md（代码面 2026-08-23 收官；T062/T063 人工验证待办，正式收官前禁称"M9 已完成"）
 stepback_revision_of: milestone-M9-codex-trusted-live-graph.md §10「M10 边界 — 体验扩张」（本文件取代该节的排期，保留其候选池）
@@ -137,6 +138,16 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ## 11. 进展账（rolling）
 
+**2026-09-14（4.6.0 发布准备 push + M10 收官判定 + M11 种子）**：
+- **4.6.0 发布准备已 push**（`d0b0484d`，用户「确认 push」后 ff 推送 `3596acee..d0b0484d`）：contract 双产品 4.6.0 + CHANGELOG `[4.6.0]`（区间 `3d885d35..HEAD` 53 commit）+ 冻结快照外科替换（18 版本字面值 + 25 hash）+ §12.4 债务结账表。CI run 34769332914：`CI` / `fixture-isolation` success；**coverage job 走了 F285b birpc 放行分支**——本次非假绿（覆盖率表完整打印、其后无阈值失败行、同 run `test` job 干净通过），但放行前两道检查均为负向 grep，日志若截断在汇总之前会零证据放行且 warning 文案仍宣称全过 → **F292 已修并 push（`766c6015`，另一 session 交付）**：负向 grep 换正向证据（测试汇总通过行 + 覆盖率表完整）并把判定器抽成 `scripts/coverage-gate.mjs` + `lib/coverage-gate-core.mjs` 可单测（8 份 ANSI 语料 + 变异实证）；其账本 6 条待下轮 milestone-next 流转。**`npm publish` 仍待用户**（registry latest 4.5.0）。
+- **冻结快照验收方法论被两路异构对抗改写**：我原先三条论据（基线门禁数字 / 失败输出全 hash 行 / diff 过滤后空集）全部判无效——前两条循环引用（引的是「修完之后」那一跑；版本行在那次跑前已被替换），第三条**会吞真实漂移**（hash 行正则精确命中 `currentHash` / `previousHash` 骨架 hash）；结论靠「回代重建 + 逐字节零残差 + sha256 preimage 25/25」独立证成。纪律入账本 + mainline-focus 共享块。
+- **M10 收官判定（主线程代用户判断，可翻案）**：**代码面收官**。主题三条：「先发布」随 4.6.0 闭合（publish 为用户动作）；「换证据源的门禁」F270 → F276 → F287 → F288 → F289 → F290 全链 ship；「诚实的图」P0-C（F266）+ F280 / F284 交付，**P1-I 诚实工具面未启动 = 主题唯一欠账，整体移交 M11 并列首批**；P1-F / H / J / L / M / N 同移交。理由：P1-I 与 P1-F 均为图解析类、验收必带外部语料 A/B、每卡 ≥2 天，塞进尾巴会重蹈 M9 拖期；里程碑边界干净可按约定跑一轮交界调研。
+- **未跑交界全量调研 workflow**：无用户 opt-in、约 14 agent / 1.1M token；09-12 三路架构审查（§12）证据仍新鲜。M11 正式规划（milestone-next 循环）时若需再跑。
+- **账本 10 条全流转**（F284 1 条 + F288–F290 / 4.6.0 9 条；7 已分流 / 3 记录）→ 三簇 M11 候选：① 对抗审查纪律簇（冻结 commit 进 prompt / 「声称有守护但变异不红」独立切入角 / 证据链本身列为攻击面 / 变异运行器骨架）；② `charterPayload` 版本归一化（升版不再触冻结快照）；③ publish-gap 自证（commit 写进 tarball 可读位置）。
+- **F291b 裁决：暂不实施**（反转 F270 P3 既有裁决 + `stop_hook_active` 语义未在 headless 实测 + R-6 已有 `enforcement: warn` 逃生口 = 便利性放松非 live 漏洞）；重开条件：R-6 出现真实用户投诉，且先做 headless Stop payload 实录。
+- **分支清理终态**：本地 94 → 2（`master` + 他 session 在用的 `claude/epic-neumann-6df36f`）：87 条已合入者删除；5 条未合入者转 `archive/*` tag 保 SHA 后删——`237-eval-rerun`（评测预注册锚）/ F207 归档 / F252 归档 / `codex/057` panoramic 组件视图（merge-base 落后 869 commit、触碰已改名的 reverse-spec 插件，判腐烂不复活）/ `codex/082`（`GATE_IMPLEMENT_MID` 从未落地、sync 确定性已另行合入）。远端 4 条已合入分支删除（含误建的 `main`；GitHub 默认分支 master、仓内零引用）。三个陈旧 codex worktree 已移除。
+- **发布验收（用户动作门，见 §13.2）**：publish → `claude plugin update` → 跑 G0-1 三项验收（`npm view` 4.6.0 / 全局 `spectra --version` commit == master / `judge:doctor` + `codex:doctor` 零漂移——**这是 F270 之后判定器改动在本机的首次活体运行**，09-01 账已记本机门禁快照停在旧判定器）；升级 Claude Code（2.1.215 → ≥2.1.241，hooks 合同中间四版有变）后重跑 F245 headless 基线并确认 Stop payload 含 `background_tasks` / `last_assistant_message`。
+
 **2026-09-13（/goal 全量推进：M10 批次 3 门禁串行链收官 F280–F289 自执行 + 自验 + push）**：
 - **批次 3 全 ship（F280–F289 均在 master）**：F280（9362f1a8）/ F281（9f08e128）/ F282（7615c82a）为批次 3 并行卡、本 session 前已交付；**本 session 主线程逐卡执行并推送**（实现 → 红先行 → 异构对抗 ≥2 角 → verify 子代理 → 全量门禁 → rebase → ff push）的为：F283（93b49956 hooks 归属表派生化 + 判据钉住）、F287（9df869e9 卡 A 门禁链头：诊断码 canonical 表 + G3/G4 + isInvokedDirectly）、F285（592f2b73 发布/CI 门补齐）+ F285b（6b595a04 coverage birpc 假红处置）、F284（a18cec22 采集面 SSoT 忽略目录 + 护栏三面）、F286（b9a4aa92 P1-K 移交承接：导出可达性检查）、**F288（c63d44ba 卡 B：状态文件锁 + 计数幂等 + 指纹路由半边 + 放行佐证）**、**F289（7e53c3fc 续做/旁链入口卡：Tier 2 续做合同）**。
 - **门禁串行链闭合**：F287 卡 A → F288 卡 B → F289 续做/旁链入口，三卡串行交付，P0-A 门禁证据源换代残余全部收口。
@@ -259,3 +270,49 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 | F289 sidechain 无提名不覆盖 | 永久登记（诚实上限） | 与 resume 无提名对称：无处定位 fix 目录则不绑定，既不硬阻断也不宽松放行 |
 
 **4.6.0 发布准备（2026-09-13）**：`contracts/release-contract.yaml` 两产品 `version` → `4.6.0` + 两份 `productMappingDescription` 前置 v4.6.0 叙事，经 `release:sync` 派生 12 处受控行；`CHANGELOG.md` 补齐 `[4.6.0]` 条目（区间 `3d885d35..HEAD`，53 commit，追认区间内 spec-driver v4.5.0 一次 bump，原 `[Unreleased]` 的 F271 段并入）。版本号进入冻结型行为快照内容，按 F223/F259 纪律**外科替换** 18 处版本字面值 + 25 处内容 hash，未用 `vitest -u`；验收改用「回代重建 + 逐字节零残差」（两路异构对抗判定原先的「diff 过滤后为空集」是假绿灯——该过滤精确命中本快照里真实存在的 `currentHash`/`previousHash` 64-hex 行，真实骨架漂移会被静默滤掉）：产物现算 hash 命中新快照 25/25 + 版本回代命中旧 hash 25/25（sha256 preimage）+ 整份重建与 `git show HEAD:` 零残差；`tests/e2e/feature-170a-*.e2e.test.ts` 的版本钉死断言同步更新。**`npm publish` 由用户本人执行**。
+
+## 13. M10 收官账 + M11 种子（2026-09-14，主线程代用户判断·可翻案）
+
+### 13.1 收官判定
+
+| 主题 | 状态 | 证据 |
+|---|---|---|
+| 先发布 | ✅ 代码面闭合，`npm publish` 待用户 | 4.6.0 contract / CHANGELOG / 冻结快照 `d0b0484d` 已在 master，CI 绿；npm latest 仍 4.5.0 |
+| 换证据源的门禁 | ✅ 全链 ship | F270 账本 → F276 fail-closed → F287 卡 A → F288 卡 B → F289 Tier 2 → F290 残余；**本机生效待 publish + `claude plugin update`** |
+| 诚实的图 | ◐ 半兑现 | F266 fail-loud 链 + F280 panoramic 诚实 envelope + F284 采集面 SSoT 已交付；**P1-I 诚实工具面未启动**；G0-4 口径一致 recall 对照组已取（09-12：GORM 0.184 / HikariCP 0.034） |
+
+### 13.2 收官挂起（用户动作门，非代码工作）
+
+- `npm publish`（host shell）→ `claude plugin update` → 跑 G0-1 三项验收（`npm view spectra-cli version` = 4.6.0；全局 `spectra --version` commit == master；`npm run judge:doctor` / `codex:doctor` 零漂移）。
+- 升级 Claude Code 至 ≥2.1.241 → 重跑 F245 headless hook 基线；确认 Stop payload 含 `background_tasks` / `last_assistant_message`。**刚发布的门禁链读这些字段，而本机 2.1.215 之后 hooks 合同改过四版，未在新版验过**。
+- G0-4a adoption 复测：4.6.0 发布满一周后重跑 `scripts/adoption-census.mjs`，与 09-12 基线（42 次 / 17 工具 14 个零调用）对比，作 M11 首轮 milestone-next 的输入。
+
+### 13.3 M11 候选清单（种子；正式排期须经 milestone-next 循环 + 用户拍板）
+
+**第一批（推荐；写入路径 disjoint 可并行，F291a 串行于前置）**：
+
+| 卡 | 类型 | 内容 | 来源 |
+|---|---|---|---|
+| **P1-I 诚实工具面** | feature · medium | 图边携带解析 stage / 策略标签并在 MCP callers / callees 暴露；confidence 双词汇收敛；`tokenBudget`（超预算按相关性收缩 + 顶部声明截断）；impact / context / graph_node top-N 与 `tools/list` 确定性回归 | §5 P1-I；主题欠账 |
+| **簇② charterPayload 版本归一化** | fix · small | 把 `generatedBy` 版本串归一化出被 hash 的内容，升版不再触 `f220-decomposition-charter` 冻结快照；同卡把「回代重建 + 逐字节零残差 + preimage」验收标准写进 F223 / F259 纪律 | 账本 09-13/14 ×3 |
+| **簇③ publish-gap 自证** | fix · small | 发布时把 commit 写进 tarball 可读位置（`dist/.spectra-build-meta.json` 已有），`release:check` 的 `publish-gap` 不再依赖 registry `gitHead` | 账本 09-13 |
+| **F291a per-target 阻断预算** | fix · medium · **门禁类·串行** | 按设计稿「下一轮执行要点」：先把 `T1-E4` / `T2-E6` 等用例改造成按 `stateKeyFor` 推导路径并显式断言「预置的是当前键的锁」，再上复合键。**前置**：publish 后本机判定器活体验证 + Claude Code 升级后 F245 基线重跑——在旧 harness 合同上改门禁状态模型是双重未知 | §12.4 + 设计稿 |
+
+**第二批**：
+- **P1-F 多语言 parity**（图解析类，外部语料 A/B 必带）：Python import 双 kernel 收敛；Java caller recall 3.4% 病根；`stored-module-specs` sourceKind 分叉。
+- **簇① 对抗审查纪律**（story · small · SKILL / prompt）：冻结 commit 进 prompt；「声称有守护但变异不红」固定切入角；「证据链本身」列为攻击面；异构对抗变异运行器骨架（F284 账本）。
+- **P1-H 评测前置**：既有 33-run 坏题审计 + 重钉 GStack 锚；任何「c3 更有效」对外表述的前置。
+- ~~CI coverage 放行分支正向证据~~ **已由 F292 交付**（`766c6015`）。
+
+**后续**：P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec Drift adoption；P1-N Codex 运行时（Agent Plugins 1.0 spike）；§12.4 M11 架构债（**立卡前按 §12 证据复核，不照单开工**）。
+
+**裁决不做 / 暂不做**：F291b（§11 09-14，重开条件见设计稿）；F288 R-6 保持登记；`codex/057` panoramic 组件视图不复活（`archive/` tag 留存）。
+
+### 13.4 第一批写入路径矩阵
+
+| 卡 | 主要写入 | 冲突判定 |
+|---|---|---|
+| P1-I | `src/mcp/*`、`src/graph/*` 边属性、`tests/unit/mcp/*` | 与其余三卡 disjoint |
+| 簇② | `tests/e2e/f220-decomposition-charter.e2e.test.ts` + `.snap`、`docs/design/` 纪律 | disjoint |
+| 簇③ | `scripts/validate-release-contracts.mjs`、`scripts/postbuild-stamp.mjs` | disjoint |
+| F291a | `plugins/spec-driver/scripts/fix-compliance-judge.mjs`、`lib/fix-compliance-io.mjs`、`tests/fix-compliance-*` | 串行于 §13.2 前两项 |

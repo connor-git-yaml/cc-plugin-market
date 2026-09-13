@@ -3,6 +3,8 @@ status: designed-not-shipped
 owner: M11
 depends_on: F288 (状态模型) / F289 (Tier 2 绑定) / F290 (残余收口)
 baseline: 3596acee
+f291a_status: designed-not-shipped → M11 候选第一批（门禁类·串行，前置见 M10 §13.3）
+f291b_ruling: "暂不实施（2026-09-14 主线程代用户判断·可翻案）"
 ---
 
 # F291 设计稿（已设计、**刻意未交付**）：per-target 阻断预算（a）+ stop_hook_active 第三佐证腿（b）
@@ -51,7 +53,14 @@ card-a 21/0、tier2 25/0 ⟹ 失败确由本改动引入，非预存）。把测
 - **下一轮执行要点**：先把两类受影响用例改造成「按 stateKeyFor 推导路径」而非写死 `<sid>`，再上复合键；
   锁用例须显式断言「预置的是**当前键**的锁」，避免静默失效。
 
-## F291b · stop_hook_active 第三佐证腿（需拍板，未实施）
+## F291b · stop_hook_active 第三佐证腿（裁决：**暂不实施** · 2026-09-14 · 可翻案）
+
+> **裁决（主线程代用户判断）**：本轮不实施，也不进 M11 首批。三条理由分别对应下文「为何需要拍板」的三点：
+> (1) 它反转 F270 P3 的既有裁决，属策略变更而非缺陷修复；(2) `stop_hook_active` 在 headless 环境下的取值语义**未实测**，
+> 在未测前提上放松 fail-closed 门违反 F264「harness 字段行为须本机实测」纪律；(3) R-6 已有 `enforcement: warn` 逃生口，
+> 本提案是便利性放松而非修 live 漏洞。**重开条件**：R-6 出现真实用户投诉（harness 不回灌反馈的环境阻断到底），
+> 且先完成本机 + 至少一种 headless（`claude --print` / SDK）的 Stop payload 实录，确认 `stop_hook_active` 只在真实重入为 true。
+
 
 F288 C-1 删掉「最早 fix 展开后 assistant entry ≥ 420」这条放行佐证腿（它落在被判方产出面：420 次工具调用即可 0 往返放行）。
 删后残余 **R-6**：harness **不回灌** hook 反馈的环境（Codex 方言 / 某些 headless / SDK 懒刷盘）预算耗尽后**阻断到底**，
