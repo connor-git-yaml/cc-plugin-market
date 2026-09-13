@@ -5,18 +5,53 @@
 
 ## [Unreleased]
 
+## [4.6.0] — 2026-09-13
+
+> **Spectra v4.6.0 + Spec Driver v4.6.0 — 诚实的图与换证据源的门禁（M10 批次 1–3）**
+>
+> 区间 `3d885d35..HEAD`（53 commit，其中改动 `src/` 的 7 个、改动 `plugins/` 的 25 个）。本条目同时追认区间内 Spec Driver 的 v4.5.0 一次 bump（`f5a8a475`，打包 F264/F265/F270/F275）——它随本次发布首次对外可见。上一版 `[4.5.0]` 的 `[Unreleased]` 段（Feature 271 产品表面清扫）已并入本条目。
+>
+> **发布口径说明**：npm registry 上 `spectra-cli` 的 latest 为 4.5.0，本区间起点取写入 4.5.0 版本号与 CHANGELOG 条目的那次 commit（`3d885d35`，F265 M10 Gate 0）。本次 `release:check` 的 `publish-gap` 判定为 indeterminate——registry 返回体缺 `gitHead` 字段，因此无法像 4.5.0 那样用 tarball 实际打包点校准起点。
+
 ### Added — spectra
 
 - **symbol 节点携带行号（Feature 271）** — `specs/_meta/graph.json` 的 symbol 节点 `metadata` 新增 `lineRange`（`{ start, end }`，1-indexed 闭区间）。**旧图不含该字段**，需 `spectra batch --mode graph-only` 重建后才生效。两类条目按设计诚实缺席：member 节点（`Class.method`，抽取层无成员级行号，用 class span 兜底会指向 class 头）与 regex 退化解析条目（span 恒为签名单行的假值）。同名符号（Python 条件定义 / TS 重载 / declaration merging）折叠为单节点时，`lineRange` 取各条目并集。
 - **`view_file(symbolId)` / `context.definition` 首次可用行号（Feature 271）** — 前者按符号行区间切片而非返回默认窗口，后者返回 `lineStart` / `lineEnd`。定位失败时 `view_file` 显式给出 warning：`lineRange-unavailable`（图中无行号，含旧图）、`lineRange-clamped`（图中行号越界，说明图已陈旧）。
+- **`impact` 对新符号给出 hint、护栏比较器新增 metadata-key 档（Feature 278）** — 改动涉及图中尚不存在的新符号时，`impact` 不再静默返回空影响面，而是明确提示图未覆盖该符号。
+- **`--init` 再生审计与 `judge:doctor` 增量漂移视图（Feature 278）** — 护栏资产按 `--init` 重新生成时审计新增字段，避免"剥字段深等"审计漏掉新增面。
+- **采集面 SSoT 收编忽略目录（Feature 284）** — `collector-surface.ts` 新增 per-pipeline `ignoreDirs`，六个采集面与适配器声明集引用同一对象；此前各消费方各自硬编码忽略目录，改一处漏五处。护栏比较器同批补齐**边属性值级 / 节点顶层 key / 图顶层 key / hyperedges** 四维——此前 14 条边属性全改仍能让再生脚本 exit 0。
 
 ### Fixed — spectra
 
+- **空图 / 退化图 fail-loud 链与 MCP 返回面诚实化（Feature 266）** — 空图闸原判据 `(0,0)` 是阶跃函数（1 个无 symbol 的节点即 pass），改为后置降级以保住强不变量；四种"查询其实没跑"的形态改为诚实缺席而非返回空结果冒充成功。经三轮异构对抗九个 CRITICAL 全闭环。
+- **`panoramic-query` 引擎缓存按 mtime+size 失效（Feature 280）** — 此前缓存只按路径判定，图重建后仍返回旧答案；判据与 `graph-tools.ts` 共用同一份。natural-language 结果同批挂上 F266 诚实标注，且**只绑定实际产出该答案的那份图**。
 - **`prepare` 对不存在的 `targetPath` 返回 `file-not-found`（Feature 271）** — 此前一路抛到顶层被脱敏成 `internal-error`，可诊断信息全部丢失。仅 `ENOENT` / `ENOTDIR` 判为不存在；其他可访问性异常（无权限、软链环等）仍走 `internal-error`，不谎报路径不存在。
 - **`graph_community` / `graph_hyperedges` 空结果诚实化（Feature 271）** — `graph_community` 区分"本图从未跑过 `spectra community`"与"社区 ID 写错了"；`graph_hyperedges` 空结果附启用条件说明，并明确这些条件必要非充分（预算降级或 LLM 未提取到协作面时仍为空）。
 - **`spectra index` 目标目录不存在的退出码 2 → 1（Feature 271）** — 与全局约定（1 = 目标 / 输入错误）对齐。
 - **恢复提示统一为 `spectra batch --mode graph-only`（Feature 271）** — MCP `graph-not-built` / `graph-format-stale` 及 worktree 同步脚本此前提示 `spectra index` 或 `spectra batch`，前者写的是另一份产物（`.spectra/unified-graph.json`），照做无法解除报错。
 - **文档面批量修正（Feature 271）** — MCP 工具数 17 → 18；`spectra export` 的 `--output` → `--output-dir`；CLI reference 补齐此前完全缺失的 `query` / `index` / `panoramic` / `direction-audit` / `mcp-server` / `scaffold-kb` 子命令；Exit Codes 章节修正"从不调用 `process.exit()`"的绝对化表述（`watch` / `mcp-server` 例外），并补充 `diff` / `direction-audit` 的"检查未通过"也退 1。
+- **图质量尺子 `normalizeName` 支持 `Class.method`（Feature 282）** — G0-4 首次取数时该尺子不认成员级名字，造成 Java 0/0 伪影与归一化 recall 3.4% 的失真读数；修后按协议重取原始读数作 M10 收官对照组。
+- **测试与守护资产清淤（Feature 272）** — 七项处置 + 三道防复发守卫，其中 pinned 资产陈旧度守卫上线当天即拦下 4 份陈旧 pinned 资产。
+- **`tests/type-tests` 严格程序闭包回收（Feature 280 后续）** — 两个接口类型下沉到纯类型模块；CI 的「Type Check Tests」自 `9362f1a8` 起转红。
+- **F213 e2e 真实家目录隔离（Feature 281）** — 该用例此前会对真实 `~/.codex` 做写入，且 cwd 项目级 `.codex/config.toml` 会影响断言结果；同批把 `.codex/config.toml`（含本机绝对路径）纳入 gitignore。
+- **CI 真实 spectra CLI 两级解析回退链（Feature 268）** — 三条 F241 证据锚在无全局安装的环境下转绿。
+
+### Added / Fixed — spec-driver
+
+- **fix 依从性门禁证据源换代（Feature 270）** — 判定器不再只读 transcript，改由 PostToolUse 侧实时账本采集器落账，并用 `background_tasks` 判在途三态。六个 Phase 全绿后补做的**跨 phase 集成审查**一举挖出 7 个 CRITICAL（per-phase 对抗不等于集成态审查），其中包括闸门判据被自家 SessionStart hook 恒满足、兜底路径自举开闸不可逆。范围在交付时做了诚实化收缩登记（SC 口径更正为 6 真达成 / 4 部分 / 5 未达成），病根 iii 与 v 未修已移交。
+- **fix 依从性门禁串行链收官（Feature 287 / 288 / 289 / 290）** — 卡 A 诊断码 canonical 表 + 用户可见面白名单 + PENDING 纯可观测量 + Stop 快照三态（F287，对抗复审顺带修掉 stdin >64KB EAGAIN 的既有 fail-open）；卡 B 状态文件锁 + 计数幂等 + 证据指纹路由 + 放行佐证（F288，**删掉「assistant entry ≥ 420」这条被判方可自产的放行腿**——420 次工具调用即可 0 往返放行）；续做 / 旁链入口 Tier 2 续做合同（F289，resume 提名 / 裸会话 fix-report 见证 / SubagentStop sidechain 标记三源绑定，新增 SubagentStop hook，Claude 独有不分发 Codex）；残余收口（F290，SubagentStop 检测侧闭包纳入 doctor 快照比对、锁竞态确定性用例、enum→产出点反向守卫、Tier 2 阻断可观测性、resume 补 fix 目录恢复）。
+- **判定器 `!saved.ok` 由「等同已达上限放行」反转为 fail-closed（Feature 276）** — 这是一条零成本绕过；同批加反馈计数上界，并删掉零接线死代码 `routeNonBlock`。经 8 轮对抗 34 个 CRITICAL 收敛。
+- **doctor hook-trust 维度对齐 Codex 插件主路径（Feature 275）** — 判据按 source 分层（plugin 源禁 command 层），防第三方凭空取得 trusted；`currentHash` 只盖声明不盖脚本字节这一诚实上限已登记。
+- **Spec Driver 引擎硬化（Feature 277，部分交付）** — verify 五态合并律 + `GATE_TASKS` 冻结值三值链 + 收敛循环与三纪律共享块 + 门物理前置与挂载守护。68 条 FR 的达成情况如实登记：已实现 50 / 已核验 10 / 移交 4 / 缺席 1 / 字面违反 2 / 裁剪 1，合并律 fail 未粉饰。
+- **Codex hooks 归属表派生化（Feature 283）** — generator 对非 `owned ∪ claude-only` 的 handler fail-loud + 两表键集相等守卫；此前守卫硬编码只能抓"删"抓不到"加"。同批 `DELEGATION_TOOL_NAMES` 收敛为单源，`parseRenameOperands` 补单元合同矩阵。
+- **导出符号生产可达性检查（Feature 286）** — 承接 P1-K / F277 移交：词法脚本 + verify Layer 1.85/1.86，审查子代理受限 Write、证据包预跑注入、RED 级取证与向后兼容类 SC 验证模板。
+- **诚实工具面四小补（Feature 278）** — `judge:doctor` 增量漂移视图等四项；其中"逐字节不变"类判据禁用钉快照、必须同时刻 A/B 的纪律已入账。
+- **发布 / CI 门补齐（Feature 285）** — `prepublishOnly` 加挂 `test:plugins` 与 `typecheck:tests`；coverage 阈值接入 CI；`tsconfig.tests.json` 进 CI 只报不阻断；清理 mjs gate 二次跑。coverage job 首跑的 birpc `onTaskUpdate` 超时按已知负载敏感类别放行，阈值与测试失败仍判硬红。
+
+### 发布工程
+
+- 本次发布的验证口径：`npm run build` 零错误、`npm run test:plugins` 1946 tests / 1944 pass / 0 fail / 2 skipped、`npx vitest run` 8248 passed / 0 failed（556 文件通过、4 跳过）、`npm run repo:check` status=warn（既有 `graph-quality:freshness`）、`npm run release:check` contract valid。
+- 冻结型行为快照（`f220-decomposition-charter`）因版本号进入产物内容而需更新（`generatedBy: spectra v<版本>` 由 `getSpectraVersionString()` 写入每份 spec 的 frontmatter，而快照的内容摘要不剥版本串），按 F223 / F259 纪律**外科替换** 18 处版本号字面值 + 25 处内容 hash，未使用 `vitest -u`。验收用「回代重建 + 逐字节零残差」而非 diff 过滤（后者经对抗实测会吞掉 `currentHash` / `previousHash` 这类真实骨架漂移）：捕获实跑产物现算 hash 命中新快照 25/25，版本串回代 v4.5.0 后复算命中**旧** hash 25/25（sha256 preimage），整份快照双向回代重建与 `git show HEAD:` 逐字节零残差。
 
 ## [4.5.0] — 2026-08-30
 

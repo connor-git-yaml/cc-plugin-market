@@ -243,3 +243,19 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 - **enum→产出点反向守卫**（F288）；`JUDGE_FILE_SET` 纳入 SubagentStop CLI 检测侧闭包（F289）；resume skill 补 fix 恢复逻辑（F289 (a) 源前向依赖，现 0 真实语料命中）。
 - **dogfooding**：对抗审查应冻结 commit 作基线（F289 spec 审查在 rebase 中途 + 实现并发漂移的移动靶上进行）。
 
+
+**批次 3 债务处置结账（2026-09-13，F290 + 4.6.0 发布准备）**：上表 M11 新增债务中**五项可加性、无裁决改动**已由 **F290（`3596acee`）落地关闭**，其余按下表流转——本节取代上表对应条目的"待办"状态：
+
+| 上表条目 | 处置 | 依据 |
+|---|---|---|
+| F288 锁竞态 trace 注入用例 | **已关闭** | F290：io 接管分支 test-only 环境钩子（上限 1000ms + 每次 `acquireStateLock` 仅生效一次）；card-b `T1-C6` 以 150/300ms 时序确定性复现接管身份竞态，`T-S2` 钉住原子创建 / 上限常量 / 夹取 / 一次性闭锁 |
+| F289 Tier 2 可观测性 | **已关闭** | F290：fail-open 早退事件带 `tier`，`evaluate` 透传 `tier2CandidatePath`，阻断 stderr 首段告知绑定源 + 目录 + 续做合同（经既有渲染点，可见码集合不变） |
+| enum→产出点反向守卫 | **已关闭** | F290：card-a `T0-U6` 认三形态产出点（`表.键` / key 级动态下标 / 别名非声明性引用），零产出码须在显式 allowlist 且 allowlist 陈旧亦判红 |
+| `JUDGE_FILE_SET` 纳入检测侧闭包 | **已关闭** | F290：新增 `SIDECHAIN_FILE_SET`（SubagentStop CLI 真实 BFS 闭包 8 项）与 `DOCTOR_FILE_SET = JUDGE ∪ SIDECHAIN`（12 项），doctor roster 改用 union + 闭包相等守卫；`JUDGE_FILE_SET` 与 FR-002b 判定器闭包守卫**不动** |
+| resume skill 补 fix 恢复逻辑 | **已关闭** | F290：恢复点表增 fix 目录六行 + 「Phase 4 verify 仍须 Task 委派」注，Codex 包装随 `repo:sync` 再生（body sha 一致） |
+| **per-target 阻断预算** | **已设计、刻意未交付 → M11 立卡** | 设计稿 `docs/design/f291-per-target-budget-and-reentry-corroboration.md`（F291a）：三候选取舍 + 选中方案完整设计 + **本轮已实现并实测爆炸半径后整体撤销**（card-b 24/4、judge-cli 219/6、card-a 20/1；根因是预置锁路径迁移使 `T1-E4` / `T2-E6` 静默停止测试其声称之物，叠加 F240 基线套件的 session 级计数轨迹用例）。撤销后基线复验 28/0、225/0、21/0、25/0。**不在已交付安全门上于发布前叠改状态模型** |
+| **F288 R-6** | 仍开放 | 删 420 assistant-entry 放行腿后，harness 不回灌反馈的环境预算耗尽即阻断到底，逃生口仅 `enforcement: warn` |
+| **stop_hook_active 第三佐证腿** | 待用户拍板 | 提案见上述设计稿 F291b 节——**反转 F270 P3 既有裁决**的策略变更，前提未实测，不自行实施 |
+| F289 sidechain 无提名不覆盖 | 永久登记（诚实上限） | 与 resume 无提名对称：无处定位 fix 目录则不绑定，既不硬阻断也不宽松放行 |
+
+**4.6.0 发布准备（2026-09-13）**：`contracts/release-contract.yaml` 两产品 `version` → `4.6.0` + 两份 `productMappingDescription` 前置 v4.6.0 叙事，经 `release:sync` 派生 12 处受控行；`CHANGELOG.md` 补齐 `[4.6.0]` 条目（区间 `3d885d35..HEAD`，53 commit，追认区间内 spec-driver v4.5.0 一次 bump，原 `[Unreleased]` 的 F271 段并入）。版本号进入冻结型行为快照内容，按 F223/F259 纪律**外科替换** 18 处版本字面值 + 25 处内容 hash，未用 `vitest -u`；验收改用「回代重建 + 逐字节零残差」（两路异构对抗判定原先的「diff 过滤后为空集」是假绿灯——该过滤精确命中本快照里真实存在的 `currentHash`/`previousHash` 64-hex 行，真实骨架漂移会被静默滤掉）：产物现算 hash 命中新快照 25/25 + 版本回代命中旧 hash 25/25（sha256 preimage）+ 整份重建与 `git show HEAD:` 零残差；`tests/e2e/feature-170a-*.e2e.test.ts` 的版本钉死断言同步更新。**`npm publish` 由用户本人执行**。
