@@ -128,23 +128,56 @@ describe('F285 · CI 工作流（结构切块 + 不存在性断言）', () => {
     expect(ifLine).toContain("steps.build.outcome == 'success'");
   });
 
-  it('coverage job：与 test 并行（头部无 if/needs）、VITEST_MAX_FORKS=1、run 恰为 npm run test:coverage、无 continue-on-error / 吞退出码', () => {
+  it('coverage job：与 test 并行（头部无 if/needs）、VITEST_MAX_FORKS=1、跑批落日志交判定器裁决，run 体逐行精确钉死防 YAML 接线空转', () => {
     const job = jobBlock('coverage');
     const header = job.slice(0, job.indexOf('    steps:'));
     expect(header).not.toMatch(/^\s{4}(?:if|needs):/m);
     const step = stepBlock('coverage', 'Coverage (thresholds enforced)');
-    // F285 首跑假红处置：阈值 / 测试失败仍硬红，只有 birpc onTaskUpdate 签名 + 零失败 + 阈值达标才放行
+    // F292：负向 grep 放行判据（ANSI 盲区 + 从未正向确认通过汇总/覆盖率表）已抽成可单测纯函数
+    // scripts/lib/coverage-gate-core.mjs（tests/unit/coverage-gate.test.ts 承载判定行为），
+    // YAML 步骤退化为「跑批落日志 → 交判定器 → 用判定器的 exit code 收尾」。
+    //
+    // delta 轮对抗审查（角 A fail-open）实测：旧的 `toContain` 逐行断言在下列四种变异体下
+    // 全部漏放（本机逐一实跑验证，见 verification/mutation-evidence.md）：
+    //   (A) `gate_status=$?` 后插一行 `gate_status=0`（强制放行）
+    //   (B) 追加第二次判定调用 `node scripts/coverage-gate.mjs coverage.log "0" || true`
+    //   (D) `status=$?` 后插一行 `status=0`（让判定器永远只看到 status=0）
+    //   (E) 步骤级加 `if: false`（整段判定空转，job 直接绿）
+    // toContain 只查子串存在，不查行序、不查有没有被后续行覆盖、更不查步骤有没有被条件
+    // 跳过——改整串 `toEqual` 精确钉 6 行序列 + 步骤级 if 不存在性断言 + SWALLOW 检查。
     const body = runBody(step);
-    expect(body).toContain('npm run test:coverage > coverage.log 2>&1');
-    expect(body.some((l) => l.includes("grep -qE 'does not meet|ERROR: Coverage for' coverage.log") && l.includes('exit 1'))).toBe(true);
-    expect(body.some((l) => l.includes('failed') && l.includes('exit 1'))).toBe(true);
-    expect(body.some((l) => l.includes('Timeout calling "onTaskUpdate"'))).toBe(true);
-    expect(body[body.length - 1]).toBe('exit "${status}"');
-    // 阈值检查必须排在假红放行之前（否则签名命中会盖过阈值未达）
-    expect(body.findIndex((l) => l.includes('does not meet'))).toBeLessThan(body.findIndex((l) => l.includes('Timeout calling')));
+    expect(body).toEqual([
+      'set +e',
+      'npm run test:coverage > coverage.log 2>&1',
+      'status=$?',
+      'node scripts/coverage-gate.mjs coverage.log "${status}"',
+      'gate_status=$?',
+      'exit "${gate_status}"',
+    ]);
+    const ifLine = nonCommentLines(step).find((l) => /^\s{8}if:/.test(l));
+    expect(ifLine, 'coverage 步不应有步骤级 if（会让整段判定空转，job 直接绿）').toBeUndefined();
+    for (const l of body.filter((line) => /^(?:npm|npx|node)\b/.test(line))) expect(l).not.toMatch(SWALLOW);
+    // 反向断言：旧的内联负向 grep 逻辑不得复活（防止"脚本加了但旧分支没删"的双轨制）
+    expect(step).not.toMatch(/grep -qE 'does not meet/);
+    expect(step).not.toMatch(/Timeout calling "onTaskUpdate"/);
+    expect(step).not.toMatch(/::warning::vitest birpc/);
+    expect(step).not.toMatch(/tail -n 40/);
+    // coverage-gate-core.mjs 必须真的含 birpc **家族**签名正则（防止判定器把这条检查删掉、
+    // 改名，或退化回钉死单个方法名字面量——delta 轮 R3 已改用家族正则容忍不同 RPC 通道/
+    // 方法名，故这里不再钉 `onTaskUpdate` 字面量，改钉家族正则的判别性片段）
+    const gateCore = read('scripts/lib/coverage-gate-core.mjs');
+    expect(gateCore).toContain('vitest-(?:worker|pool|api)');
+    expect(gateCore).toContain('Timeout calling');
     expect(step).toMatch(/^\s{10}VITEST_MAX_FORKS: ["']1["']$/m);
     expect(step).not.toMatch(/continue-on-error/);
     expect(job).toContain('run: node dist/cli/index.js batch --mode graph-only');
+  });
+
+  it('coverage job 上传 coverage.log artifact（if: always()，v4）', () => {
+    const step = stepBlock('coverage', 'Upload coverage log');
+    expect(step).toMatch(/^\s{8}if: always\(\)$/m);
+    expect(step).toMatch(/uses: actions\/upload-artifact@v4$/m);
+    expect(step).toContain('path: coverage.log');
   });
 
   it('覆盖率阈值 key 与 include 条目指向真实文件（对抗复审 A-W1：vitest 对 glob 空匹配静默按 100% 通过，文件改名即阈值蒸发）', () => {

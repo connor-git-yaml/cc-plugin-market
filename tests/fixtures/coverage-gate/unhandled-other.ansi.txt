@@ -1,0 +1,41 @@
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90m/private/tmp/claude-501/-Users-connorlu-Desktop--workspace2-nosync-cc-plugin-market--claude-worktrees-epic-neumann-6df36f/bb54368f-695a-4805-b0a9-431ad251de9f/scratchpad/vt[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+ [32m✓[39m tu/a.test.mjs [2m([22m[2m3 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯⎯[39m[1m[41m Uncaught Exception [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mError[22m: boom unhandled[39m
+[36m [2m❯[22m Timeout._onTimeout tu/a.test.mjs:[2m5:45[22m[39m
+    [90m  3| [39m[34mit[39m([32m'add'[39m[33m,[39m () [33m=>[39m [34mexpect[39m([34madd[39m([34m1[39m[33m,[39m [34m2[39m))[33m.[39m[34mtoBe[39m([34m3[39m))[33m;[39m
+    [90m  4| [39m[34mit[39m([32m'sub'[39m[33m,[39m () [33m=>[39m [34mexpect[39m([34msub[39m([34m3[39m[33m,[39m [34m1[39m))[33m.[39m[34mtoBe[39m([34m2[39m))[33m;[39m
+    [90m  5| [39mit('leak', () => { setTimeout(() => { throw new Error('boom unhandled'…
+    [90m   | [39m                                            [31m^[39m
+    [90m  6| [39m
+[90m [2m❯[22m listOnTimeout node:internal/timers:[2m605:17[22m[39m
+[90m [2m❯[22m processTimers node:internal/timers:[2m541:7[22m[39m
+
+[31mThis error originated in "[1mtu/a.test.mjs[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mleak[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m     Errors [22m [1m[31m1 error[39m[22m
+[2m   Start at [22m 01:14:48
+[2m   Duration [22m 218ms[2m (transform 18ms, setup 0ms, collect 10ms, tests 22ms, environment 0ms, prepare 47ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+----------|---------|----------|---------|---------|-------------------
+File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+----------|---------|----------|---------|---------|-------------------
+All files |     100 |    66.66 |     100 |     100 |                   
+ a.mjs    |     100 |    66.66 |     100 |     100 | 2                 
+----------|---------|----------|---------|---------|-------------------

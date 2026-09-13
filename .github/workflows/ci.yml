@@ -177,9 +177,14 @@ jobs:
         run: npm run build
       - name: Build Knowledge Graph
         run: node dist/cli/index.js batch --mode graph-only
-      # F285 首跑实证（run 34710678418）：549 文件全过、阈值全达标，却因 vitest birpc `Timeout calling "onTaskUpdate"`
-      # （F235/F269 类别，#8164 上游未修；coverage 采集让主进程在收尾转换阶段阻塞 >60s）整 job 假红。
-      # 处置：阈值与测试失败仍是硬红（先查 does not meet / N failed），只有「零失败 + 阈值达标 + 该签名」才按已知假红放行并打 ::warning。
+      # F292：F285 首跑实证（run 34710678418）暴露的两条负向 grep 放行判据被证伪——
+      # ANSI 未剥离时它们在 CI 上结构性匹配不到彩色 failed 行（真实测试失败 + 一次 birpc
+      # 超时会被一并放行），且从未正向确认「打印了通过汇总」与「覆盖率报告确实生成」。
+      # 判定逻辑已抽成可单测纯函数 scripts/lib/coverage-gate-core.mjs（tests/unit/coverage-gate.test.ts
+      # 8 真实样本 + 合成串隔离用例覆盖），此处只负责跑批落日志、交判定器裁决。
+      # 旧的裸尾部截取窗口一并移除——它正是本次根因之一（汇总块在覆盖率表之前，固定行数
+      # 窗口天然看不到，人工复核也复核不到）；判定器自己把证据摘录打印到 stdout 替代它，
+      # 完整 coverage.log 改由下方 Upload coverage log 步上传，供复盘下载。
       - name: Coverage (thresholds enforced)
         env:
           VITEST_MAX_FORKS: "1"
@@ -187,12 +192,14 @@ jobs:
           set +e
           npm run test:coverage > coverage.log 2>&1
           status=$?
-          set -e
-          tail -n 40 coverage.log
-          if grep -qE 'does not meet|ERROR: Coverage for' coverage.log; then echo '::error::覆盖率阈值未达（见上方 does not meet 行）'; exit 1; fi
-          if grep -qE 'Tests +[0-9]+ failed|Test Files +[0-9]+ failed' coverage.log; then echo '::error::coverage 跑批存在测试失败'; exit 1; fi
-          if [ "${status}" -ne 0 ] && grep -q 'Timeout calling "onTaskUpdate"' coverage.log; then
-            echo '::warning::vitest birpc onTaskUpdate 超时（F235/F269 假红类别，#8164 上游未修）——全部用例通过且阈值达标，按已知假红放行'
-            exit 0
-          fi
-          exit "${status}"
+          node scripts/coverage-gate.mjs coverage.log "${status}"
+          gate_status=$?
+          exit "${gate_status}"
+
+      - name: Upload coverage log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-log
+          path: coverage.log
+          retention-days: 7
