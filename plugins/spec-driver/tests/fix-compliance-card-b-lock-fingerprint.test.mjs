@@ -207,6 +207,30 @@ describe('F288 G1 · mutateBlockState 原语', () => {
   });
 });
 
+  it('T1-C6 确定性接管身份竞态（F290，闭合 verify W2 / M1-c）：A 读到陈旧锁后被 trace 延迟，窗口内 B 已接管并持有活锁 ⇒ A 的 rename 经身份核对 rename 回、等待 B 释放后再取锁 ⇒ 最终 2、丢更新 0（裸 unlink 接管会删掉 B 的活锁 ⇒ 最终 1）', async () => {
+    const root = stageRoot();
+    fs.mkdirSync(path.dirname(lockPath(root, 'c6')), { recursive: true });
+    fs.writeFileSync(lockPath(root, 'c6'), JSON.stringify({ lockId: 'stale', pid: 2147483000, startedAt: Date.now() }));
+    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nconst hold = Number(process.argv[3] || 0);\nconst r = mutateBlockState(process.argv[2], 'c6', (st) => { if (hold > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, hold); return { next: { ...st, blockCount: st.blockCount + 1 } }; });\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable, diagnostics: r.diagnostics }));`;
+    const scriptPath = path.join(root, 'inc-c6.mjs');
+    fs.writeFileSync(scriptPath, script);
+    const run = (holdMs, env) => new Promise((resolve) => {
+      const child = spawn('node', [scriptPath, root, String(holdMs)], { stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP: path.join(root, 'tmp-override'), ...env } });
+      let out = ''; child.stdout.on('data', (d) => { out += d; }); child.on('close', (code) => resolve({ code, out }));
+    });
+    // A：读到陈旧 holder 后在 rename 前被延迟 150ms；B：立即接管并在 mutator 里持锁 300ms（150 < 300 < 150+480 重试预算）
+    const [a, b] = await Promise.all([
+      run(0, { SPEC_DRIVER_FIX_COMPLIANCE_LOCK_TRACE_DELAY_MS: '150' }),
+      run(300, {}),
+    ]);
+    for (const r of [a, b]) assert.equal(r.code, 0, r.out);
+    const pa = JSON.parse(a.out); const pb = JSON.parse(b.out);
+    assert.ok(pa.ok && pb.ok);
+    assert.equal(loadBlockState(root, 'c6').blockCount, 2, '身份核对必须防止 A 删掉 B 的活锁：丢更新 = 0');
+    assert.equal(pa.lockUnavailable, false, 'A 应在 B 释放后取到锁（不该耗尽重试降级）');
+    assert.equal(fs.existsSync(lockPath(root, 'c6')), false, '收尾锁已释放');
+  });
+
 // ════════════════════════════════════════════
 // G2 · 指纹与路由
 // ════════════════════════════════════════════
@@ -556,5 +580,19 @@ describe('F288 · 源码守卫', () => {
     const corroborated = src.match(/function releaseCorroborated\([\s\S]*?\n\}/);
     assert.ok(corroborated, 'releaseCorroborated 缺席');
     assert.ok(!/NON_BLOCK_ENTRY_LIMIT|entryCount/.test(corroborated[0]), corroborated[0]);
+  });
+  it('T-S2 原子创建源码钉（F290，M1-b）：锁只经 staging + linkSync 原子创建，不得退回 openSync(wx)+写（空内容窗口）', () => {
+    const io = fs.readFileSync(path.resolve(HERE, '../scripts/lib/fix-compliance-io.mjs'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(/fs\.linkSync\(stagingPath, lockPath\)/.test(io), '必须 linkSync(stagingPath, lockPath)');
+    assert.ok(!/openSync\(lockPath, 'wx'\)/.test(io), '不得对 lockPath 直接 openSync wx（内容为空的窗口）');
+    // trace 延迟 hook 只在 rename 之前、且只由环境变量驱动（生产不设 ⟹ 零行为）
+    assert.ok(/SPEC_DRIVER_FIX_COMPLIANCE_LOCK_TRACE_DELAY_MS/.test(io));
+    // 🔴 对抗复审 CRITICAL-1：此前只断言「变量名出现」，上限与一次性闭锁**零覆盖**（去掉 Math.min 全绿）。
+    // 现钉三件：① 常量上限 ≤ 1000ms；② 睡眠经 Math.min(…, 常量) 夹取；③ 每次调用一次性闭锁。
+    const capDecl = io.match(/const LOCK_TRACE_DELAY_MAX_MS = (\d+);/);
+    assert.ok(capDecl, '缺 LOCK_TRACE_DELAY_MAX_MS 上限常量');
+    assert.ok(Number(capDecl[1]) <= 1000, `trace 延迟上限须 ≤1000ms（现 ${capDecl[1]}）`);
+    assert.ok(/sleepSync\(Math\.min\(traceDelay, LOCK_TRACE_DELAY_MAX_MS\)\)/.test(io), '睡眠必须经上限常量夹取');
+    assert.ok(/let traceApplied = false;/.test(io) && /!traceApplied &&/.test(io) && /traceApplied = true;/.test(io), 'trace 延迟须每次 acquireStateLock 仅生效一次');
   });
 });

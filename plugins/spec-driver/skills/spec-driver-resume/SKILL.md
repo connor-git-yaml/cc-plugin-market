@@ -318,6 +318,18 @@ online-research.md 缺失/无效且 online_research_required=true → 从在线�
 product/tech-research.md 存在  → 从对应阶段恢复
 无制品                         → 从头开始
 ```
+**fix 目录（`specs/NNN-fix-*/`，F290 补：fix 流程只有 fix-report / plan / 代码 / verification，不套用 feature 的 spec→tasks 链）**：
+
+```text
+verification/verification-report.md 存在   → 流程已完成
+plan.md 存在 + 代码变更存在               → 从验证闭环 (fix Phase 4) 恢复
+plan.md 存在                               → 从代码修复 (fix Phase 3) 恢复
+fix-report.md 含 Root Cause 节             → 从修复规划 (fix Phase 2) 恢复
+fix-report.md 存在但无 Root Cause          → 从问题诊断 (fix Phase 1) 恢复（诊断未闭合，不得直接修）
+无制品                                     → 从 fix Phase 1 开始
+```
+
+> 恢复到 fix Phase 4 时，verify 类工作**仍须经 Task 委派**（与首跑同一纪律）：fix-compliance 判定器的 Tier 2 (a) 源以「resume 展开 + fix 目录提名 + 本会话 verify 委派」为续做证据，编排器 inline 跑验证会被判缺 `delegation:verify`。
 
 输出恢复信息：
 

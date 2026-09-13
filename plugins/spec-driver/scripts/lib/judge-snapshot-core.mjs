@@ -35,6 +35,32 @@ export const JUDGE_FILE_SET = Object.freeze([
 ]);
 
 /**
+ * F290：SubagentStop **检测侧** CLI（fix-compliance-sidechain-marker.mjs）的 import 闭包。
+ * 判定器本身不 import 该 CLI（FR-002b 守卫要求 JUDGE_FILE_SET 与判定器闭包**完全相等**，故不能塞进去），
+ * 但它同样随插件快照分发、同样会陈旧（F236「本机门禁跑着旧判定器」在检测侧的同型：CLI 陈旧 ⟹ (c) 源静默失效）。
+ * 与 sidechain-file-set-guard 测试解析出的真实闭包完全相等。
+ */
+export const SIDECHAIN_FILE_SET = Object.freeze([
+  'scripts/lib/fix-compliance-sidechain-marker.mjs',
+  'scripts/lib/fix-compliance-core.mjs',
+  'scripts/lib/fix-compliance-execution-record.mjs',
+  'scripts/lib/fix-compliance-io.mjs',
+  'scripts/lib/delegation-tool-names.mjs',
+  'scripts/lib/ledger-writer.mjs',
+  'scripts/lib/is-invoked-directly.mjs',
+  'scripts/lib/simple-yaml.mjs',
+]);
+
+/**
+ * F290：doctor 快照比对的**完整**文件集 = 判定器闭包 ∪ 检测侧闭包（去重，JUDGE 顺序在前，入口仍为 JUDGE_FILE_SET[0]）。
+ * 只比对 .mjs：两侧的 shell 薄壳（stop-fix-compliance-check.sh / subagent-stop-fix-marker.sh）均不在比对集（既有口径，一致）。
+ */
+export const DOCTOR_FILE_SET = Object.freeze([
+  ...JUDGE_FILE_SET,
+  ...SIDECHAIN_FILE_SET.filter((f) => !JUDGE_FILE_SET.includes(f)),
+]);
+
+/**
  * 从单一来源探测结果映射为 SnapshotResolutionResult 的短路判定。
  * @returns {object|null} 命中（ok/error）时返回结果，需继续 fallback 时返回 null
  */

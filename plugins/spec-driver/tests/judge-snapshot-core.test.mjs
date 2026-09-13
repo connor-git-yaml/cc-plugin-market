@@ -12,6 +12,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   JUDGE_FILE_SET,
+  SIDECHAIN_FILE_SET,
+  DOCTOR_FILE_SET,
   resolveActiveSnapshot,
   compareFile,
   aggregateStatus,
@@ -367,5 +369,13 @@ describe('JUDGE_FILE_SET — 常量断言', () => {
   it('Object.freeze 生效：push/赋值不改变内容', () => {
     assert.throws(() => JUDGE_FILE_SET.push('x'));
     assert.equal(JUDGE_FILE_SET.length, 11);
+  });
+
+  it('F290：SIDECHAIN_FILE_SET 8 项（检测侧 CLI 闭包）；DOCTOR_FILE_SET = 11 ∪ 8 去重 = 12，入口不变', () => {
+    assert.equal(SIDECHAIN_FILE_SET.length, 8);
+    assert.equal(DOCTOR_FILE_SET.length, 12);
+    assert.equal(DOCTOR_FILE_SET[0], JUDGE_FILE_SET[0]);
+    assert.deepStrictEqual(DOCTOR_FILE_SET.slice(0, 11), [...JUDGE_FILE_SET]);
+    assert.equal(DOCTOR_FILE_SET[11], 'scripts/lib/fix-compliance-sidechain-marker.mjs');
   });
 });

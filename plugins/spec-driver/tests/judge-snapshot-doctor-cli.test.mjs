@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JUDGE_FILE_SET } from '../scripts/lib/judge-snapshot-core.mjs';
+import { JUDGE_FILE_SET, DOCTOR_FILE_SET } from '../scripts/lib/judge-snapshot-core.mjs';
 import { deriveDelta, classifyGitResult, isCommitShaShape } from '../scripts/judge-snapshot-doctor.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ afterEach(() => {
 });
 
 function writeJudgeFiles(base, overrides = {}) {
-  for (const entry of JUDGE_FILE_SET) {
+  for (const entry of DOCTOR_FILE_SET) {
     if (overrides[entry] === null) continue;
     const content = overrides[entry] !== undefined ? overrides[entry] : `content-of-${entry}`;
     const p = path.join(base, entry);
@@ -315,7 +315,7 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
     );
     // 汇总行必须体现 added-since——旁注方案正是在这里把它整个吞掉的
     assert.ok(
-      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 added-since`),
+      r.stdout.includes(`增量汇总: ${DOCTOR_FILE_SET.length - 1} unchanged / 1 added-since`),
       `增量汇总应逐字含 added-since 计数：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);
@@ -411,8 +411,8 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
     assert.ok(line.includes('(基线 match → 当前 mismatch)'), `该行应打印两侧原始 status，实际：${line}`);
     // 逐字钉住汇总行：既守护「汇总行存在」，也守护 DELTA_VOCABULARY 的打印顺序
     assert.ok(
-      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 introduced`),
-      `增量汇总应逐字为「${JUDGE_FILE_SET.length - 1} unchanged / 1 introduced」：\n${r.stdout}`,
+      r.stdout.includes(`增量汇总: ${DOCTOR_FILE_SET.length - 1} unchanged / 1 introduced`),
+      `增量汇总应逐字为「${DOCTOR_FILE_SET.length - 1} unchanged / 1 introduced」：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);
   });
@@ -440,7 +440,7 @@ describe('judge-snapshot-doctor CLI --since（F278 项④）', () => {
       `该行应打印两侧原始 status，实际：${line}`,
     );
     assert.ok(
-      r.stdout.includes(`增量汇总: ${JUDGE_FILE_SET.length - 1} unchanged / 1 added-since`),
+      r.stdout.includes(`增量汇总: ${DOCTOR_FILE_SET.length - 1} unchanged / 1 added-since`),
       `汇总行必须体现 added-since：\n${r.stdout}`,
     );
     assertNoRemediation(r.stdout);

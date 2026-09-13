@@ -280,7 +280,7 @@ const withTier = (verdict, tier) => ({ ...verdict, tier });
  * | 源 | 检出 | 锚点 | 提名 |
  * |---|---|---|---|
  * | (a) resume | 最晚一次 `spec-driver-resume` 展开（同趟累计） | resume 展开行 | 既有 nomination 机械在该窗口内提名；无提名 ⇒ 不绑定（feature / story 续做零判定） |
- * | (b) 写入见证 | Write / Edit / 带写指示符 Bash 写 `specs/NNN-fix-…/fix-report.md` 或 `verification/verification-report.md` | 会话起点（-1 = 全窗口） | 见证目录（多目录取最晚） |
+ * | (b) 写入见证 | **仅** Write / Edit 写 `specs/NNN-fix-…/fix-report.md` + 成功回执（F290 订正 F289 遗留漂移：代码只有一条 `ANCHORED_ARTIFACT_PATH_REGEX`，**从不**认 `verification-report.md`、**也不**认 Bash——收进去即复活第 3 轮红队实证的绕过链） | 首条见证写入行 | 见证目录（单目录）/ ambiguous（多目录走 F224） |
  * | (c) sidechain | 本会话标记文件（SubagentStop 侧 CLI 写，键 = session + agent） | 会话起点 | 主 transcript 提名，否则标记携带的 sidechain 提名 |
  *
  * 不绑定的形态（对照组）：resume 无提名 / 只读或 `cat` 提及 / 写 fix 目录下其他文件 / 标记 session 不匹配。
@@ -762,6 +762,8 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     ledgerDelegationCount: ledgerResult.delegations.length,
     tier,                                   // F289：1 = 完整合同；2 = 续做合同
     tier2Source: tier2 ? tier2.source : null,
+    // F290：Tier 2 阻断文案告知绑定目录（W-2 可观测性）
+    tier2CandidatePath: tier2 && tier2.candidate && typeof tier2.candidate.path === 'string' ? tier2.candidate.path : null,
   };
 }
 
@@ -900,6 +902,19 @@ export function computeEvidenceFingerprint({ promptId, missing, ledgerDelegation
   return crypto.createHash('sha256').update(material).digest('hex');
 }
 
+const TIER2_SOURCE_LABEL = Object.freeze({
+  resume: 'spec-driver-resume 展开 + fix 目录提名',
+  witness: '本会话写入 fix-report.md 见证',
+  sidechain: '子代理 sidechain 内 fix 展开标记',
+});
+/** F290：Tier 2 阻断文案首段（人读，非诊断码）——告知绑定源与目录，并说明续做合同（implement 豁免）。 */
+export function tier2BindingNotice(source, candidatePath) {
+  const label = TIER2_SOURCE_LABEL[source] || '续做绑定';
+  // 🔴 对抗复审 W-2：本函数自身消毒，**不依赖**三处上游锚定正则永远把字符集卡死在 [a-z0-9-]——
+  // F276 W-1 的「路径里一个换行就能长出伪造行（可冒充 GATE_DEGRADED_PREFIX_LINE）」正是这样复活的。
+  const dir = typeof candidatePath === 'string' && candidatePath.length > 0 ? `（目录 ${renderPathSegment(candidatePath)}）` : '';
+  return `本会话未展开 spec-driver-fix，但按「${label}」被识别为 fix 续做${dir}，按续做合同判定：implement 委派已豁免，仍需本会话 verify 委派 + 制品齐全。`;
+}
 const UNCORROBORATED_NOTICE = '预算已耗尽但缺放行佐证（transcript 上本判定器的阻断反馈 < 2 条）：请等待上一次阻断反馈落盘后再停止；勿反复重补同一制品。若你的运行环境不回灌 hook 反馈，请在 spec-driver.config.yaml 设 fix_compliance.enforcement: warn。';
 function emitBlock(projectRoot, sessionId, verdict, blockCount, diagnostics, noticeLine = null) {
   appendAuditEvent(projectRoot, buildAuditEvent({
@@ -983,18 +998,19 @@ function dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostic
       extraDiagnostics: diagnostics,
     });
   }
+  const tier2Notice = counts && typeof counts.tier2Notice === 'string' ? counts.tier2Notice : null;
   switch (decision.route) {
     case 'block':
-      return emitBlock(projectRoot, sessionId, verdict, decision.nextCount, diagnostics);
+      return emitBlock(projectRoot, sessionId, verdict, decision.nextCount, diagnostics, tier2Notice);
     case 'nonblock':
       // 无进展：不消耗阻断预算，但退出码保持裁决自身语义（2）；文案走 buildFeedbackText（R2-5：首次 exit 2 也要看到该补什么）
-      return emitBlock(projectRoot, sessionId, verdict, decision.blockCount, [...diagnostics, JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code]);
+      return emitBlock(projectRoot, sessionId, verdict, decision.blockCount, [...diagnostics, JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code], tier2Notice);
     case 'uncorroborated':
       return emitBlock(projectRoot, sessionId, verdict, decision.blockCount, [
         ...diagnostics,
         ...(decision.noProgress ? [JUDGE_DIAGNOSTICS.gateFingerprintNoProgress.code] : []),
         JUDGE_DIAGNOSTICS.stateBudgetUncorroborated.code,
-      ], UNCORROBORATED_NOTICE);
+      ], [tier2Notice, UNCORROBORATED_NOTICE].filter(Boolean).join('\n'));
     case 'release':
       return releaseDegraded(projectRoot, sessionId, verdict, {
         alreadyRecorded: decision.wasAlreadyRecorded && hasFailedRunRecord(projectRoot, sessionId),
@@ -1074,6 +1090,8 @@ function routeBlockEnforcement(projectRoot, sessionId, result, payload, extraDia
     storageUnavailableFeedbackCount: result.storageUnavailableFeedbackCount,
     blockFeedbackCount: result.blockFeedbackCount,
     entryCount: result.assistantEntriesSinceEarliestFix,
+    // F290（F289 W-2）：Tier 2 阻断首段告知「为何按 fix 判」——被绑定用户此前只看到缺项、看不到绑定原因
+    tier2Notice: result.tier === 2 ? tier2BindingNotice(result.tier2Source, result.tier2CandidatePath) : null,
   };
   const fingerprint = computeEvidenceFingerprint({
     promptId: payload ? payload.prompt_id : undefined,
@@ -1367,7 +1385,7 @@ function recordDeferTerminal(projectRoot, sessionId, verdict, entryCount) {
  * FR-013 fail-open 的 loud 半边：判定能力失效时 best-effort 落盘 degraded 诊断事件，
  * 使"漏拦"在事后审计中可被发现而非彻底隐没。写入自身失败不得影响放行（双重兜底）。
  */
-function tryAppendFailOpenEvent(projectRoot, sessionId, enforcement, diagnostics, configDiagnostics = []) {
+function tryAppendFailOpenEvent(projectRoot, sessionId, enforcement, diagnostics, configDiagnostics = [], tier = null) {
   try {
     // 合并配置层诊断（如 config-degraded）——配置非法与判定异常同时发生时两类信息都不得丢失
     // （codex implement 审查 W-2，FR-015 可追溯性）
@@ -1387,6 +1405,8 @@ function tryAppendFailOpenEvent(projectRoot, sessionId, enforcement, diagnostics
       blockCount: null,
       degraded: true,
       diagnostics: merged,
+      // F290：fail-open 早退事件也带合同层级（F224 宽松早退在 Tier 2 下曾无 tier 归属，审计流无法区分）
+      tier: tier === 1 || tier === 2 ? tier : null,
     });
   } catch {
     // 诊断落盘失败不得让 fail-open 路径崩溃
@@ -1413,6 +1433,7 @@ function runHook(projectRoot, payload) {
       projectRoot, payload.session_id, cfg.enforcement,
       [...result.transcriptDiagnostics, ...(result.snapshotDiagnostics || []), ...(result.ledgerDiagnostics || [])],
       cfg.diagnostics,
+      result.tier,
     );
     return 0;
   }

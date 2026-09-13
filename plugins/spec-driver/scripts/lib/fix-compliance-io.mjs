@@ -569,6 +569,8 @@ const LOCK_RETRY_MAX = 60;
 const LOCK_RETRY_WAIT_MS = 8;
 /** 陈旧锁墙钟兜底：300s，覆盖 F273 实证的宿主合盖睡眠 ~5min 冻结（单独墙钟判据会把活着的持锁者误接管） */
 const LOCK_STALE_MS = 300 * 1000;
+/** F290 W-1：test-only 接管 trace 延迟的硬上限（1s）——配合「每次调用一次」把最坏放大压到 1s */
+const LOCK_TRACE_DELAY_MAX_MS = 1000;
 
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -608,6 +610,8 @@ function pidAlive(pid) {
  */
 export function acquireStateLock(projectRoot, sessionId) {
   const sanitizedId = sanitizeSessionId(sessionId);
+  // F290 W-1：test-only trace 延迟每次调用最多生效一次（见下方钩子处的放大面论证）
+  let traceApplied = false;
   const diagnostics = [];
   const candidates = [
     path.join(projectRoot, ...STATE_SUBDIR, `${sanitizedId}.lock`),
@@ -665,6 +669,18 @@ export function acquireStateLock(projectRoot, sessionId) {
             // 再核对被 rename 走的确实是我们判陈旧的那把锁（对抗复审 B-W1：read→rename 之间锁可能被换成活锁）。
             const stalePath = `${lockPath}.stale.${process.pid}.${lockId}`;
             const judgedLockId = holder && typeof holder === 'object' ? holder.lockId : null;
+            // F290 test-only trace hook：在「读到 holder 判陈旧」与「rename 接管」之间注入可控延迟，
+            // 让 B-W1 的微秒级接管身份竞态可确定性复现（card-b T1-C6）。生产从不设该环境变量 ⟹ 零行为。
+            // 🔴 对抗复审 W-1（放大面收窄）：`.claude/settings.json` 的 `env` 字段可把该变量**持久化**到
+            // 下次会话的所有 hook 子进程（供应链 / 评审疏漏路径），而接管重试循环上限 LOCK_RETRY_MAX=60；
+            // 若每轮都睡满上限，单次 acquireStateLock 墙钟可被推到 60×上限，越过宿主 hook 超时后
+            // 「超时按放行处理」等价门禁被绕过。故双重收窄：上限 1000ms（T1-C6 只需 150ms）+ **每次
+            // acquireStateLock 调用最多生效一次**（traceApplied 闭锁），最坏放大 = 1s，不足以越过超时。
+            const traceDelay = Number(process.env.SPEC_DRIVER_FIX_COMPLIANCE_LOCK_TRACE_DELAY_MS);
+            if (!traceApplied && Number.isFinite(traceDelay) && traceDelay > 0) {
+              traceApplied = true;
+              sleepSync(Math.min(traceDelay, LOCK_TRACE_DELAY_MAX_MS));
+            }
             try {
               fs.renameSync(lockPath, stalePath);
               // 身份核对：judgedLockId 已知时，stalePath 的 lockId 必须与之相符；不符说明窗口内换成了别的锁 ⟹ rename 回去、不接管。

@@ -3,7 +3,7 @@
  * Feature 236 — 判定器快照漂移信号：CLI 编排层
  *
  * 独立、只读、开发者主动调用的 doctor 命令（npm run judge:doctor）。
- * 比对仓库侧与已安装快照侧的判定器文件（集合以 JUDGE_FILE_SET 的枚举为准），产出四态结果。
+ * 比对仓库侧与已安装快照侧的判定器文件（集合以 DOCTOR_FILE_SET 为准 = 判定器闭包 JUDGE_FILE_SET ∪ SubagentStop 检测侧闭包 SIDECHAIN_FILE_SET，F290），产出四态结果。
  * 不接入 repo:check、不接入 Stop hook、drift 恒退出码 0（诊断非门禁，FR-009）。
  * 输出只描述状态，不含任何重装/同步/修复建议（FR-011）。
  *
@@ -24,6 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   JUDGE_FILE_SET,
+  DOCTOR_FILE_SET,
   resolveActiveSnapshot,
   compareFile,
   aggregateStatus,
@@ -166,9 +167,10 @@ export function checkJudgeSnapshotDrift({
     };
   }
 
-  // 步骤 3：逐文件比对。入口文件（JUDGE_FILE_SET[0]）复用步骤 1 的探测结果，
+  // 步骤 3：逐文件比对。入口文件（JUDGE_FILE_SET[0] == DOCTOR_FILE_SET[0]）复用步骤 1 的探测结果，
   // 避免二次读盘；error 时 compareFile 将其判为 indeterminate/repo（保留其余已确认明细）。
-  const files = JUDGE_FILE_SET.map((entry, index) => {
+  // F290：比对集扩为 DOCTOR_FILE_SET（判定器闭包 ∪ SubagentStop 检测侧闭包），检测侧 CLI 陈旧同样可见。
+  const files = DOCTOR_FILE_SET.map((entry, index) => {
     const repoDigest = index === 0 ? repoReferenceProbe : computeSha256(path.join(repoBase, entry));
     const snapDigest = computeSha256(path.join(resolution.snapshotPath, entry));
     // snapshotDigest 随行返回：`--since` 的基线比较必须复用**这一次**读到的字节，

@@ -120,6 +120,90 @@ describe('F287 G0 · JUDGE_DIAGNOSTICS canonical 表', () => {
     }
   });
 
+  it('T0-U6 反向守卫（F290）：schema enum 每个码在 scripts/**/*.mjs 有 ≥1 **真实产出点**（形态①`表.键` / ②表的 key 级动态下标 / ③别名的非声明性引用），零产出码须在显式 allowlist 内且 allowlist 不得陈旧', () => {
+    const SCRIPTS_ROOT = path.resolve(HERE, '../scripts');
+    const sources = [];
+    (function walk(dir) { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && p.endsWith('.mjs')) sources.push(fs.readFileSync(p, 'utf8')); } })(SCRIPTS_ROOT);
+    // 🔴 verify CRITICAL-新1：原 `^\s*\/\/.*$` 只剥**整行**注释，行尾注释（`code(); // 提及 表.键`）完全不剥
+    //    ⟹ 删掉真实产出点后顺手留一句行尾说明即可让守卫恢复绿（实测假阴性）。本仓行尾注释是主流写法。
+    //    改用状态机整体剥离（行注释 + 块注释），并在 code 态处理 `\` 转义——否则 `/^https?:\/\//` 这类
+    //    正则字面量的 `\/\/` 会被误判成行注释起点而过剥（过剥方向是 fail-loud 误报，仍由下方自检兜住）。
+    const stripComments = (src) => {
+      let out = ''; let i = 0; let mode = 'code';
+      while (i < src.length) {
+        const c = src[i]; const c2 = src[i + 1];
+        if (mode === 'code') {
+          if (c === '\\') { out += c + (c2 ?? ''); i += 2; continue; }
+          if (c === '/' && c2 === '/') { mode = 'line'; i += 2; continue; }
+          if (c === '/' && c2 === '*') { mode = 'block'; i += 2; continue; }
+          if (c === "'" || c === '"' || c === '`') { mode = c; out += c; i += 1; continue; }
+          out += c; i += 1; continue;
+        }
+        if (mode === 'line') { if (c === '\n') { mode = 'code'; out += c; } i += 1; continue; }
+        if (mode === 'block') { if (c === '*' && c2 === '/') { mode = 'code'; i += 2; } else { if (c === '\n') out += c; i += 1; } continue; }
+        // 字符串 / 模板态
+        if (c === '\\') { out += c + (c2 ?? ''); i += 2; continue; }
+        if (c === mode) { mode = 'code'; out += c; i += 1; continue; }
+        out += c; i += 1;
+      }
+      return out;
+    };
+    const corpus = sources.map(stripComments).join('\n');
+    // 剥离器过剥自检（fail-loud）：几个已知真实产出点在剥离后必须仍在，否则是剥离器吃了真代码
+    for (const probe of ['JUDGE_DIAGNOSTICS.internalError.code', 'STATE_STORAGE_DIAGNOSTICS.lockTakenOver', 'IN_FLIGHT_DIAGNOSTICS[IN_FLIGHT_STATES.UNDETERMINED]']) {
+      assert.ok(corpus.includes(probe), `剥注释过剥：已知真实产出点 ${probe} 在剥离后消失`);
+    }
+    const count = (needle) => corpus.split(needle).length - 1;
+    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ALLOWLIST_ZERO_PRODUCER = new Set(['nonblock-storage-unavailable', 'parse-timeout']);
+    const tables = {
+      JUDGE_DIAGNOSTICS: Object.fromEntries(Object.entries(JUDGE_DIAGNOSTICS).map(([k, v]) => [k, v.code])),
+      ARTIFACT_DIAGNOSTICS, STATE_STORAGE_DIAGNOSTICS, IO_DIAGNOSTICS, LEDGER_DIAGNOSTICS, IN_FLIGHT_DIAGNOSTICS, FOREIGN_DIALECT_DIAGNOSTICS,
+    };
+    const KEY_LEVEL = { IN_FLIGHT_DIAGNOSTICS: { constName: 'IN_FLIGHT_STATES', values: IN_FLIGHT_STATES } };
+    const TABLE_LEVEL_ONLY = new Set(['FOREIGN_DIALECT_DIAGNOSTICS']);
+    const codeToEntry = new Map();
+    for (const [table, obj] of Object.entries(tables)) for (const [key, code] of Object.entries(obj)) codeToEntry.set(code, { table, key });
+    /** 形态③：别名的**非声明性**引用数（剔除定义行 / 纯表登记行 `key: ALIAS` / import·export 说明符行）
+     *  🔴 verify CRITICAL-新2：原判据只要标识符出现 ≥2 次即算「有产出」，而「定义 + 登记进表」这两处
+     *  纯声明性引用天然就有 2 次 ⟹ 把该码从所有真实 push/emit 逻辑里删干净仍判绿（实测，受影响面 =
+     *  整个 LEDGER_DIAGNOSTICS 表）。现要求剔除声明性引用后仍 ≥1。 */
+    const nonDeclarativeRefs = (alias, code) => corpus.split('\n').filter((line) => {
+      if (!new RegExp(`\\b${alias}\\b`).test(line)) return false;
+      if (new RegExp(`export\\s+const\\s+${alias}\\s*=`).test(line)) return false;            // 定义
+      if (new RegExp(`^\\s*[\\w$]+\\s*:\\s*${alias}\\s*,?\\s*$`).test(line)) return false;     // 纯表登记
+      if (/^\s*import\b.*\bfrom\b/.test(line) || /^\s*export\s*\{/.test(line)) return false;   // 说明符
+      return true;
+    }).length;
+    const producedBy = ({ table, key }, code) => {
+      if (/^[A-Za-z_$][\w$]*$/.test(key) && count(`${table}.${key}`) >= 1) return `${table}.${key}`;
+      const kl = KEY_LEVEL[table];
+      if (kl) {
+        const constKey = Object.keys(kl.values).find((k) => kl.values[k] === key);
+        if (constKey && count(`${table}[${kl.constName}.${constKey}]`) >= 1) return `${table}[${kl.constName}.${constKey}]`;
+      } else if (TABLE_LEVEL_ONLY.has(table) && count(`${table}[`) >= 1) {
+        return `${table}[…] 表级证据（运行时键控，key 级静态证据不可得——K-4 已登记）`;
+      }
+      const alias = corpus.match(new RegExp(`export const (\\w+) = '${escapeRe(code)}'`));
+      if (alias && nonDeclarativeRefs(alias[1], code) >= 1) return `常量 ${alias[1]}（非声明性引用 ${nonDeclarativeRefs(alias[1], code)} 处）`;
+      return null;
+    };
+    const problems = [];
+    for (const code of SCHEMA_ENUM) {
+      const entry = codeToEntry.get(code);
+      if (!entry) {
+        if (!ALLOWLIST_ZERO_PRODUCER.has(code)) { problems.push(`${code}: 已入 schema enum 但不在任何码表且不在 allowlist`); continue; }
+        const literalRefs = count(`'${code}'`) + count(`"${code}"`);
+        if (literalRefs > 0) problems.push(`${code} 已在源码出现字面量产出点（${literalRefs} 处），allowlist 陈旧须删`);
+        continue;
+      }
+      const via = producedBy(entry, code);
+      if (!via && !ALLOWLIST_ZERO_PRODUCER.has(code)) problems.push(`${code}（${entry.table}.${entry.key}）零真实产出点且不在 allowlist`);
+      if (via && ALLOWLIST_ZERO_PRODUCER.has(code)) problems.push(`${code} 已有产出点（${via}），allowlist 陈旧须删`);
+    }
+    assert.deepEqual(problems, [], problems.join('\n'));
+  });
+
   it('T0-U4 反裸字面量：judge 源码中诊断码字面量只出现在表定义块内（产出点零裸字面量、零模板串拼接）', () => {
     const tableStart = JUDGE_SRC.indexOf('export const JUDGE_DIAGNOSTICS');
     const tableEnd = JUDGE_SRC.indexOf('});', tableStart) + 3;
