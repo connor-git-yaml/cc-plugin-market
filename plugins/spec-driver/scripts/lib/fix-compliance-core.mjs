@@ -426,7 +426,7 @@ export const GATE_DEGRADED_PREFIX_LINE = '已达阻断上限(2 次)，本次降�
  */
 export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
   if (parseError || !raw || typeof raw !== 'object') {
-    return { lineIndex, role: undefined, timestamp: null, textBlocks: [], toolUseBlocks: [], toolResultBlocks: [], parseError: true };
+    return { lineIndex, role: undefined, timestamp: null, isMeta: false, textBlocks: [], toolUseBlocks: [], toolResultBlocks: [], parseError: true };
   }
   const role = typeof raw.type === 'string' ? raw.type : undefined;
   // F270 P4：透传顶层 timestamp（账本委派 hookTs 与 latestFix 展开时刻对齐用；C-14）。
@@ -469,7 +469,9 @@ export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
     }
   }
   // 非 user/assistant 顶层类型或缺 content → 空集（T001 补充结论 7），toolResultBlocks 恒带空数组
-  return { lineIndex, role, timestamp, textBlocks, toolUseBlocks, toolResultBlocks, parseError: false };
+  // F289 B-C1：isMeta 透传——harness 注入的 skill 展开痕迹恒 isMeta=true；被判方（sidechain 首条 user prompt / 手贴）为 false。
+  const isMeta = raw.isMeta === true;
+  return { lineIndex, role, timestamp, isMeta, textBlocks, toolUseBlocks, toolResultBlocks, parseError: false };
 }
 
 // ────────────────────────────────────────
@@ -592,16 +594,26 @@ export function detectTranscriptDialect(entries) {
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
  * @returns {{ found:boolean, mode:string|null, anchorLineIndex:number|null, earliestFixLineIndex:number|null, latestFixLineIndex:number|null }}
  */
-export function detectFixSkillExpansion(entries) {
+export function detectFixSkillExpansion(entries, opts = {}) {
   const list = Array.isArray(entries) ? entries : [];
+  // F289 B-C1：requireMeta 只由 SubagentStop 侧 CLI 传入——子代理 transcript 里父编排器的 prompt 引用（isMeta=false）
+  // 不得被当作『子代理真的展开了 fix』；主 transcript 路径不传（保持 Tier 1 既有语义、夹具兼容）。
+  const requireMeta = opts.requireMeta === true;
   let latest = { found: false, mode: null, anchorLineIndex: null };
   // 最早/最晚一次 **fix** 展开：与主锚点取值规则刻意不同（主锚点每块只看最后一次匹配的 mode，
   // 这两个基线看该块内**任一**匹配是否为 fix），故必须在同一趟里各自累计，不能互相推导。
   let earliestFixLineIndex = null;
   let latestFixLineIndex = null;
   let latestFixTimestamp = null;   // F270 P4：latestFix 那行的 transcript timestamp（账本对齐用）
+  // F289 Tier 2 (a)：最晚一次 **resume** 展开（同一趟累计，不另起扫描——F257 单趟纪律）；只记录，不为它记 fix 基线
+  let latestResumeLineIndex = null;
+  let latestResumeTimestamp = null;
+  // F289 (a) 对抗复审 C-1：绑定用**最早**一次 resume 展开——用最晚会让被判方尾部再展开一次 resume 即整体解绑（零往返）。
+  let earliestResumeLineIndex = null;
+  let earliestResumeTimestamp = null;
   for (const entry of list) {
     if (!entry || entry.role !== 'user') continue;
+    if (requireMeta && entry.isMeta !== true) continue;
     for (const text of entry.textBlocks) {
       // 全局匹配取该块内最后一次（同块多痕迹时取最晚）
       let match;
@@ -613,6 +625,10 @@ export function detectFixSkillExpansion(entries) {
           if (earliestFixLineIndex === null) earliestFixLineIndex = entry.lineIndex;
           latestFixLineIndex = entry.lineIndex;
           latestFixTimestamp = entry.timestamp ?? null;
+        } else if (match[2] === 'resume') {
+          if (earliestResumeLineIndex === null) { earliestResumeLineIndex = entry.lineIndex; earliestResumeTimestamp = entry.timestamp ?? null; }
+          latestResumeLineIndex = entry.lineIndex;
+          latestResumeTimestamp = entry.timestamp ?? null;
         }
       }
       if (lastMode !== null) {
@@ -620,7 +636,7 @@ export function detectFixSkillExpansion(entries) {
       }
     }
   }
-  return { ...latest, earliestFixLineIndex, latestFixLineIndex, latestFixTimestamp };
+  return { ...latest, earliestFixLineIndex, latestFixLineIndex, latestFixTimestamp, earliestResumeLineIndex, earliestResumeTimestamp, latestResumeLineIndex, latestResumeTimestamp };
 }
 
 // ────────────────────────────────────────
@@ -1138,10 +1154,15 @@ function normalizeArtifactWritePath(raw, rootPrefix) {
  * @param {string} projectRoot
  * @returns {Set<string>} 形如 'specs/254-fix-alpha' 的规范特性目录路径
  */
-export function collectArtifactWriteWitnessDirs(entries, anchorLineIndex, projectRoot) {
+/**
+ * F289 (b) 对抗复审 C-2：返回有序见证列表（每条含写入行号与 timestamp），供绑定源确定**真实锚点**
+ * （不是 -1）——否则闸门三 / 佐证计数 / 账本 sinceTs 在 (b)/(c) 下以会话起点为基线，长会话大面积误判。
+ * @returns {{ dir:string, lineIndex:number, timestamp:string|null }[]} 按 lineIndex 升序
+ */
+export function collectArtifactWriteWitnesses(entries, anchorLineIndex, projectRoot) {
   const list = Array.isArray(entries) ? entries : [];
   const anchor = typeof anchorLineIndex === 'number' ? anchorLineIndex : -1;
-  const witnessed = new Set();
+  const witnesses = [];
 
   // 第一趟：tool_use id → 回执聚合（anyError 为该 id 的**任一**回执失败）。
   // 不加锚点窗口：回执可能落在任意位置，而 id 由被判方无法伪造的 harness 侧配对，
@@ -1170,10 +1191,15 @@ export function collectArtifactWriteWitnessDirs(entries, anchorLineIndex, projec
       const receipt = receiptByToolUseId.get(block.id);
       if (!receipt || receipt.anyError) continue;
       const dir = normalizeArtifactWritePath(block.input && block.input.file_path, rootPrefix);
-      if (dir !== null) witnessed.add(dir);
+      if (dir !== null) witnesses.push({ dir, lineIndex: entry.lineIndex, timestamp: entry.timestamp ?? null });
     }
   }
-  return witnessed;
+  return witnesses;
+}
+
+/** 兼容既有消费方：仅要目录集合（去重）。语义与改造前逐字一致（同一趟见证的 dir 集）。 */
+export function collectArtifactWriteWitnessDirs(entries, anchorLineIndex, projectRoot) {
+  return new Set(collectArtifactWriteWitnesses(entries, anchorLineIndex, projectRoot).map((w) => w.dir));
 }
 
 // ────────────────────────────────────────
@@ -1978,6 +2004,8 @@ export function judgeCompliance(input) {
     fixReport = { exists: false, content: null }, verificationReport = { exists: false, nonEmpty: false, content: null },
     executionRecords = [], closure: providedClosure,
     enforcement = 'block', configDegraded = false, diagnostics = [],
+    // F289 Tier 2 续做合同：implement 委派豁免（可能发生在上一会话 / sidechain），其余判据与 Tier 1 逐字相同
+    tier2 = false,
   } = input || {};
 
   const counts = { implement: 0, verify: 0, other: 0 };
@@ -2021,7 +2049,7 @@ export function judgeCompliance(input) {
     if (!(verificationReport && verificationReport.exists && verificationReport.nonEmpty)) {
       missing.push('verification-report.md');
     }
-    if (counts.implement < 1) missing.push('delegation:implement');
+    if (!tier2 && counts.implement < 1) missing.push('delegation:implement');
     if (counts.verify < 1) missing.push('delegation:verify');
   } else {
     // undetermined：既非有效修复报告也非 no-op 报告（含 F206 坍塌：连制品都没有）

@@ -28,6 +28,7 @@
     },
     "missing": { "type": "array", "items": { "type": "string" } },
     "blockCount": { "type": ["integer", "null"], "description": "本次判定所处的阻断计数；warn 档恒为 null，block 档在「在途推迟」分支（diagnostics 含 delegation-in-flight）亦为 null——推迟不消耗阻断预算，此时无计数可报；存储不可用阻断分支亦为 null（预算不可知）" },
+    "tier": { "type": ["integer", "null"], "description": "F289：本次裁决所依据的合同层级——1 = Tier 1 完整合同（主 transcript 有 spec-driver-fix 展开）；2 = Tier 2 续做合同（无展开，命中 resume 提名 / 写入见证 / sidechain 标记之一，implement 委派豁免）；null = fail-open / 非 fix 会话事件。Tier 2 的绑定源由 diagnostics 里的 tier2-bound-* 码给出" },
     "degraded": { "type": "boolean", "description": "true 表示任一有界预算耗尽后的降级放行：blockCount 达 BLOCK_LIMIT（既有）或 nonBlockStopCount 达 NON_BLOCK_LIMIT / 420 backstop（F288 卡 B 指纹路由）；两条路径由 diagnostics 里的 nonblock-* 触发码区分" },
     "pendingSectionCount": { "type": ["integer", "null"], "description": "F287 卡 A · G3（FR-032，纯可观测性、不参与判定）：verification-report.md 中含未回填 PENDING 标记（PENDING / (?<!等)待用户 / 待回填 / DEFERRED / ⏸）的**节**数——计数单位是 markdown ATX 标题分隔的节，**不是**「项」；标题行不参与匹配（标记只写在标题 ⇒ 0）；围栏内不计，未闭合围栏自开栏起按正文计。null 三义：报告缺席 / 存在但空（判定侧同按缺席计 missing）/ 超限未计（> 4M 字符）；无 verdict（fail-open）时亦为 null。审计消费方按 B 口径理解（「有事等人」），不要读成「验证项未回填数」（人工真值集 S precision 0.676 / B 0.971，见 specs/287-*/verification/pending-truth-set.md）。" },
     "diagnostics": {
@@ -71,7 +72,10 @@
           "state-lock-taken-over",
           "state-budget-uncorroborated",
           "gate-fingerprint-no-progress",
-          "gate-fingerprint-partial"
+          "gate-fingerprint-partial",
+          "tier2-bound-resume",
+          "tier2-bound-witness",
+          "tier2-bound-sidechain"
         ]
       }
     }

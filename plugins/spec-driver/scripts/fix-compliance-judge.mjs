@@ -29,6 +29,7 @@ import {
   isDeferrableMissingSet,
   extractFixShortName,
   collectArtifactWriteWitnessDirs,
+  collectArtifactWriteWitnesses,
   countAssistantEntriesSinceEarliestFixExpansion,
   countStorageUnavailableBlockFeedback,
   countBlockFeedbackEntries,
@@ -56,6 +57,8 @@ import {
   readArtifactFile,
   resetBlockState,
   mutateBlockState,
+  listSidechainMarkers,
+  readStdinSync,
   // F287 卡 A · G0：state-storage 码由 io 首发，judge 三处复用只引用不重复登记
   STATE_STORAGE_DIAGNOSTICS,
 } from './lib/fix-compliance-io.mjs';
@@ -106,6 +109,10 @@ export const JUDGE_DIAGNOSTICS = Object.freeze({
   nonblockBackstopExhausted: diag('nonblock-backstop-exhausted', false),
   // F288 卡 B · 6b 放行佐证：状态文件的预算计数走在 transcript 可见的阻断往返前面（预置 / 篡改 / 懒刷盘）⟹ 不放行、继续阻断
   stateBudgetUncorroborated: diag('state-budget-uncorroborated', false),
+  // F289 Tier 2 续做合同的绑定源（纯审计码）：resume 提名 / 裸会话写入见证 / sidechain 标记
+  tier2BoundResume: diag('tier2-bound-resume', false),
+  tier2BoundWitness: diag('tier2-bound-witness', false),
+  tier2BoundSidechain: diag('tier2-bound-sidechain', false),
 });
 
 /**
@@ -235,44 +242,7 @@ export function parseArgs(argv) {
   return args;
 }
 
-// ────────────────────────────────────────
-// stdin 读取（同步，避免异步竞态）
-// ────────────────────────────────────────
-
-/** EAGAIN 有界等待：每次 5 ms、最多 2000 次（≈10 s）；写端始终不续写才放弃（返回已读部分 → 上游判 payload-invalid 落盘） */
-const STDIN_EAGAIN_WAIT_MS = 5;
-const STDIN_EAGAIN_MAX_SPINS = 2000;
-
-/**
- * 同步读全 stdin。F287 对抗复审 C-1（既有，自 F208 v4.3.0）：`fs.readFileSync(0)` 在管道 fd0 处于非阻塞态时
- * （本进程 `import 'node:process'` 即触发）读空 64 KB 管道缓冲、写端尚未续写 → 抛 EAGAIN → 被吞成 ''
- * → payload-invalid → exit 0。wrapper 的 `printf '%s' "$STDIN_PAYLOAD" | node …` 恰是这一形态：被判方只要把
- * 末条助手消息写长（Stop payload 总字节 > 65536）即可零成本放行整个门禁，留痕仅一条 sessionId=unknown 的
- * payload-invalid。改为 readSync 循环：EAGAIN 有界等待后重试，读到 EOF（0 字节）才结束；其它错误返回已读内容
- * （解析失败仍由上游判 payload-invalid 落盘）。回归钉：card-a 测试 C-1（真实 printf | node 管道形态，100 KB payload）。
- */
-function readStdinSync() {
-  const chunks = [];
-  const buf = Buffer.alloc(64 * 1024);
-  let spins = 0;
-  for (;;) {
-    let n;
-    try {
-      n = fs.readSync(0, buf, 0, buf.length, null);
-    } catch (err) {
-      if (err && err.code === 'EAGAIN' && spins < STDIN_EAGAIN_MAX_SPINS) {
-        spins += 1;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STDIN_EAGAIN_WAIT_MS);
-        continue;
-      }
-      if (err && err.code === 'EOF') break;
-      return Buffer.concat(chunks).toString('utf8');
-    }
-    if (n === 0) break;
-    chunks.push(Buffer.from(buf.subarray(0, n)));
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
+// stdin 读取：F289 起与 SubagentStop 侧 CLI 共用 io 的 readStdinSync（EAGAIN 有界重试，F287 C-1）
 
 // ────────────────────────────────────────
 // 判定编排（纯读取，不落盘；hook 与 report 共用）
@@ -300,6 +270,89 @@ function snapshotDiagnosticsFor(lastAssistantMessage, entries) {
   if (state === SNAPSHOT_STATES.ABSENT) return [JUDGE_DIAGNOSTICS.snapshotMessageAbsent.code];
   if (state === SNAPSHOT_STATES.STALE) return [JUDGE_DIAGNOSTICS.snapshotStale.code];
   return [];
+}
+
+const withTier = (verdict, tier) => ({ ...verdict, tier });
+
+/**
+ * F289 · Tier 2 续做合同的绑定判定（只在主 transcript **无** fix 展开时调用；三源任一命中即绑定，同时命中取最早锚点）。
+ *
+ * | 源 | 检出 | 锚点 | 提名 |
+ * |---|---|---|---|
+ * | (a) resume | 最晚一次 `spec-driver-resume` 展开（同趟累计） | resume 展开行 | 既有 nomination 机械在该窗口内提名；无提名 ⇒ 不绑定（feature / story 续做零判定） |
+ * | (b) 写入见证 | Write / Edit / 带写指示符 Bash 写 `specs/NNN-fix-…/fix-report.md` 或 `verification/verification-report.md` | 会话起点（-1 = 全窗口） | 见证目录（多目录取最晚） |
+ * | (c) sidechain | 本会话标记文件（SubagentStop 侧 CLI 写，键 = session + agent） | 会话起点 | 主 transcript 提名，否则标记携带的 sidechain 提名 |
+ *
+ * 不绑定的形态（对照组）：resume 无提名 / 只读或 `cat` 提及 / 写 fix 目录下其他文件 / 标记 session 不匹配。
+ * 残余（如实）：标记可 rm 且无 transcript 侧对账兜底；拆会话逃 implement 委派（已豁免）；transcript 截断清零。
+ */
+/** 提名事件是否存在（对抗复审 A-C2）：合法候选 / ambiguous / 候选历史任一非空 ⟹ 发生过提名——
+ * 不能只认 `candidate.path`（一条光杆 `mv` 到非规范名即 path=null、ambiguous=true，按无提名会零判定，
+ * 在 Tier 2 上重开 F224 收窄的绕过面）。绑定后 ambiguous 的处置逐字沿用 Tier 1（判定器 candidate.path=null ⟹ missing:feature-dir）。 */
+function hasNomination(candidate) {
+  return !!candidate && (
+    !!candidate.path
+    || candidate.ambiguous === true
+    || (Array.isArray(candidate.candidates) && candidate.candidates.length > 0)
+  );
+}
+
+/**
+ * F289 Tier 2 绑定检出（三源：resume 提名 / 裸会话写入见证 / sidechain 标记；两级互斥取严，isFix 本身不动）。
+ *
+ * 🔴 对抗复审 C-1/C-2（绕过 + 误伤两路收敛）：每个源必须给出**真实绑定事件行**作为窗口锚点，绝不用 -1（会话起点）——
+ *   否则闸门三从 line 0 计数（长会话 in-flight verify 无法推迟 = 误阻断）、账本 sinceTs=null（补充恒空 = 误阻断）、
+ *   佐证窗口跨到会话前段（数进无关阻断反馈 = 误放行）。primary 锚点取**有真实行号的源里最早那个**（证据窗口够宽、
+ *   且排除绑定前的反馈）；仅 sidechain 命中且无真实主 transcript 行时才回落 -1（残余，见 fix-report §7）。
+ *   420 backstop 已在 F288 卡 B C-1 关闭为「只作 nonBlock 跑道耗尽触发、不作放行腿」，故 Tier 2 不再有「line 0 起 420 ⇒ 零往返放行」。
+ */
+function detectTier2Binding(entries, projectRoot, sessionId, anchor) {
+  const hits = [];
+  // (a) resume：最早一次 resume 展开为绑定事件；提名事件存在即绑定（含 ambiguous / 光杆 mv）
+  if (Number.isInteger(anchor.earliestResumeLineIndex)) {
+    const candidate = resolveFeatureDirCandidate(entries, anchor.earliestResumeLineIndex);
+    if (hasNomination(candidate)) {
+      hits.push({ source: 'resume', code: JUDGE_DIAGNOSTICS.tier2BoundResume.code, anchorLineIndex: anchor.earliestResumeLineIndex, anchorTimestamp: anchor.earliestResumeTimestamp ?? null, candidate });
+    }
+  }
+  // (b) 写入见证：首条见证写入行为绑定事件（真实行 + timestamp）
+  const witnesses = collectArtifactWriteWitnesses(entries, -1, projectRoot);
+  if (witnesses.length > 0) {
+    const first = witnesses[0];
+    const dirs = [...new Set(witnesses.map((w) => w.dir))];
+    const candidate = dirs.length === 1
+      ? { path: dirs[0], ambiguous: false, candidates: dirs }
+      : { path: null, ambiguous: true, candidates: dirs };   // 多目录见证 ⟹ 走 Tier 1 F224（missing:feature-dir）
+    hits.push({ source: 'witness', code: JUDGE_DIAGNOSTICS.tier2BoundWitness.code, anchorLineIndex: first.lineIndex, anchorTimestamp: first.timestamp ?? null, candidate });
+  }
+  // (c) sidechain 标记：锚点优先与见证同行（真实行）；无见证时回落 -1（残余）。提名优先主 transcript，其次标记携带。
+  const markers = typeof sessionId === 'string' && sessionId.length > 0 ? listSidechainMarkers(projectRoot, sessionId) : [];
+  if (markers.length > 0) {
+    const witnessAnchor = witnesses.length > 0 ? witnesses[0] : null;
+    const main = resolveFeatureDirCandidate(entries, witnessAnchor ? witnessAnchor.lineIndex : -1);
+    const carried = markers.map((m) => m.candidatePath).filter((p) => typeof p === 'string' && p.length > 0);
+    // 🔴 对抗复审 delta 双角收敛（误伤面 C-1 + 绕过面 C-3）：main/carried **双空**（子代理展开了 fix 但无处
+    // 定位 fix 目录）⟹ **不绑定**（与 (a) resume 源对称：无提名事件则不 Tier 2 判定）。
+    // 既不硬阻断（误伤面：{ambiguous:false} 落不可推迟的 missing:feature-dir，短会话即误阻断），
+    // 也不接 F224 宽松通道（绕过面：{ambiguous:true}+一次文本匹配 verify 委派 = 廉价子代理免费通行）——
+    // 就是「未识别为 fix 续做」，走既有非 fix 早退（exit 0 零判定零落盘）。有提名（main 或标记携带）才绑定。
+    if (hasNomination(main) || carried.length > 0) {
+      const candidate = hasNomination(main)
+        ? main
+        : { path: carried[carried.length - 1], ambiguous: false, candidates: carried };
+      hits.push({
+        source: 'sidechain', code: JUDGE_DIAGNOSTICS.tier2BoundSidechain.code,
+        anchorLineIndex: witnessAnchor ? witnessAnchor.lineIndex : -1,
+        anchorTimestamp: witnessAnchor ? (witnessAnchor.timestamp ?? null) : null,
+        candidate,
+      });
+    }
+  }
+  if (hits.length === 0) return null;
+  // primary：有真实行号（≥0）的源里最早那个；全无真实行（仅 sidechain 回落）时取该 -1 源。codes 保留全部命中源（可同时）。
+  const real = hits.filter((h) => h.anchorLineIndex >= 0).sort((a, b) => a.anchorLineIndex - b.anchorLineIndex);
+  const primary = real.length > 0 ? real[0] : hits[0];
+  return { ...primary, codes: hits.map((h) => h.code) };
 }
 
 function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, snapshotInput = null) {
@@ -353,6 +406,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
   //   合同判 → missing 非空 → 阻断。原 `mode==='fix'` 判据（尾部展开即释放）无此形态。方向 fail-closed、
   //   可自愈（补齐 fix 制品或 BLOCK_LIMIT=2 兜底降级），但属新增误阻断类，按 F256「类 X」纪律登记。
   const isFix = anchor.earliestFixLineIndex !== null;
+  let tier2 = null;
   if (!isFix) {
     // F240 FR-004：区分"确实不是 fix 会话"与"这份 transcript 我根本解析不了"。
     //
@@ -373,13 +427,26 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     const dialectCode = Object.hasOwn(FOREIGN_DIALECT_DIAGNOSTICS, dialect)
       ? FOREIGN_DIALECT_DIAGNOSTICS[dialect]
       : null;
-    return {
-      enforcement, configDegraded, isFix: false, mode: anchor.mode,
-      transcriptDiagnostics: dialectCode ? [JUDGE_DIAGNOSTICS.transcriptFormatUnrecognized.code, dialectCode] : [],
-      snapshotDiagnostics,   // 误伤面 I2 / 绕过面 I-1：与 feature-dir-unresolvable 早退同口径，fail-open 早退也保留快照可观测量
-      verdict: null,
-    };
+    // F289 Tier 2：无 fix 展开时评估续做绑定（三源：resume 提名 / 裸会话写入见证 / sidechain 标记；两级互斥取严，
+    // isFix 判据本身不动）。只对 Claude 形态评估——方言 transcript 保持既有 fail-open 早退。
+    tier2 = dialectCode === null ? detectTier2Binding(entries, projectRoot, sessionId, anchor) : null;
+    if (tier2 === null) {
+      return {
+        enforcement, configDegraded, isFix: false, mode: anchor.mode, tier: null,
+        transcriptDiagnostics: dialectCode ? [JUDGE_DIAGNOSTICS.transcriptFormatUnrecognized.code, dialectCode] : [],
+        snapshotDiagnostics,   // 误伤面 I2 / 绕过面 I-1：与 feature-dir-unresolvable 早退同口径，fail-open 早退也保留快照可观测量
+        verdict: null,
+      };
+    }
   }
+  // 合同层级与**有效锚点**：Tier 1 = fix 展开基线；Tier 2 = 绑定源锚点（三源同时命中取最早）。下游全部窗口
+  // （闸门三 / 反馈计数 / 提名 / 见证 / 委派 / 执行记录 / 在途 / 指纹分量）一律取有效锚点——Tier 2 没有 fix 展开行，
+  // 若仍用 latestFixLineIndex（null）则 F288 放行佐证与卡 C 反馈计数恒为 0 ⇒ 诚实 Tier 2 会话被无界阻断。
+  const tier = isFix ? 1 : 2;
+  const tier2Codes = tier2 ? tier2.codes : [];
+  const effective = tier === 1
+    ? anchor
+    : { ...anchor, earliestFixLineIndex: tier2.anchorLineIndex, latestFixLineIndex: tier2.anchorLineIndex, latestFixTimestamp: tier2.anchorTimestamp };
 
   // F257 缺陷 2 · 闸门三的计量源：基线用 anchor.earliestFixLineIndex，**刻意不用 anchor.anchorLineIndex**。
   // 主锚点取的是最晚一次展开，agent 自调一次 Skill(spec-driver-fix) 即可把它推到末尾、令锚点后计数
@@ -388,24 +455,31 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
   // 该正则含惰性量词，诱饵前缀语料下把最坏耗时整整翻倍——判定器跑在同步 Stop hook 上，不可接受）。
   // 🔴 绝不可为"统一"把两个基线合并成一个，也绝不可在此另起第二遍展开扫描。
   const assistantEntriesSinceEarliestFix =
-    countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
+    countAssistantEntriesSinceEarliestFixExpansion(entries, effective.earliestFixLineIndex);
 
   // F276 卡 C · `!saved.ok` 分支的唯一放行上界：数本段 fix 展开之后 harness 回灌的存储不可用阻断反馈。
   // 🔴 传的是 `latestFixLineIndex`，**不是**同处那个 `earliestFixLineIndex`——两个基线来自
   // `detectFixSkillExpansion` 的同一次调用，取哪个都不多扫一遍，但**安全方向相反**：
   // 本计数器窗口变窄 ⟹ 数到的更少 ⟹ 更晚放行 ⟹ fail-closed；闸门三窗口变窄则是 fail-open。
   // 照抄 earliest 就是把防线搭反（被判方付过 2 次往返后重展开 fix 即可拿到 0 次往返的放行）。
+  // F288 卡 B · 6b：两条降级放行路径共同的佐证计数（本判定器一切 exit 2 回灌条目，窗口取 latestFixLineIndex）。
+  // 🔴 delta 复审误伤面 CRITICAL：曾尝试 Tier 2 改用「最晚绑定活动行」防跨目标复用，但它把「同目标合法重复编辑」
+  // 一并前移窗口 ⟹ 诚实用户按判定器提示每轮重编辑 fix-report 时佐证窗口永远跑在回灌之前、release valve 永不触发
+  // （8 轮实测零自愈，改动前第 3 轮即愈）——比它要修的跨目标 fail-open（需先付 2 次真实阻断 + Tier 2 新基建 0 语料）
+  // 严重得多。故还原为 F288 per-session 佐证窗口（同目标正常自愈）；跨目标复用作为「阻断预算按 session 非按目标」
+  // 的既有 F288 设计如实登记（残余，per-target 预算 → M11 独立立卡，需改 F288 状态模型）。
   const storageUnavailableFeedbackCount =
-    countStorageUnavailableBlockFeedback(entries, anchor.latestFixLineIndex);
-  // F288 卡 B · 6b：两条降级放行路径共同的佐证计数（本判定器一切 exit 2 回灌条目，窗口同上取 latest）
-  const blockFeedbackCount = countBlockFeedbackEntries(entries, anchor.latestFixLineIndex);
+    countStorageUnavailableBlockFeedback(entries, effective.latestFixLineIndex);
+  const blockFeedbackCount = countBlockFeedbackEntries(entries, effective.latestFixLineIndex);
 
   // F270 P2：证据窗口下界统一切至 latestFixLineIndex（最晚一次 **fix** 展开）。
   // 不能用 anchorLineIndex（最晚**任意**展开）：尾部一次 doc 展开会把 5 个窗口推到 doc 行，
   // fix 阶段的委派/见证/执行记录被整段切到窗外 → 大面积误阻断（core.test T204 有 A/B 实证）。
   // 被判方重展开 fix 推走 latestFix 只会切掉自己的证据（fail-closed 自伤），与闸门三用
   // earliest 防"重展开续命"方向互补——方向不对称是刻意的（F257/F270）。
-  const candidate = resolveFeatureDirCandidate(entries, anchor.latestFixLineIndex);
+  const candidate = tier === 2
+    ? tier2.candidate   // Tier 2：提名由绑定源给出（resume 窗口提名 / 见证目录 / sidechain 标记携带）
+    : resolveFeatureDirCandidate(entries, effective.latestFixLineIndex);
 
   // F227 D：主候选磁盘不可用时的只读兜底——状态机（core 层）逐字不变，
   // 磁盘判据完全下沉到这里，且仅在 ambiguous 为假、且 candidate.path 不可用时才介入。
@@ -544,7 +618,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
       if (shortName !== null) {
         // 见证集合按 short-name 归约后比较（家族级；理由见上方「为何比较是 short-name 家族级」一段）
         const witnessedShortNames = new Set(
-          [...collectArtifactWriteWitnessDirs(entries, anchor.latestFixLineIndex, projectRoot)]
+          [...collectArtifactWriteWitnessDirs(entries, effective.latestFixLineIndex, projectRoot)]
             .map(extractFixShortName)
             .filter((s) => s !== null),
         );
@@ -584,9 +658,9 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
   //     这是 D-1 方向 X **用户拍板接受**的下界（只防疏忽不防蓄意）。**补充事件如实落诊断**
   //     （ledger-supplemented-role），使"账本补了 transcript 没有的角色"这一唯一有安全意义的事件
   //     可事后审计——不阻断（补充方向是帮合规用户），但不再零留痕。
-  const transcriptDelegations = extractDelegationsAfter(entries, anchor.latestFixLineIndex);
+  const transcriptDelegations = extractDelegationsAfter(entries, effective.latestFixLineIndex);
   const ledgerResult = sessionId
-    ? readLedgerDelegations(projectRoot, sessionId, { sinceTs: anchor.latestFixTimestamp ?? null })
+    ? readLedgerDelegations(projectRoot, sessionId, { sinceTs: effective.latestFixTimestamp ?? null })
     : { state: LEDGER_ABSENT, delegations: [], corruptCount: 0, diagnostics: [], windowUndetermined: false };
   const ledgerDiagnostics = [...(ledgerResult.diagnostics || [])];
   // 补充：transcript 委派为主体，账本补其未覆盖的 roleClass（按 roleClass 去重，不重复计数）。
@@ -610,10 +684,11 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     : { closureForm: 'undetermined', hasRepairAnchor: false, hasNoopAnchor: false };
   // no-op 锚点分支才配对 fix 锚点后窗口的 Bash 执行证据；纯 repair（hasNoopAnchor=false）零介入（FR-007）
   const executionRecords = closure.hasNoopAnchor
-    ? extractExecutionRecordsAfter(entries, anchor.latestFixLineIndex)
+    ? extractExecutionRecordsAfter(entries, effective.latestFixLineIndex)
     : [];
 
-  const verdict = judgeCompliance({
+  const verdict = withTier(judgeCompliance({
+    tier2: tier === 2,   // F289：续做合同 implement 委派豁免，其余判据逐字同 Tier 1
     delegations,
     featureDir: { path: resolvedPath, existsOnDisk: featureDirCheck.existsOnDisk },
     fixReport: { exists: fixReport.exists, content: fixReport.content },
@@ -631,8 +706,9 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
       ...configDiagnostics,
       ...(witnessAbsent ? [JUDGE_DIAGNOSTICS.featureDirWitnessAbsent.code] : []),
       ...snapshotDiagnostics,
+      ...tier2Codes,   // F289：绑定源审计码（三源可同时命中，全部保留）
     ],
-  });
+  }), tier);
 
   // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路（沿用不变）。
   // 早前实现在 judge 之前直接 return，等于用"目录无法定位"一并赦免了与目录解析无关的委派证据要求，
@@ -663,7 +739,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     // true，进而走这条 exit 0 的降级放行。它与「合规」是账本翻转裁决的**两条**路径，此前只有
     // 合规那条补了留痕，本条仍无痕 → 伪造通过与诚实降级在审计流里逐字节相同。
     return {
-      enforcement, configDegraded, isFix: true, mode: anchor.mode,
+      enforcement, configDegraded, isFix: true, mode: anchor.mode, tier,
       transcriptDiagnostics: [JUDGE_DIAGNOSTICS.featureDirUnresolvable.code], verdict: null,
       assistantEntriesSinceEarliestFix, ledgerDiagnostics,
       snapshotDiagnostics,   // F287 G4：fail-open 早退也保留快照可观测量（runHook 并入落盘）
@@ -673,7 +749,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
   // F256 盲区 2：复用已解析的 entries/锚点求"在途委派"（零额外磁盘/transcript 读取）。
   // 本字段只描述事实（锚点后是否还有未回收的在途工作），不参与 verdict 本身；
   // 如何使用它（推迟裁决）由 runHook 决定。
-  const inFlightDelegations = extractInFlightDelegationsAfter(entries, anchor.latestFixLineIndex);
+  const inFlightDelegations = extractInFlightDelegationsAfter(entries, effective.latestFixLineIndex);
 
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
@@ -682,8 +758,10 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     storageUnavailableFeedbackCount,   // F276 卡 C：`!saved.ok` 分支的上界计量源（事实字段透传）
     blockFeedbackCount,                // F288 卡 B：降级放行的佐证计数（事实字段透传）
     // F288 卡 B · G2 指纹分量：🔴 latest（最晚 fix 展开）而非 earliest——R-5 方向钉；账本条目数取账本原始返回长度
-    latestFixLineIndex: anchor.latestFixLineIndex,
+    latestFixLineIndex: effective.latestFixLineIndex,
     ledgerDelegationCount: ledgerResult.delegations.length,
+    tier,                                   // F289：1 = 完整合同；2 = 续做合同
+    tier2Source: tier2 ? tier2.source : null,
   };
 }
 
@@ -737,6 +815,8 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
     missing: verdict ? verdict.missing : [],
     blockCount: enforcement === 'block' ? (typeof blockCount === 'number' ? blockCount : null) : null,
     degraded: Boolean(degraded),
+    // F289：合同层级（1 / 2）；无 verdict（fail-open）事件为 null
+    tier: verdict && (verdict.tier === 1 || verdict.tier === 2) ? verdict.tier : null,
     diagnostics: [...diag],
     // F287 G3（FR-032）：纯可观测量；无 verdict（fail-open）或报告缺席时 null
     pendingSectionCount: verdict && typeof verdict.pendingSectionCount === 'number' ? verdict.pendingSectionCount : null,
@@ -1515,6 +1595,9 @@ function runReport(projectRoot, transcriptPath, reportSessionId = null) {
     assistantEntriesSinceEarliestFix: typeof result.assistantEntriesSinceEarliestFix === 'number'
       ? result.assistantEntriesSinceEarliestFix
       : null,
+    // F289：合同层级与 Tier 2 绑定源（事实字段透传）
+    tier: result.tier === 1 || result.tier === 2 ? result.tier : null,
+    tier2Source: result.tier2Source ?? null,
     ...(result.verdict || {}),
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);

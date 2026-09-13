@@ -59,7 +59,8 @@ describe('F283 · 归属表单源：OWNED_HOOK_SCRIPT_SUFFIXES 由 OWNED_HOOK_EX
   it('OWNED_HOOK_SCRIPT_NAMES / isOwnedEntry 在派生表上语义不变：canonical 六条脚本全部判 owned', () => {
     const owned = Object.values(readCanonical().hooks)
       .flatMap((groups) => groups.flatMap((g) => g.hooks.map((h) => h.command)))
-      .filter((cmd) => !cmd.includes('worktree-lifecycle.sh'));
+      // F289：Claude 独有脚本（worktree-lifecycle.sh / subagent-stop-fix-marker.sh）按登记表剔除，不硬编码文件名
+      .filter((cmd) => !schema.CLAUDE_ONLY_HOOK_SCRIPT_NAMES.some((name) => cmd.endsWith(`/${name}`)));
     expect(owned).toHaveLength(6);
     for (const cmd of owned) expect(schema.isOwnedEntry(cmd, { allowPlaceholderRoot: true })).toBe(true);
     expect([...schema.OWNED_HOOK_SCRIPT_NAMES].sort()).toEqual(

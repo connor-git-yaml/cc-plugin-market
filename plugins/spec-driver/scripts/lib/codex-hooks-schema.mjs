@@ -166,6 +166,10 @@ export const OWNED_HOOK_SCRIPT_SUFFIXES = deriveOwnedSuffixes(Object.keys(OWNED_
  */
 export const CLAUDE_ONLY_HOOK_SCRIPT_SUFFIXES = Object.freeze([
   Object.freeze(['hooks', 'worktree-lifecycle.sh']),
+  // F289：SubagentStop 侧 sidechain fix 展开检测器。`SubagentStop` 虽在 Codex 事件全集里，但本 feature 不做 Codex 侧
+  // 等价事件适配（F289 spec FR-012：payload 形状不同、无 agent_transcript_path 语义），故按 Claude 独有脚本过滤，
+  // 不进 OWNED 表、不分发到 Codex。
+  Object.freeze(['hooks', 'subagent-stop-fix-marker.sh']),
 ]);
 
 /**

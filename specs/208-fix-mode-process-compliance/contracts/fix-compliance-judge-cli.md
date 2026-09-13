@@ -375,6 +375,31 @@ mutation 写回 `lastCountedFingerprint`（null 是吸收态，不写回则 rout
 **耗尽放行的终态**：`record-workflow-run` 写 `result:'failed'`、`complianceVerdict.blockCount` 为**真实计数（number，键不消失）**、
 审计 `degraded:true`，与 `blockCount` 达上限的放行可由 `nonblock-*` 触发码区分（两条放行路径可见性对等）。
 
+## Tier 2 续做合同（F289：resume / 裸会话 / sidechain 入口收口）
+
+**两级互斥取严**：主 transcript 有 `spec-driver-fix` 展开 ⇒ Tier 1（现状，逐字不变）；无展开时评估 Tier 2 绑定，任一命中 ⇒ 按续做合同判定，
+都不命中 ⇒ 既有零接触放行。`isFix` 判据本身不动。
+
+| 源 | 检出 | 判定窗口锚点 | 不绑定（对照组） |
+|---|---|---|---|
+| (a) resume | **最早**一次 `spec-driver-resume` 展开 + 其后**提名事件**（合法候选 ∨ ambiguous ∨ 候选历史非空，非仅 `path!==null`） | 最早 resume 展开行 | resume 无提名事件（feature / story 续做）、只读 / `cat` 提及 |
+| (b) 写入见证 | **仅** Write / Edit 成功写 `fix-report.md`（**不含** verification-report、**不含** Bash——扩任一复活 F257 绕过） | **首条见证写入行** | 写其他文件、只读、只写 verification-report、heredoc / `cp` |
+| (c) sidechain | 本会话标记 `<sid>.sidechain.<agent>.json`（SubagentStop CLI 扫子代理 transcript、命中 fix 展开且 **`isMeta===true`** 时写；父 prompt 引用 isMeta=false 不算） | 有见证则首条见证行，否则会话起点（残余） | 标记 session 不匹配 / 缺席 / 父 prompt 引用 |
+
+**续做合同** = Tier 1 path A 去掉 `delegation:implement`（implement 可能发生在上一会话 / sidechain）：磁盘制品齐全非占位 + 本会话（锚点起）≥1 次
+verify 类委派（transcript ∪ 账本补充）；no-op path B 原样。不合规走**同一条**路由链（F288 指纹三分 / 预算 / 放行佐证 / warn 恒 0），
+所有窗口（闸门三 / 反馈计数 / 提名 / 见证 / 委派 / 执行记录 / 在途 / 指纹分量）取**有效锚点** = primary 绑定事件行（多源命中取有真实行号里最早那个；绝不用 -1，否则闸门三从 line 0 计数、账本 sinceTs=null、佐证跨会话前段）。420 backstop 已由 F288 卡 B C-1 关闭为「只作 nonBlock 跑道耗尽触发、非放行腿」，故 Tier 2 无「line 0 起 420 ⇒ 零往返放行」。
+
+**可观测性**：审计事件 `tier: 1 | 2 | null`；Tier 2 事件 diagnostics 带 `tier2-bound-resume` / `tier2-bound-witness` / `tier2-bound-sidechain`
+（三源可同时命中，全部保留；不可见）；`--mode report` 输出 `tier` 与 `tier2Source`。`missing` 枚举不新增。
+
+**SubagentStop 侧**：`hooks/subagent-stop-fix-marker.sh` 恒 exit 0 零输出；CLI 形状守卫（`session_id` / `agent_transcript_path` 非空字符串，
+Codex 方言静默）、单趟 `detectFixSkillExpansion`、`MAX_TRANSCRIPT_BYTES` 上限、失败只进 `.sidechain-selfdiag.jsonl`；不做在途判定（T-2 陷阱）。
+脚本登记为 Claude 独有（不分发到 Codex）。
+
+**残余（如实，不写成闭合）**：(a) resume 源本机语料 0 命中且 resume skill 无 fix 恢复逻辑（前向占位，待跟进卡）；(c) 全语料唯一命中为父 prompt 引用诱饵（isMeta 已排除），标记基建前向生效；sidechain 标记可 `rm` 且无 transcript 侧对账兜底（弱于 Tier 1）；(b) 只认 Write/Edit × fix-report.md（heredoc / cp / 只写 verification-report 漏判）；sidechain-only 无见证时锚回落 -1（闸门三可能提前停推迟，fail-closed）；拆会话逃 implement 委派（已豁免，仍严于现状）；
+transcript 截断清零等共性弱点不变；(b) 以会话起点为锚，同会话前段无关流程的 verify 委派 / 阻断反馈会被算进窗口（fail-open 于误阻断、不影响放行地板）。
+
 ## 不变量
 
 - **零 LLM / 零子代理委派**：本 CLI 全程不得出现任何 `Task(` / 模型 API 调用字符串；implement/verify 阶段应静态审查此文件与其 import 链，确认无网络调用。

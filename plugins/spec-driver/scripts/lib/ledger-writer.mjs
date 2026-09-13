@@ -169,7 +169,7 @@ const SPEC_DRIVER_PROJECT_MARKERS = Object.freeze([
   'scripts',
 ]);
 
-function isSpecDriverProject(projectRoot) {
+export function isSpecDriverProject(projectRoot) {
   try {
     const entries = new Set(fs.readdirSync(path.join(projectRoot, '.specify')));
     return SPEC_DRIVER_PROJECT_MARKERS.some((m) => entries.has(m));

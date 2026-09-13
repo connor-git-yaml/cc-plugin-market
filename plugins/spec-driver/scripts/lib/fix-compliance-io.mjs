@@ -756,6 +756,121 @@ export function mutateBlockState(projectRoot, sessionId, mutator) {
   return { ...outcome, lockUnavailable: !lock.acquired, diagnostics };
 }
 
+// ────────────────────────────────────────
+// F289 · sidechain 标记（SubagentStop 检测 → 主 Stop 执法的接力载体）
+// ────────────────────────────────────────
+
+/** 单个标记文件体积上限：形状是几个短字段，超过即视为畸形不读 */
+const SIDECHAIN_MARKER_MAX_BYTES = 64 * 1024;
+
+function sidechainMarkerBasename(sanitizedSession, sanitizedAgent) {
+  return `${sanitizedSession}.sidechain.${sanitizedAgent}.json`;
+}
+
+/**
+ * 写 sidechain fix 标记（由 SubagentStop 侧 CLI 调用；两级回落与状态文件同家族、同目录）。
+ * 键 = session_id + agent_id：同一会话多个子代理各一份，互不覆盖。绝不抛。
+ * @returns {{ ok:boolean, path:string|null, errors:object[] }}
+ */
+export function writeSidechainMarker(projectRoot, { sessionId, agentId, agentType, fixLineIndex, candidatePath }) {
+  const sanitizedSession = sanitizeSessionId(sessionId);
+  const sanitizedAgent = sanitizeSessionId(agentId);
+  const payload = {
+    sessionId: sanitizedSession,
+    agentId: sanitizedAgent,
+    agentType: typeof agentType === 'string' ? agentType.slice(0, 64) : '',
+    fixLineIndex: Number.isInteger(fixLineIndex) ? fixLineIndex : null,
+    candidatePath: typeof candidatePath === 'string' ? candidatePath : null,
+    recordedAt: new Date().toISOString(),
+  };
+  const errors = [];
+  for (const dir of [path.join(projectRoot, ...STATE_SUBDIR), path.join(stateTmpBase(), STATE_TMP_SUBDIR)]) {
+    const target = path.join(dir, sidechainMarkerBasename(sanitizedSession, sanitizedAgent));
+    try {
+      writeStateOrThrow(target, payload);
+      return { ok: true, path: target, errors };
+    } catch (err) {
+      errors.push(describeWriteFailure(err));
+    }
+  }
+  return { ok: false, path: null, errors };
+}
+
+/**
+ * 列出本会话的 sidechain 标记（两级目录都读；只认 `sessionId` 字段与文件名一致的记录；畸形 / 超限文件跳过）。
+ * 只读不删：`resetBlockState` 也不删它（合规后同会话再次 Stop 仍走 Tier 2 评估，方向 fail-closed）。
+ * @returns {Array<{ sessionId:string, agentId:string, agentType:string, fixLineIndex:number|null, candidatePath:string|null, recordedAt:string|null, path:string }>}
+ */
+export function listSidechainMarkers(projectRoot, sessionId) {
+  const sanitizedSession = sanitizeSessionId(sessionId);
+  const prefix = `${sanitizedSession}.sidechain.`;
+  const out = [];
+  for (const dir of [path.join(projectRoot, ...STATE_SUBDIR), path.join(stateTmpBase(), STATE_TMP_SUBDIR)]) {
+    let names;
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!name.startsWith(prefix) || !name.endsWith('.json')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (!stat.isFile() || stat.size > SIDECHAIN_MARKER_MAX_BYTES) continue;
+        const parsed = JSON.parse(fs.readFileSync(full, 'utf8'));
+        if (!parsed || typeof parsed !== 'object' || parsed.sessionId !== sanitizedSession) continue;
+        out.push({
+          sessionId: sanitizedSession,
+          agentId: typeof parsed.agentId === 'string' ? parsed.agentId : '',
+          agentType: typeof parsed.agentType === 'string' ? parsed.agentType : '',
+          fixLineIndex: Number.isInteger(parsed.fixLineIndex) ? parsed.fixLineIndex : null,
+          candidatePath: typeof parsed.candidatePath === 'string' ? parsed.candidatePath : null,
+          recordedAt: typeof parsed.recordedAt === 'string' ? parsed.recordedAt : null,
+          path: full,
+        });
+      } catch {
+        // 畸形 / 不可读 → 跳过（标记只是接力载体，读不到即视为缺席）
+      }
+    }
+  }
+  out.sort((a, b) => String(a.recordedAt || '').localeCompare(String(b.recordedAt || '')));
+  return out;
+}
+
+// ────────────────────────────────────────
+// 同步读全 stdin（judge 与 SubagentStop 侧 CLI 共用）
+// ────────────────────────────────────────
+
+/** EAGAIN 有界等待：每次 5 ms、最多 2000 次（≈10 s）；写端始终不续写才放弃 */
+const STDIN_EAGAIN_WAIT_MS = 5;
+const STDIN_EAGAIN_MAX_SPINS = 2000;
+
+/**
+ * F287 对抗复审 C-1（既有，自 F208）：`fs.readFileSync(0)` 在管道 fd0 处于非阻塞态时（本进程 `import 'node:process'`
+ * 即触发）读空 64 KB 管道缓冲、写端尚未续写 → 抛 EAGAIN → 被吞成 '' → payload-invalid → exit 0。wrapper 的
+ * `printf '%s' "$STDIN_PAYLOAD" | node …` / `cat | node …` 恰是这一形态。改为 readSync 循环：EAGAIN 有界等待后重试，
+ * 读到 EOF（0 字节）才结束；其它错误返回已读内容。
+ */
+export function readStdinSync() {
+  const chunks = [];
+  const buf = Buffer.alloc(64 * 1024);
+  let spins = 0;
+  for (;;) {
+    let n;
+    try {
+      n = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (err) {
+      if (err && err.code === 'EAGAIN' && spins < STDIN_EAGAIN_MAX_SPINS) {
+        spins += 1;
+        sleepSync(STDIN_EAGAIN_WAIT_MS);
+        continue;
+      }
+      if (err && err.code === 'EOF') break;
+      return Buffer.concat(chunks).toString('utf8');
+    }
+    if (n === 0) break;
+    chunks.push(Buffer.from(buf.subarray(0, n)));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /**
  * 重置阻断计数状态（FR-006 增补：补救成功后的清零转移）。
  * 删除两级存储（主路径 + tmpdir 回落）中该 session 对应的状态文件，
