@@ -137,6 +137,15 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ## 11. 进展账（rolling）
 
+**2026-09-13（/goal 全量推进：M10 批次 3 门禁串行链收官 F280–F289 自执行 + 自验 + push）**：
+- **批次 3 全 ship（F280–F289 均在 master）**：F280（9362f1a8）/ F281（9f08e128）/ F282（7615c82a）为批次 3 并行卡、本 session 前已交付；**本 session 主线程逐卡执行并推送**（实现 → 红先行 → 异构对抗 ≥2 角 → verify 子代理 → 全量门禁 → rebase → ff push）的为：F283（93b49956 hooks 归属表派生化 + 判据钉住）、F287（9df869e9 卡 A 门禁链头：诊断码 canonical 表 + G3/G4 + isInvokedDirectly）、F285（592f2b73 发布/CI 门补齐）+ F285b（6b595a04 coverage birpc 假红处置）、F284（a18cec22 采集面 SSoT 忽略目录 + 护栏三面）、F286（b9a4aa92 P1-K 移交承接：导出可达性检查）、**F288（c63d44ba 卡 B：状态文件锁 + 计数幂等 + 指纹路由半边 + 放行佐证）**、**F289（7e53c3fc 续做/旁链入口卡：Tier 2 续做合同）**。
+- **门禁串行链闭合**：F287 卡 A → F288 卡 B → F289 续做/旁链入口，三卡串行交付，P0-A 门禁证据源换代残余全部收口。
+- **异构对抗（Codex 暂停·档位缺席）实证再累积**：F288 两路 2C（同一缺陷两角：420 assistant-entry 放行腿被判方自产 = 0 往返绕过；同时冻结快照下「上界 420」为假）+ 8W；F289 spec 两路 3C×2（收敛为锚点坍缩 / sidechain 信任反转 / (b) 合同漂移 / 项目闸缺失四类定义层缺陷）——**均为同构审查结构性漏判类**（自产放行腿、-1 锚点坍缩、父 prompt 引用诱饵，跑一次才现形）。
+- **本批最重教训**：(1) **F278「防线照错方向搭」再现**——F257 把「≥420 ⇒ 不再推迟」（fail-closed）在 F288 被接成「≥420 ⇒ 放行」（fail-open），同一常量方向反转；(2) **单锚点坍缩病根**（F257/F270 十轮修的正是它）在 F289 重现——证据窗口（要宽）与佐证/闸门（要 fail-closed）被塞进同一个 -1 锚点；(3) sidechain 首条 user 文本是**父编排器写**的，按 harness 采信 = 信任模型反转（isMeta 判据收口）；(4) **真实语料证伪纸面覆盖**——(a) resume 源 0 命中、(c) sidechain 唯一命中是诱饵，登记为前向占位而非已生效能力。
+- **门禁基线**（F288 rebased 8e06f838）：build 0 / vitest 8248/0 / test:plugins 1912/0 / repo:check warn（publish-gap indeterminate=既有）/ release:check valid。
+- **M11 债务追加**：F288 R-6（harness 不回灌环境阻断到底、逃生口 enforcement:warn）、stop_hook_active 第三佐证腿（曾 F270 P3 判死需重裁决）、enum→产出点反向守卫、F289 W-2（Tier 2 阻断可见性 = 绑定原因首行）、K-5（主 Stop/SubagentStop projectRoot 同源 worktree 未测）、K-6（标记无 TTL/sweep + 同项目他会话植标记 DoS）、resume skill 补 fix 恢复（(a) 源前向依赖）、检测侧闭包 doctor 覆盖（JUDGE_FILE_SET 不含 SubagentStop CLI）。
+- **dogfooding**：对抗审查应冻结 commit 作基线（F289 spec 审查在 rebase 中途 + 实现并发漂移的树上进行，"实现只作对照"基线漂移）——append 账本。
+
 **2026-09-12（/goal 全量推进：体检 + G0-4 两基线 + M9 正式收官 + 架构审查）**：
 - **master 增量**（09-01 → 09-12）：F276-C（P0-A 残余卡 C：`!saved.ok` 反转 fail-closed + 反馈计数上界；routeNonBlock 死代码 −127 行；卡 A/B 输入在 `specs/276-…/handoff/`）、**F278**（诚实工具面四小补）、**F279**（护栏比较器 kind/label + metadata 递归 + graph.graph 四维收口）、**F277**（引擎硬化，**部分交付**：68 FR = 已实现 50 / 已核验 10 / 移交 4〔FR-010~013 审查 agent 写盘/证据契约〕/ 缺席 1〔FR-018〕/ 字面违反 2〔FR-037 两处仓内相对 import 非 `node:` 前缀、FR-040 AGENTS.md +704B 仍在预算内——均非缺陷是判据措辞〕/ 裁剪 1；合并律 fail **如实登记**而非按未裁剪口径报达成——F270 教训已生效）。
 - **门禁基线**：build 0 / lint 0 / test:plugins 0 / repo:check 0 / release:check 0 / vitest **8178 passed · 1 failed**——唯一失败 = `tests/e2e/feature-213-codex-plugin-install.e2e.test.ts`「CODEX_HOME unset → 默认 ~/.codex」场景：断言 spectra MCP `command==='spectra'` 得 `node`，姊妹场景（自定义 CODEX_HOME）通过。**归因：环境耦合非回归**（F281 verify 校正早期归因）——该场景把开发者**真实 `~/.codex` 当默认家目录**执行 marketplace add / plugin add / 清理；`command` 得 `node` 的直接来源是 cwd=仓根时机器专属、未跟踪的项目级 `.codex/config.toml`（`[mcp_servers.spectra] command="node"`，Codex 只对真家目录登记为 trusted 的项目加载），**不是**用户级配置里的其它 server；且在真实 home 上做 mutation 本身是安全隐患（本次清理链已确认零残留）→ 立小卡「F213 e2e 真实 home 隔离」（见 §12），F281 已修：临时 HOME + cwd 独立。
@@ -224,4 +233,13 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 **M10 尾（P1 既有轨道，按容量）**：P1-F 多语言 parity（Java 调用边 recall 3.4% 实锤 + `.mjs` 顶层具名导出 symbol 缺席待判）、P1-H 评测前置、P1-I 诚实工具面（tokenBudget / 确定性回归）、P1-J 检索内核 v1 + ARB 基准、P1-L brainstorm、P1-M Spec Drift adoption、P1-N Codex 运行时跟进。
 
 **M11 移交（架构还债，立卡前按本节证据复核，不照单开工）**：共享 git runner（timeout+SIGKILL）；graph.json 单一装配函数 + `spectra graph` 裁决；LLM 调用面收敛 + mapreduce 1055 行接通或删；`spectra index` 产品面裁决；MCP/CLI batch option resolver 共用；原子写收编 3 处；深比较器合一；GeneratorRegistry 二选一；logger/graph-types 下沉 + query-helpers 归位 + graph-quality 判定逻辑下沉；getDependencies 实现或删；parseArgs 拆表；runBatch 真·分阶段（large）；spec-driver 诊断结果模型 `diagnostic-cli.mjs`；审计事件合同清扫；判定器主路径真实语料入库 + 长度钉死断言清理；回执索引抽象；文档注入引擎合一；小清扫（JSDoc/`--format` 双解析/SKILLS 单源/runId 同源/dev spike 移出）；慢测试收敛（CI 13m）；graph-mcp-snapshot 资产更新；零守护用例清理 + F272 A 类 64 条；perf anchor 重采 + 自动消费者；symbol 级 graph-accuracy 尺子（source×target；label-only 尺子 precision 在口径一致时结构性 ≈1.0，F282 复审缺陷 3）+ Go 同名不同 receiver 方法合并单节点（`callbacks.go::Register` lineRange {182,232}，F282 复审 I-4）。
+
+**批次 3 收官追加（2026-09-13，F288/F289 门禁链残余）**：门禁串行链 **F287 卡 A → F288 卡 B → F289 续做/旁链入口卡全部 ship**，P0-A 门禁证据源换代残余收口。M11 新增债务（本批异构对抗 + verify 登记）：
+- **fix-compliance 阻断预算 per-target 化**（F289 delta 复审 CRITICAL）：`blockCount`/降级状态现按 session 持久，同会话 Fix-A 付满 2 次阻断后新目标 Fix-B 可 per-session 复用 0 往返放行；根治需改 F288 状态键 `<sid>`→`<sid>+dir`（曾试「佐证锚逐目标前移」被证会误伤同目标合法重复编辑成永久 fail-closed，已还原）。**独立立卡，禁在已交付安全门上同 session 叠改**。
+- **F288 R-6**：删 420 assistant-entry 放行腿后，harness 不回灌反馈的环境（Codex 方言 / 某些 headless）预算耗尽后阻断到底，逃生口仅 `enforcement: warn`；候选恢复机制 `stop_hook_active` 第三佐证腿（曾 F270 P3 判死，需重裁决）。
+- **F288 锁竞态 trace 注入用例**（verify W1/W2）：M1-b（link vs open+write）/ M1-c（接管身份核对）微秒级竞态无生产侧 trace 注入的确定性回归用例（T1-C5 已补陈旧锁并发地板）。
+- **F289 sidechain 无提名不覆盖**（残余 10）：子代理展开 fix 但无处定位目录 ⇒ 不绑定、门禁不覆盖（与 resume 无提名对称，诚实上限）。
+- **F289 Tier 2 可观测性**：F224 fail-open 早退事件不带 `tier`；Tier 2 阻断 stderr 未告知绑定原因（W-2）。
+- **enum→产出点反向守卫**（F288）；`JUDGE_FILE_SET` 纳入 SubagentStop CLI 检测侧闭包（F289）；resume skill 补 fix 恢复逻辑（F289 (a) 源前向依赖，现 0 真实语料命中）。
+- **dogfooding**：对抗审查应冻结 commit 作基线（F289 spec 审查在 rebase 中途 + 实现并发漂移的移动靶上进行）。
 

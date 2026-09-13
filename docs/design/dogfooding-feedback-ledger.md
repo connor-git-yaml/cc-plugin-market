@@ -505,3 +505,6 @@
 - [结果准确性][spec-driver spec-review · 类别列抽检第二支笔] 本卡新加的「类别列取值抽检」在自身 Phase 5 首次真实命中：矩阵把 FR-016 标约束型，而新建守护代码注释自称实现 FR-016 (ii)，plan 的「承载制品已由别的 FR 认领 ⇒ 本条不新造」论证被从严判据否定 → 追加改判。说明「第二支笔」设计有效，也说明 plan 阶段的类别判定依据需要一条「共享制品」处理规则（候选后续卡）
 - [流程顺畅度][spec-driver verify · 角色 prompt 体量] verify.md 已达 582 行，子代理「整读角色 prompt + 68 行对账」组合三次停摆于读完再写；最终靠编排器摘录判定态定义成 151 行简报 + 按行段拆三路 + 每 6 行落盘完成。改进方向：verify 角色 prompt 分层（定义层 / 流程层），或引擎级支持分段对账产物合并
 
+- [流程顺畅度][对抗审查 · 冻结基线] 门禁类多轮异构对抗时，spec 审查与 implement 并发漂移会让「实现只作对照」的基线变成移动靶（F289 spec 两路审查期间 worktree 处于 rebase 中途 + 归属表从 OWNED 改 Claude-only + spec 6 行改写）：两路 reviewer 各自登记「基线漂移」。改进：派发对抗审查时冻结一个 commit 作审查基线并写进 prompt（F289 implement/delta 阶段起已照此，prompt 显式钉 HEAD）。再现：F289 spec 阶段
+- [流程顺畅度][对抗审查 · fix 会引入反向缺陷] F289 Tier 2 两处 fix 各自引入过反向缺陷、靠后一轮对抗抓出：earliest 锚（修「尾部重展开解绑」）→ 跨目标 fail-open；latest-activity 锚（修跨目标）→ 同目标永久 fail-closed（8 轮零自愈）。教训：门禁类「窗口锚点」改动必须同时构造「同目标重复」与「跨目标切换」两类语料对拍，单侧验证会漏反向；证据/佐证/闸门三窗口方向常相反，不可用单一锚点统一。再现：F289 implement/delta
+- [流程顺畅度][子代理 · 负载卡死] verify 子代理与全量 vitest / gate 并发跑时 stream watchdog 无进展 600s 判死（F289 verify 首派卡死）；同期 vitest 满载 5–18 项 birpc RPC 超时假红（隔离重跑 193/193 全绿）。改进：重活动子代理与全量门禁串行、勿并发；子代理 prompt 内 node/test 命令包 `timeout`、砍 3× 重复与全量语料为抽样。再现：F233/F235/F269 满载假红家族
