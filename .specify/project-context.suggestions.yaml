@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-09-14T08:39:59.053Z"
+generatedAt: "2026-09-14T18:54:11.410Z"
 status: "advisory"
 contextSource:
   state: "yaml"
@@ -11,8 +11,8 @@ contextSource:
   suggestionsMarkdownPath: ".specify/project-context.suggestions.md"
 summary:
   criticalCount: 0
-  recommendedCount: 2
-  optionalCount: 2
+  recommendedCount: 1
+  optionalCount: 3
   suggestionCount: 4
 suggestions:
   - id: "add-stable-reference-documents"
@@ -85,10 +85,10 @@ suggestions:
         path: "specs/products/spec-driver/_generated/workflow-index.json"
         note: "workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。"
   - id: "codify-verification-policy"
-    priority: "recommended"
+    priority: "optional"
     category: "verification-policy"
     title: "把验证偏好固化到 Project Context"
-    summary: "当前 verification 信号存在缺口，建议把验证偏好与最低完成标准显式写入 Project Context。"
+    summary: "当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。"
     suggestedChanges:
       - field: "verification_policy.required_commands"
         action: "set"
@@ -108,7 +108,7 @@ suggestions:
     evidence:
       - sourceType: "scorecard-report"
         path: "specs/products/spec-driver/_generated/scorecard-report.json"
-        note: "verification-freshness 当前状态为 warn。"
+        note: "verification-freshness 当前状态为 pass。"
   - id: "declare-default-owner-and-reviewers"
     priority: "recommended"
     category: "ownership"

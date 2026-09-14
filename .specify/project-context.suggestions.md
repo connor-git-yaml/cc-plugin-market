@@ -1,14 +1,14 @@
 # Project Context Suggestions
 
-- Generated At: `2026-09-14T08:39:59.053Z`
+- Generated At: `2026-09-14T18:54:11.410Z`
 - Status: `advisory`
 - Context Source: `yaml`
 
 ## Summary
 
 - Critical: 0
-- Recommended: 2
-- Optional: 2
+- Recommended: 1
+- Optional: 3
 - Total Suggestions: 4
 
 ## Suggestions
@@ -50,9 +50,9 @@ Evidence:
 - `adoption-report` · `specs/products/spec-driver/_generated/adoption-report.json` — 最近 run summary 中最常使用的 workflow 是 spec-driver-fix（1 次）。
 - `workflow-index` · `specs/products/spec-driver/_generated/workflow-index.json` — workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。
 
-### [RECOMMENDED] 把验证偏好固化到 Project Context
+### [OPTIONAL] 把验证偏好固化到 Project Context
 
-当前 verification 信号存在缺口，建议把验证偏好与最低完成标准显式写入 Project Context。
+当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。
 
 - ID: `codify-verification-policy`
 - Category: `verification-policy`
@@ -63,7 +63,7 @@ Suggested Changes:
 - `verification_policy.review_dimensions` · set: `architecture`, `readability`, `maintainability`
 
 Evidence:
-- `scorecard-report` · `specs/products/spec-driver/_generated/scorecard-report.json` — verification-freshness 当前状态为 warn。
+- `scorecard-report` · `specs/products/spec-driver/_generated/scorecard-report.json` — verification-freshness 当前状态为 pass。
 
 ### [RECOMMENDED] 补充默认 owner / reviewers
 

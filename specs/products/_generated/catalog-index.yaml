@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-09-14T08:39:58.855Z"
+generatedAt: "2026-09-14T18:54:11.334Z"
 productCount: 2
 products:
   - id: "spectra"
@@ -11,10 +11,10 @@ products:
     currentSpecPath: "specs/products/spectra/current-spec.md"
     workflowRefCount: 6
     qualityStatus: "pass"
-    specCount: 0
+    specCount: 108
     qualityReportPath: "specs/products/spectra/_generated/quality-report.json"
-    scorecardStatus: "warn"
-    scorecardScore: 90
+    scorecardStatus: "pass"
+    scorecardScore: 100
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
@@ -24,7 +24,7 @@ products:
     currentSpecPath: "specs/products/spec-driver/current-spec.md"
     workflowRefCount: 7
     qualityStatus: "pass"
-    specCount: 0
+    specCount: 58
     qualityReportPath: "specs/products/spec-driver/_generated/quality-report.json"
-    scorecardStatus: "warn"
-    scorecardScore: 90
+    scorecardStatus: "pass"
+    scorecardScore: 100

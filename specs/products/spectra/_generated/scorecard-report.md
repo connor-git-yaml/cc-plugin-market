@@ -2,22 +2,22 @@
 
 > **Product**: spectra
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-09-14T08:39:58.972Z
-> **Status**: WARN
-> **Score**: 90/100
+> **Generated**: 2026-09-14T18:54:11.384Z
+> **Status**: PASS
+> **Score**: 100/100
 
 ## Summary
 
-- Spectra 当前治理评分为 90/100，整体状态 WARN.
+- Spectra 当前治理评分为 100/100，整体状态 PASS.
 - 没有 fail 级规则。
-- 另有 1 条 warn 级规则，建议在下一次 sync / release 前收口。
+- 全部规则均已达到 pass 基线。
 
 ## Rule Breakdown
 
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | WARN | 50 | 20 | totalFeatures=0, ignored=[object Object] |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=19, fresh=19, stale=0 |
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
@@ -43,17 +43,133 @@
 ### Verification 新鲜度
 
 - Evaluator: `verification-freshness`
-- Status: WARN
-- Score: 50 / 100
+- Status: PASS
+- Score: 100 / 100
 - Weight: 20
-- 当前没有纳入治理的已实现增量 spec，verification 新鲜度无法计算。
+- 全部 19 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 0,
+  "totalFeatures": 19,
+  "fresh": [
+    "042",
+    "043",
+    "044",
+    "045",
+    "046",
+    "047",
+    "048",
+    "049",
+    "050",
+    "053",
+    "055",
+    "056",
+    "057",
+    "058",
+    "059",
+    "060",
+    "079",
+    "080",
+    "061"
+  ],
+  "stale": [],
+  "missing": [],
+  "failed": [],
+  "coverageRatio": 1,
   "ignored": {
-    "blueprint": [],
-    "nonImplemented": []
+    "blueprint": [
+      "024",
+      "054",
+      "076"
+    ],
+    "nonImplemented": [
+      "001",
+      "002",
+      "003",
+      "004",
+      "005",
+      "006",
+      "007",
+      "008",
+      "009",
+      "010",
+      "025",
+      "026",
+      "027",
+      "028",
+      "029",
+      "030",
+      "031",
+      "033",
+      "034",
+      "035",
+      "036",
+      "037",
+      "038",
+      "039",
+      "040",
+      "041",
+      "051",
+      "052",
+      "095",
+      "097",
+      "099",
+      "100",
+      "101",
+      "102",
+      "103",
+      "104",
+      "105",
+      "106",
+      "107",
+      "094-01",
+      "094-02",
+      "094-03",
+      "094-04",
+      "094-06",
+      "094-07",
+      "114",
+      "125",
+      "127",
+      "128",
+      "130",
+      "131",
+      "132",
+      "140",
+      "145",
+      "146",
+      "151",
+      "152",
+      "153",
+      "154",
+      "155",
+      "156",
+      "157",
+      "170c",
+      "170d",
+      "171",
+      "174",
+      "175",
+      "177",
+      "184",
+      "189",
+      "190",
+      "192",
+      "193",
+      "195",
+      "200",
+      "202",
+      "205",
+      "214",
+      "217",
+      "221",
+      "249",
+      "250",
+      "265",
+      "266",
+      "271",
+      "278"
+    ]
   }
 }
 ```

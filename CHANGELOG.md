@@ -5,6 +5,33 @@
 
 ## [Unreleased]
 
+> **M11 第一批五卡（2026-09-15）**：卡 A P1-I 诚实工具面 / 卡 B F291a per-target 阻断预算 / 卡 C 簇④ 引擎-CLI 小补 / 卡 D 簇⑦ 图新鲜度自动化 / 卡 E cli-proxy 无头瘦身 + collector 成本口径。制品见 `specs/293-*`～`specs/297-*`。
+
+### Added — spectra
+
+- **MCP 返回面诚实化（P1-I，卡 A）** — calls 边带 `resolution { stage, strategy, basis }` 与 `callSites[]` / `callSiteCount`（graph-builder 按 (source, target) 合并调用点，排序去重 cap 20）；`context.callers[] / callees[]`、`impact.affected[]`、`detect_changes.affectedSymbols[]`、`graph_node.neighbors[].edge` 透传 `confidenceLabel` / `resolution` / `callSites`；12 个工具成功响应带 `tokenBudget { payloadBytes, capBytes, estimatedTokens, truncated, truncatedKeys? }`；`tools/list` 顺序与 top-N 确定性回归（合同 `contracts/mcp-return-surface-contract.yaml`，TS 词表 `src/knowledge-graph/call-resolution-labels.ts` 机械对拍）。外部语料 A/B（GORM / HikariCP）节点 / 边 / 准确率逐字不变。
+- **图 provenance 补「建图时树态」维（簇⑦，卡 D）** — `graph.graph.sourceTreeDirty`；freshness 新 stale 原因 `source-tree-dirty-at-build`、`committedSourceChanges`（已提交但未重建的采集面差分，`-c diff.renames=false -c diff.relative=false --end-of-options` 钉死）、`builtFromDirtyTree`；`graph-quality` CLI / MCP honesty / repo:check 同步；`repo:sync` 新增 `graph-freshness` 步（skip-dirty / rebuild / 收敛守卫 / 超时 SIGKILL）。
+
+### Changed — spectra（**breaking：MCP 返回面词表**）
+
+- `context.definition.confidence` → `confidenceLabel`；`fuzzyMatches[].confidence` → `matchScore`；`resolvedConfidence` → `resolvedMatchScore`（名字相似度不再冒充置信度；`confidence` 恒为数值分数）。
+- `graph_hyperedges` 输出改紧凑 JSON（走统一 envelope）。
+- **无头 CLI 调用隔离（卡 E）** — `claude --print` 加 `--safe-mode --no-session-persistence --disable-slash-commands --tools ''`，cwd 固定到临时目录；`result.total_cost_usd` 透传为 `reportedCostUsd`（costMetadata / frontmatter / 汇总表「CLI 报告成本」行）；`error_during_execution` 判可重试（503）。micrograd 输入 token −95.3%、nanoGPT −88.3%，图 / spec 产物逐字节相同。
+- **baseline collector schema 1.2** — `tokensCacheCreation` / `tokensCacheRead` / `reportedCostUsd` / `reportedCostCoverage`；成本只在 CLI 报告全覆盖时取真值，否则公式（cache creation 按 1h 段 6 USD/MTok）；`baseline:diff` 成本维度只展示不判红，minor 版本不一致降为 warning。
+
+### Fixed — spec-driver
+
+- **fix-compliance 阻断预算按目标记账（F291a，卡 B，门禁类）** — 同会话 Fix-A 付满预算后全新 Fix-B 首次评估 0 往返放行（F289 delta CRITICAL）。状态文件仍每会话一份，文件内 `targets[规范化目标目录]` 分桶，桶随 F224 改名链迁移（核心 `resolveFeatureDirCandidate` 新增 `renames[]`），无目标轮次自成一桶不捐赠，合规清零整份删除，在途推迟预算留会话级，改造前顶层计数不迁移；审计事件与 `--mode report` 带 `targetDir` / `budgetKey`。首版复合键文件方案被两轮异构对抗证伪（32-bit dirhash 可碰撞 / legacy 回落万能捐赠 / 兄弟桶残留 / 逐轮改名永久 fail-closed），设计稿留证伪表。
+- **sync 引擎（卡 C）** — fix-report 消费通道（无 spec.md 或占位模板 + fix-report.md 的目录进时间线 FIX 与 `fixReports[]`；同编号既有实质 spec.md 时跳过，本仓 133 / 201 此前会双计 49 条虚假冲突）；`--preflight` 分母与 Phase 5 同源并指名占位 / 同编号目录；`--lint` 四类写法告警 + `duplicate-dirs` 结构化 findings + exit 1；`fr-floor` 改用独立扫描器（`lib/sync-fr-floor.mjs`）；三套 `parseProductMapping` 收敛（catalog `specCount` 此前恒 0）；mapping 写回 in-place 补丁（目标 key 任意形态视为已存在）；fix-report 字段截断带标记；占位判据加样板 FR 字面量。
+- **check-fr-matrix（卡 C）** — `constitution` 章节缺席按 `passed:false` + `sectionMissing`（接线改按 passed 判），标题容忍 `N. ` 前缀 / 装饰 / Re-check，fenced / 行内代码 / 引用块不算引用；`verify-gaps` 读认领列（移交 ≠ 裁剪 ≠ 约束型 `—`）、只认第一张表、首格多编号（区间 / 链接 / 斜线 / 逗号）、`specEmpty` / `claimColumnMissing` 显式标记；目录参数 exit 2。
+- **orchestrator-cli（卡 C）** — `get-phases` 带 `gates_before` / `gates_after` 与 resolver `diagnostics`；`yamlScalar` 对二进制 / 时间戳 / 指数 / 八进制等形态加引号、普通标识符不加（两个方向按输出文本钉住）。
+- **共享散文（卡 C）** — 第 6 个共享块 `gate-class-mandatory-upgrade`（(ii) 门禁类升格条款 + 换算式）注入 plan.md 与 4 份 SKILL，路径清单与分类表机械对拍；verify.md 分层索引；共享制品类别判定规则；story / feature SKILL「守护项口径从源码现取」。
+
+### 测试
+
+- pinned graph 四份与 F249 护栏两份资产受控再生（剥新字段深等 0 差异）；`f220` charter 快照受控 `-u`（9 处 `sourceTreeDirty` + 16 处 cache 行插入，0 删除）；`tests/**` 40 处 `@ts-expect-error`（TS2578）删除（`typecheck:tests:full` 1071 → 1031）。
+- 新增：`fix-compliance-f291a-per-target`（10）、`sync-merge-engine-m11c`（19）、`check-fr-matrix`（18）、`orchestrator-cli-m11c`（11）、`repo-sync-graph-freshness`（28）、MCP 返回面 / 词表 / tokenBudget / 确定性（unit 7 文件 + e2e 3 例）。
+
 ### Fixed — spec-driver
 
 - **sync-merge-engine FR 抽取与身份修复** — 自 4 月首次聚合起对 190 份 spec 抽出 0 条 FR（正则只认 `- FR-001:`），且按裸编号跨 spec 归并（91.3% 静默丢弃）。现在：FR 身份键 = `(sourceSpec, id)`；条目 = 列表位 / 行首粗体段落 / 标题起始位的 FR 编号，编号语法覆盖 `FR-1` / `FR-A-001` / `FR-A01` / `FR-1.1` / `FR-003A` / `FR-026-01`；需求类 H2 累加路由（`## 非功能需求` 不再覆盖前面的功能需求）；子编号 / 字母后缀目录（`094-02` / `170c`）与 `product-mapping.yaml` 同一口径不再坍缩或被扫描跳过；同名 H2 累加、fenced code 内的 `## ` 不切节；fenced code / 区间标签 / 引用型标题不成条目；「候选编号未抽取」与「需求类 H2 之外的条目写法」两条 warning 按独立取数路径判定，零 FR spec 与悬空映射条目有提示；`fr-count` 改为合并守恒（骨架 FR 总数 == 各 spec 抽取条数之和，基线不再取自骨架自身）；写回 `product-mapping.yaml` 只在语义变化时执行并保留注释头（含 CRLF）。真实仓库：spectra 1586 / spec-driver 792 条 FR，2 条冲突（均为 spec 自身重复）。
