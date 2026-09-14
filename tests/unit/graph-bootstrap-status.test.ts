@@ -18,7 +18,6 @@ import { pathToFileURL } from 'node:url';
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import * as statusCore from '../../scripts/lib/graph-bootstrap-status.mjs';
 
 interface EmbeddedCommitResult {

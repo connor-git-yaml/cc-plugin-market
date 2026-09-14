@@ -20,7 +20,6 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { validateGraphQuality } from '../../scripts/lib/graph-quality-core.mjs';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 import {
@@ -396,7 +395,6 @@ describe('F258：ignore-undeterminable warn check', () => {
       '../../src/cli/commands/graph-quality.js'
     );
     const { IGNORE_UNDETERMINABLE_TOKEN: consumerToken } = await import(
-      // @ts-expect-error — .mjs 无类型声明，运行时可解析
       '../../scripts/lib/graph-quality-core.mjs'
     );
 
@@ -470,7 +468,6 @@ describe('F258：ignore-undeterminable warn check', () => {
       '../../src/cli/commands/graph-quality.js'
     );
     const { IGNORE_ORACLE_DEGRADED_TOKEN: consumerToken } = await import(
-      // @ts-expect-error — .mjs 无类型声明，运行时可解析
       '../../scripts/lib/graph-quality-core.mjs'
     );
 

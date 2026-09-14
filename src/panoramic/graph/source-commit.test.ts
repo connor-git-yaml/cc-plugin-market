@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { resolveSourceCommit, evaluateFreshness } from './source-commit.js';
+import { resolveSourceCommit, evaluateFreshness, isSourceTreeDirty, isCommitSha } from './source-commit.js';
 import {
   BEHAVIOR_VERSION,
   computeCollectorFingerprint,
@@ -124,6 +124,44 @@ describe('evaluateFreshness（真实临时 git 仓库）', () => {
     const verdict = evaluateFreshness(head, repoDir, computeCollectorFingerprint());
     expect(verdict.state).toBe('fresh');
     expect(verdict.currentHead).toBe(head);
+  });
+
+  // ── M11 卡 D（簇⑦）：source-commit 的语义 = 「sourceCommit 之后的提交是否改动了采集面源码」，
+  // 而不是「HEAD 是否移动」——只改文档 / 图产物 / 账本的 commit 不应让图变 stale，
+  // 否则每次 commit 后 repo:check 必 warn（F270 / F275 / F277 三次再现）。
+  it('M11-D：sourceCommit 之后只有文档 / 图产物类 commit（未触及采集面）→ 不算 source-commit stale，仍 fresh', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'README.md'), '# docs only\n');
+    fs.mkdirSync(path.join(repoDir, 'specs', '_meta'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, 'specs', '_meta', 'graph.json'), '{}\n');
+    const docsHead = commitAll(repoDir, 'docs + graph artifact');
+    expect(docsHead).not.toBe(graphHead);
+    const verdict = evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('fresh');
+    expect(verdict.currentHead).toBe(docsHead);
+  });
+
+  it('M11-D：sourceCommit 之后的 commit 改动了采集面源码（含删除）→ stale，并列出变化的源码路径', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    fs.writeFileSync(path.join(repoDir, 'b.py'), 'b = 2\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'README.md'), '# docs\n');
+    commitAll(repoDir, 'docs');
+    fs.rmSync(path.join(repoDir, 'b.py'));
+    commitAll(repoDir, 'delete b.py');
+    const verdict = evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.staleReasons).toEqual(['source-commit']);
+    expect(verdict.committedSourceChanges).toEqual(['b.py']);
+  });
+
+  it('M11-D：sourceCommit 不在当前历史里（历史改写 / 浅克隆）→ 按 stale 保守处理，不假装 fresh', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    commitAll(repoDir, 'init');
+    const verdict = evaluateFreshness('f'.repeat(40), repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.staleReasons).toEqual(['source-commit']);
   });
 
   it('sourceCommit 与当前 HEAD 不一致 → stale', () => {
@@ -591,8 +629,8 @@ describe('evaluateFreshness：五级优先级 + staleReasons（F249 FR-009）', 
     expect(verdict.state).toBe('stale');
     expect(verdict.state).not.toBe('dirty');
     expect(verdict.staleReasons).toEqual(['collector-fingerprint']);
-    // stale 分支不再走 porcelain 读取，故不应带 dirty 侧字段
-    expect(verdict.dirtyFiles).toBeUndefined();
+    // M11 卡 D：stale 的 verdict 同时携带工作树状态（state 仍是 stale）——自动重建方据此拒绝在脏树上重建
+    expect(verdict.dirtyFiles).toEqual(['a.ts']);
   });
 
   it('SC-007：同一输入重复运行 5 次，staleReasons 顺序完全一致（确定性）', () => {
@@ -676,5 +714,268 @@ describe('SC-017：非 git 仓库（currentHead=null）时指纹状态不改变 
     expect(verdict.recordedSourceCommit).toBe('abc123');
     // 指纹型原因绝不能在此短路路径上冒出来
     expect(verdict.staleReasons).toBeUndefined();
+  });
+});
+
+// ============================================================
+// M11 卡 D 对抗审查回补（角 A fail-open / 角 B 假红副作用，2026-09-15）
+// ============================================================
+
+describe('M11-D 回补：committed diff 的判定面与 argv 面', () => {
+  let repoDir: string;
+
+  beforeEach(() => {
+    repoDir = initTempGitRepo();
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('C-1：采集面文件被 git mv 出采集面（rename 折叠成只列目的路径）→ 仍判 stale 并列出旧路径', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n'.repeat(20));
+    const graphHead = commitAll(repoDir, 'init');
+    realGit(repoDir, ['mv', 'a.ts', 'a.ts.bak']);
+    commitAll(repoDir, 'move out of surface');
+    const verdict = evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.staleReasons).toEqual(['source-commit']);
+    expect(verdict.committedSourceChanges).toEqual(['a.ts']);
+  });
+
+  it('C-4：只改 .gitignore 的 commit 改变了采集范围 → stale，并列出 .gitignore', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    fs.writeFileSync(path.join(repoDir, '.gitignore'), 'generated/\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, '.gitignore'), '');
+    commitAll(repoDir, 'stop ignoring generated/');
+    const verdict = evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.committedSourceChanges).toEqual(['.gitignore']);
+  });
+
+  it('C-4：未提交的 .gitignore 改动同样进 dirty 判定面（嵌套 .gitignore 亦然）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    fs.mkdirSync(path.join(repoDir, 'sub'));
+    fs.writeFileSync(path.join(repoDir, 'sub', '.gitignore'), 'x\n');
+    const verdict = evaluateFreshness(head, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('dirty');
+    expect(verdict.dirtyFiles).toEqual(['sub/.gitignore']);
+  });
+
+  it.each(['-s', '--quiet', '--diff-filter=X', 'HEAD', 'main', 'abc123'])(
+    'C-2：recordedSourceCommit=%s 不是 commit SHA → 不进 git argv，按 stale 保守处理（区间里确有源码改动）',
+    (recorded) => {
+      fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+      commitAll(repoDir, 'init');
+      fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+      commitAll(repoDir, 'change a');
+      const verdict = evaluateFreshness(recorded, repoDir, computeCollectorFingerprint());
+      expect(verdict.state).toBe('stale');
+      expect(verdict.staleReasons).toEqual(['source-commit']);
+      expect(verdict.recordedSourceCommit).toBe(recorded);
+    },
+  );
+
+  it('C-2：recordedSourceCommit=--output=<file> 不会让 git 写文件', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+    commitAll(repoDir, 'change a');
+    const outFile = path.join(repoDir, 'PWNED.txt');
+    const verdict = evaluateFreshness(`--output=${outFile}`, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(fs.existsSync(outFile)).toBe(false);
+  });
+
+  it('M1：两点 diff 而非三点——图建在后代 commit、HEAD 回到祖先时判 stale（图里有 HEAD 上不存在的文件）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const ancestor = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'b.ts'), 'export const b = 2;\n');
+    const descendant = commitAll(repoDir, 'add b');
+    realGit(repoDir, ['checkout', '-q', ancestor]);
+    const verdict = evaluateFreshness(descendant, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.committedSourceChanges).toEqual(['b.ts']);
+  });
+
+  it('W-4：真实区间源码改动 + 指纹不一致并存 → [source-commit, collector-fingerprint]（不靠 readFailed 路径）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+    commitAll(repoDir, 'change a');
+    const outdated: CollectorFingerprint = { ...computeCollectorFingerprint(), behaviorVersion: BEHAVIOR_VERSION - 1 };
+    const verdict = evaluateFreshness(graphHead, repoDir, outdated);
+    expect(verdict.staleReasons).toEqual(['source-commit', 'collector-fingerprint']);
+    expect(verdict.committedSourceChanges).toEqual(['a.ts']);
+  });
+
+  it('W-5：stale 判定不再吞掉工作树状态——stale 的 verdict 同时携带 dirtyFiles（repo:sync 据此拒绝在脏树上重建）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+    commitAll(repoDir, 'change a');
+    fs.writeFileSync(path.join(repoDir, 'c.ts'), 'export const c = 3;\n');
+    const verdict = evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.dirtyFiles).toEqual(['c.ts']);
+  });
+});
+
+describe('M11-D 回补：脏工作树上建的图（sourceTreeDirty）', () => {
+  let repoDir: string;
+
+  beforeEach(() => {
+    repoDir = initTempGitRepo();
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('isSourceTreeDirty：干净树 false；未提交源码 true；只有未提交文档 false', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    commitAll(repoDir, 'init');
+    expect(isSourceTreeDirty(repoDir)).toBe(false);
+    fs.writeFileSync(path.join(repoDir, 'README.md'), '# doc\n');
+    expect(isSourceTreeDirty(repoDir)).toBe(false);
+    fs.writeFileSync(path.join(repoDir, 'b.ts'), 'export const b = 2;\n');
+    expect(isSourceTreeDirty(repoDir)).toBe(true);
+  });
+
+  it('图记录 sourceTreeDirty=true、commit 一致、树已干净 → stale [source-tree-dirty-at-build]（丢弃的未提交内容可能仍在图里）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    const verdict = evaluateFreshness(head, repoDir, computeCollectorFingerprint(), true);
+    expect(verdict.state).toBe('stale');
+    expect(verdict.staleReasons).toEqual(['source-tree-dirty-at-build']);
+  });
+
+  it('图记录 sourceTreeDirty=true 而树仍脏 → dirty（未提交状态尚在，不升格 stale）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'b.ts'), 'export const b = 2;\n');
+    const verdict = evaluateFreshness(head, repoDir, computeCollectorFingerprint(), true);
+    expect(verdict.state).toBe('dirty');
+  });
+
+  it('sourceTreeDirty 缺席 / false / 非布尔 → 不影响既有判定（fresh）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    for (const recorded of [undefined, null, false, 'true', 1]) {
+      expect(evaluateFreshness(head, repoDir, computeCollectorFingerprint(), recorded).state).toBe('fresh');
+    }
+  });
+
+  it('多原因顺序：source-commit 在前、source-tree-dirty-at-build 居中、指纹原因在后', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+    commitAll(repoDir, 'change a');
+    const verdict = evaluateFreshness(graphHead, repoDir, undefined, true);
+    expect(verdict.staleReasons).toEqual(['source-commit', 'source-tree-dirty-at-build', 'collector-fingerprint-unrecorded']);
+  });
+});
+
+// ============================================================
+// M11 卡 D delta 复审回补（2026-09-15）：判定面 pin / 形态边界 / 脏树建图在树脏期间可见 / 测过且干净可区分
+// ============================================================
+
+describe('M11-D delta 回补', () => {
+  let repoDir: string;
+
+  beforeEach(() => {
+    repoDir = initTempGitRepo();
+    mockedExecFileSync.mockClear();
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('CRITICAL-2：图记录 sourceTreeDirty=true 而树仍脏 → state 仍 dirty，但 verdict 带 builtFromDirtyTree:true（此前该记录在树脏期间被整个扔掉）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'other.ts'), 'export const o = 1;\n');
+    const verdict = evaluateFreshness(head, repoDir, computeCollectorFingerprint(), true);
+    expect(verdict.state).toBe('dirty');
+    expect(verdict.builtFromDirtyTree).toBe(true);
+    expect(verdict.dirtyFiles).toEqual(['other.ts']);
+    const clean = evaluateFreshness(head, repoDir, computeCollectorFingerprint(), false);
+    expect(clean.builtFromDirtyTree).toBeUndefined();
+  });
+
+  it('W-2：每个 state 都带测量结果——fresh / stale（树干净）带 dirtyFiles: []，与「没测」（字段缺席）可区分；unknown-provenance（无图）也带', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const head = commitAll(repoDir, 'init');
+    expect(evaluateFreshness(head, repoDir, computeCollectorFingerprint()).dirtyFiles).toEqual([]);
+    const stale = evaluateFreshness(head, repoDir, undefined);
+    expect(stale.state).toBe('stale');
+    expect(stale.dirtyFiles).toEqual([]);
+    const noGraph = evaluateFreshness(null, repoDir);
+    expect(noGraph.state).toBe('unknown-provenance');
+    expect(noGraph.currentHead).toBe(head);
+    expect(noGraph.dirtyFiles).toEqual([]);
+    fs.writeFileSync(path.join(repoDir, 'b.ts'), 'export const b = 2;\n');
+    expect(evaluateFreshness(null, repoDir).dirtyFiles).toEqual(['b.ts']);
+  });
+
+  it('非 git 目录：unknown-provenance 且不带任何工作树字段（真没测）', () => {
+    const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'source-commit-nongit2-'));
+    try {
+      const verdict = evaluateFreshness(null, nonGitDir);
+      expect(verdict.state).toBe('unknown-provenance');
+      expect(verdict.currentHead).toBeNull();
+      expect(verdict.dirtyFiles).toBeUndefined();
+      expect(verdict.porcelainReadFailed).toBeUndefined();
+    } finally {
+      fs.rmSync(nonGitDir, { recursive: true, force: true });
+    }
+  });
+
+  it('W-6：committed diff 的 argv 钉住 --no-renames 等价 pin、diff.relative=false 与 --end-of-options（三者各自承重）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 2;\n');
+    commitAll(repoDir, 'change');
+    mockedExecFileSync.mockClear();
+    evaluateFreshness(graphHead, repoDir, computeCollectorFingerprint());
+    const diffCall = mockedExecFileSync.mock.calls.find((call) => Array.isArray(call[1]) && (call[1] as string[]).includes('diff'));
+    expect(diffCall).toBeDefined();
+    const args = diffCall![1] as string[];
+    expect(args.slice(0, 4)).toEqual(['-c', 'diff.renames=false', '-c', 'diff.relative=false']);
+    expect(args).toContain('--end-of-options');
+    expect(args.indexOf('--end-of-options')).toBeLessThan(args.indexOf(graphHead));
+  });
+
+  it('W-6 实证：diff.relative=true + projectRoot 在子目录时，仓库根的采集面改动仍判 stale（pin 不是装饰）', () => {
+    fs.writeFileSync(path.join(repoDir, 'top.ts'), 'export const t = 1;\n');
+    fs.mkdirSync(path.join(repoDir, 'sub'));
+    fs.writeFileSync(path.join(repoDir, 'sub', 'a.ts'), 'export const a = 1;\n');
+    const graphHead = commitAll(repoDir, 'init');
+    realGit(repoDir, ['config', 'diff.relative', 'true']);
+    fs.writeFileSync(path.join(repoDir, 'top.ts'), 'export const t = 2;\n');
+    commitAll(repoDir, 'change top');
+    const verdict = evaluateFreshness(graphHead, path.join(repoDir, 'sub'), computeCollectorFingerprint());
+    expect(verdict.state).toBe('stale');
+    expect(verdict.committedSourceChanges).toEqual(['top.ts']);
+  });
+
+  it('I-4：isCommitSha 形态边界——40 / 64 hex 合法；39 / 41 hex、大写、非 hex 都不合法', () => {
+    expect(isCommitSha('a'.repeat(40))).toBe(true);
+    expect(isCommitSha('b'.repeat(64))).toBe(true);
+    for (const bad of ['a'.repeat(39), 'a'.repeat(41), 'a'.repeat(63), 'A'.repeat(40), 'g'.repeat(40), 'HEAD', 'main', '']) {
+      expect(isCommitSha(bad), bad).toBe(false);
+    }
+  });
+
+  it('M10：写盘侧 isSourceTreeDirty 在 porcelain 读取失败时按脏保守记录（docstring 明写的不变量）', () => {
+    fs.writeFileSync(path.join(repoDir, 'a.ts'), 'export const a = 1;\n');
+    commitAll(repoDir, 'init');
+    mockedExecFileSync.mockImplementationOnce(() => {
+      throw new Error('ENOBUFS');
+    });
+    expect(isSourceTreeDirty(repoDir)).toBe(true);
   });
 });

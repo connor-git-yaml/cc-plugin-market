@@ -51,8 +51,17 @@ export const IGNORE_ORACLE_DEGRADED_TOKEN = '[oracle-degraded]';
  */
 function describeStaleReason(reason, freshness) {
   switch (reason) {
-    case 'source-commit':
-      return `source-commit：图记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${freshness.currentHead ?? 'null'}）不一致`;
+    case 'source-commit': {
+      const changes = Array.isArray(freshness.committedSourceChanges) ? freshness.committedSourceChanges : undefined;
+      const detail = changes === undefined
+        ? ''
+        : changes.length === 0
+          ? '（该 commit 不在当前历史，或记录的 sourceCommit 不是合法 commit SHA）'
+          : `（${changes.slice(0, 5).join(', ')}${changes.length > 5 ? ` … 共 ${changes.length} 个` : ''}）`;
+      return `source-commit：图记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD ${freshness.currentHead ?? 'null'} 之间采集面源码有差异${detail}`;
+    }
+    case 'source-tree-dirty-at-build':
+      return 'source-tree-dirty-at-build：图采集自有未提交源码改动的工作树而当前树已干净，被丢弃的未提交内容可能仍在图里，请在干净工作树上重建';
     case 'collector-fingerprint':
       return 'collector-fingerprint：图记录的 collector fingerprint 与当前采集器实现不一致（采集面或 behaviorVersion 已变更）';
     case 'collector-fingerprint-unrecorded':
@@ -346,12 +355,22 @@ export function validateGraphQuality({ projectRoot }) {
       recordedSourceCommit: report.freshness.recordedSourceCommit,
       currentHead: report.freshness.currentHead,
       staleReasons,
+      // M11 卡 D：路径清单与原因同源透传（此前只在 --json 全量报告里有，repo:check 的结构化 evidence 拿不到）；
+      // evidence 同样有界（前 20 条 + 总数），两个 commit 之间的采集面改动可达几百条
+      committedSourceChanges: Array.isArray(report.freshness.committedSourceChanges) ? report.freshness.committedSourceChanges.slice(0, 20) : [],
+      committedSourceChangeCount: Array.isArray(report.freshness.committedSourceChanges) ? report.freshness.committedSourceChanges.length : 0,
+      builtFromDirtyTree: report.freshness.builtFromDirtyTree === true,
     }),
   );
   if (report.freshness.state === 'stale') {
     warnings.push(describeFreshnessStale(report.freshness, staleReasons));
   }
   // 'dirty' 态刻意不产生 warning（FR-026），checks 条目仍记录 state 供人工查看。
+  // 例外（M11 卡 D，delta 复审 CRITICAL-2）：图采集自脏工作树而树仍脏——图内容可能含已丢弃的未提交改动，与「提交前常态脏」
+  // 是两件事，须可见；文案只提示在干净树上重建，不阻断。
+  if (report.freshness.state === 'dirty' && report.freshness.builtFromDirtyTree === true) {
+    warnings.push('freshness：图采集自有未提交源码改动的工作树（sourceTreeDirty），当前树仍脏，图内容可能含已丢弃的未提交改动；提交或清理后在干净树上重建（repo:sync 末步会自动做）');
+  }
 
   const status = errors.length > 0 ? 'fail' : warnings.length > 0 ? 'warn' : 'pass';
   return { status, checks, warnings, errors };

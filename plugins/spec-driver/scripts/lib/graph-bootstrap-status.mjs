@@ -43,7 +43,8 @@ export const DEFAULT_FRESHNESS_DEADLINE_MS = 5000;
 // 或长时间阻塞。读取前先 stat，超限直接判不可评估，不读入内存。
 export const MAX_JSON_BYTES = 256 * 1024 * 1024;
 
-const FRESHNESS_STATES = new Set(['fresh', 'dirty', 'stale', 'unknown-provenance']);
+/** freshness 取值域的 canonical 集合（repo-maintenance-core / graph-consumption-decision 从这里 import，不各留一份拷贝） */
+export const FRESHNESS_STATES = new Set(['fresh', 'dirty', 'stale', 'unknown-provenance']);
 const ACCEPTED_FRESHNESS_EXIT_CODES = new Set([0, 1, 2]);
 
 /**
@@ -59,7 +60,9 @@ const ACCEPTED_FRESHNESS_EXIT_CODES = new Set([0, 1, 2]);
  * 反引号/`$` 会在 shell 双引号语境里触发命令替换/变量展开，双引号与反斜杠会破坏 sed 提取。
  */
 const STALE_REASON_PHRASES = {
-  'source-commit': '图内嵌的 sourceCommit 与当前 worktree HEAD 不一致',
+  // M11 卡 D：source-commit 的语义已改为「两棵树之间采集面源码有差异」，HEAD 移动本身不再触发
+  'source-commit': '图记录的 sourceCommit 与当前 HEAD 之间采集面源码有差异（或该 commit 不在当前历史）',
+  'source-tree-dirty-at-build': '图采集自有未提交源码改动的工作树，当前树已干净，被丢弃的未提交内容可能仍在图里',
   'collector-fingerprint': '图记录的 collector fingerprint 与当前采集器实现不一致（采集面或行为版本已变）',
   'collector-fingerprint-unrecorded': '图未记录 collector fingerprint（本机制上线前的旧图，或绕过 CLI 写入）',
   'collector-fingerprint-invalid': '图记录的 collector fingerprint 结构畸形，不可信',

@@ -83,6 +83,7 @@ export type OrphanExceptionCategory = 'entrypoint' | 'pure-type' | 'test-export'
  */
 export type FreshnessStaleReason =
   | 'source-commit'
+  | 'source-tree-dirty-at-build'
   | 'collector-fingerprint'
   | 'collector-fingerprint-unrecorded'
   | 'collector-fingerprint-invalid';
@@ -91,7 +92,8 @@ export type FreshnessStaleReason =
  * freshness 判定的四态结果。
  * - fresh：sourceCommit 与当前 HEAD 一致、collector 指纹与当前实现一致，且工作树无未提交源码改动
  * - dirty：上述一致性均成立，但工作树存在未提交源码改动
- * - stale：sourceCommit 与当前 HEAD 不一致，或 collector 指纹不一致/缺失/畸形（原因见 staleReasons）
+ * - stale：sourceCommit 与 HEAD 两棵树之间采集面源码有差异（或 range 无法解析 / SHA 形态不合法），或图采集自脏工作树而当前树已干净，
+ *   或 collector 指纹不一致/缺失/畸形（原因见 staleReasons）
  * - unknown-provenance：sourceCommit 为 null / 缺失，或当前 HEAD 无法解析
  *   （currentHead 为 null 时绝不据此比较出 stale）
  */
@@ -101,12 +103,21 @@ export interface GraphFreshnessVerdict {
   recordedSourceCommit: string | null | undefined;
   /** 当前工作区 HEAD（null=非 git 仓库 / rev-parse 失败） */
   currentHead: string | null;
-  /** dirty 态时列出触发判定的源码文件路径（供人读摘要展示） */
+  /**
+   * 触发 dirty 判定的源码文件路径（供人读摘要展示）。M11 卡 D 起 git 可用时**每个** state 都携带测量结果：
+   * `[]` = 测过且干净（与「没测」区分），非空 = 树脏；自动重建方据此拒绝在脏树上重建（否则未提交状态被烤进图并盖上
+   * HEAD 的章）。缺席 = 未测量（git 不可用，或旧版 CLI 的输出）。
+   */
   dirtyFiles?: string[];
+  /**
+   * M11 卡 D：图记录了 `sourceTreeDirty: true`（采集自脏工作树）而当前树仍脏——内容可能含已丢弃的未提交改动，
+   * 此刻分不清；state 仍是 dirty，本字段把这一事实回显给消费方（树干净后同一记录升格为 stale `source-tree-dirty-at-build`）。
+   */
+  builtFromDirtyTree?: true;
   /**
    * FIX-3（Codex 对抗审查）：`git status --porcelain` 读取失败（如 ENOBUFS）时，
    * 保守判定为 dirty（而非误判 fresh）并显式标注本字段为 true，供人读输出提示
-   * "工作树状态读取失败，按 dirty 保守处理"。仅在 state === 'dirty' 时可能为 true。
+   * "工作树状态读取失败，按 dirty 保守处理"。dirty 态与（树状态读取失败的）stale 态可能为 true。
    */
   porcelainReadFailed?: boolean;
   /**
@@ -116,6 +127,11 @@ export interface GraphFreshnessVerdict {
    * 下游文案渲染可直接依赖该顺序（SC-007/SC-009）。`state !== 'stale'` 时字段缺席。
    */
   staleReasons?: FreshnessStaleReason[];
+  /**
+   * M11 卡 D：`staleReasons` 含 `source-commit` 时，`recordedSourceCommit..currentHead` 提交历史中改动的采集面源码路径
+   * （排序去重）。range 无法解析（历史改写 / 浅克隆）时为空数组但仍判 stale。其它情况字段缺席。
+   */
+  committedSourceChanges?: string[];
 }
 
 // ============================================================

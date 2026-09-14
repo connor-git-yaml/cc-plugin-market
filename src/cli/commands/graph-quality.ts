@@ -292,7 +292,7 @@ function downgradeForNoSymbolNodes(report: GraphQualityReport, nodeCount: number
  * 抽出来是为了让 cannot-assess 的"读到图"分支与正常分支共用同一实现，不产生第二套口径。
  */
 function evaluateGraphFreshness(graph: GraphJSON, projectRoot: string): GraphFreshnessVerdict {
-  const raw = evaluateFreshness(graph.graph.sourceCommit, projectRoot, graph.graph.fingerprint);
+  const raw = evaluateFreshness(graph.graph.sourceCommit, projectRoot, graph.graph.fingerprint, graph.graph.sourceTreeDirty);
   return { ...raw, recordedSourceCommit: raw.recordedSourceCommit ?? null };
 }
 
@@ -315,6 +315,14 @@ function computeOverallVerdict(
   return 'pass';
 }
 
+/** source-commit 文案里的路径清单：最多列 5 条并给总数；空清单意味着 range 无法解析 / SHA 形态不合法。 */
+function describeCommittedSourceChanges(changes: string[] | undefined): string {
+  if (changes === undefined) return '';
+  if (changes.length === 0) return '（该 commit 不在当前历史 / 记录的 sourceCommit 不是合法 commit SHA / git diff 失败或输出超限）';
+  const shown = changes.slice(0, 5).join(', ');
+  return changes.length > 5 ? `（${shown} … 共 ${changes.length} 个）` : `（${shown}）`;
+}
+
 /**
  * F249 FR-013：把单条 `staleReasons` 原因渲染为面向维护者的修复建议。
  *
@@ -331,7 +339,9 @@ function describeStaleReason(
 ): string {
   switch (reason) {
     case 'source-commit':
-      return `[source-commit] 图产物记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${freshness.currentHead ?? 'null'}）不一致，请重新运行 \`spectra batch --mode graph-only\` 重建图。`;
+      return `[source-commit] 图产物记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD ${freshness.currentHead ?? 'null'} 之间采集面源码有差异${describeCommittedSourceChanges(freshness.committedSourceChanges)}，请重新运行 \`spectra batch --mode graph-only\` 重建图。`;
+    case 'source-tree-dirty-at-build':
+      return '[source-tree-dirty-at-build] 图采集自有未提交源码改动的工作树，而当前工作树已干净：被丢弃的未提交内容可能仍在图里（sourceCommit 只是标签不是内容锚），请在干净工作树上重新运行 `spectra batch --mode graph-only` 重建图。';
     case 'collector-fingerprint':
       return '[collector-fingerprint] 图产物记录的 collector fingerprint 与当前采集器实现不一致（采集面或 behaviorVersion 已变更），该图可能遗漏/多计文件，请重新运行 `spectra batch --mode graph-only` 重建图。';
     case 'collector-fingerprint-unrecorded':
@@ -400,6 +410,8 @@ function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[]
       steps.push(
         '工作树状态读取失败，按 dirty 保守处理；请手动运行 `git status` 确认实际改动，或重新运行 `spectra batch --mode graph-only` 重建图。',
       );
+    } else if (report.freshness.builtFromDirtyTree === true) {
+      steps.push('图采集自有未提交源码改动的工作树（sourceTreeDirty），当前树仍脏：图内容可能含已丢弃的未提交改动，提交或清理后在干净工作树上重新运行 `spectra batch --mode graph-only` 重建图。');
     } else {
       steps.push('图可能未反映未提交改动，如需精确请先提交或重新建图。');
     }
@@ -827,7 +839,9 @@ function formatReportText(report: GraphQualityReport, builderAdvisory: string | 
       // 摘要行是扫读时唯一必看的一行
       (report.freshness.staleReasons && report.freshness.staleReasons.length > 0
         ? ` [staleReasons: ${report.freshness.staleReasons.join(', ')}]`
-        : ''),
+        : '') +
+      // M11 卡 D：图采集自脏工作树而树仍脏——state 仍是 dirty，但这一事实必须出现在扫读必看的摘要行
+      (report.freshness.builtFromDirtyTree === true ? ' [builtFromDirtyTree]' : ''),
   ];
 
   // F261：advisory 紧跟 [freshness] 之后——两者都在回答"这张图还能不能信"，只是维度不同
@@ -910,10 +924,14 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
   let report: GraphQualityReport;
   // F261：仅在成功读到合法图产物时才有 builder advisory；cannot-assess 系列没有可读的 graph.graph。
   let builderAdvisory: string | null = null;
+  // M11 卡 D（delta 复审 CRITICAL-1 / W-4）：无图可读的分支也传按当前仓库真实测出的 freshness——recordedSourceCommit
+  // 如实为 null（没图），但 currentHead 与工作树状态是真值；此前硬写 `currentHead:null` 让自动重建方误判 git 不可用，
+  // 图缺失 + 脏树时又因为看不到脏而在脏树上重建。
+  const noGraphFreshness = (): GraphFreshnessVerdict => evaluateFreshness(null, projectRoot);
   if (!graphExists) {
     report = buildCannotAssessReport(graphPath, 'graph-missing', [
       '未建图，请先运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · <2min）生成 graph.json。',
-    ]);
+    ], noGraphFreshness());
   } else {
     const raw = fs.readFileSync(graphPath, 'utf-8');
     let parsed: unknown;
@@ -925,7 +943,7 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
     if (parsed === undefined || !validateGraphJsonShape(parsed)) {
       report = buildCannotAssessReport(graphPath, 'json-parse-error', [
         '图产物损坏（JSON 解析失败，或缺少 directed/multigraph/graph/nodes/links 等基础字段，或 node.id / edge.source / edge.target 形态不合法），建议重新运行 `spectra batch --mode graph-only` 重建。',
-      ]);
+      ], noGraphFreshness());
     } else {
       // FIX-7：schemaVersion 数值比较，而非字符串相等——低于支持版本 → schema-too-old；
       // 高于支持版本（如未来更新版本 spectra 生成的图）→ schema-newer-than-supported；
@@ -935,17 +953,17 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
       if (!supportedVersion || !actualVersion) {
         report = buildCannotAssessReport(graphPath, 'json-parse-error', [
           `图产物 schemaVersion（${parsed.graph.schemaVersion}）格式不合法（应为 major.minor 数值形态，如 "2.0"），建议重新运行 \`spectra batch --mode graph-only\` 重建。`,
-        ]);
+        ], noGraphFreshness());
       } else {
         const cmp = compareSchemaVersion(actualVersion, supportedVersion);
         if (cmp < 0) {
           report = buildCannotAssessReport(graphPath, 'schema-too-old', [
             `图产物 schemaVersion（${parsed.graph.schemaVersion}）低于当前命令支持的最低版本（${MIN_SUPPORTED_SCHEMA_VERSION}），请重新运行 \`spectra batch --mode graph-only\` 重建。`,
-          ]);
+          ], noGraphFreshness());
         } else if (cmp > 0) {
           report = buildCannotAssessReport(graphPath, 'schema-newer-than-supported', [
             `图产物 schemaVersion（${parsed.graph.schemaVersion}）高于本工具当前支持的版本（${MIN_SUPPORTED_SCHEMA_VERSION}），请升级 spectra 后重试。`,
-          ]);
+          ], noGraphFreshness());
         } else if (isEmptyGraph(parsed)) {
           // F266 FR-006：结构合法但零节点零边 —— 归入既有 cannot-assess 通道继承 exit 2，
           // 不给 exit code 新增语义（FR-007），也不进 buildReport（否则六指标空态会聚合成 pass）。

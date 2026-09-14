@@ -72,7 +72,7 @@ import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/des
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { collectGenericLanguageCodeSkeletons } from './generic-language-skeleton-collector.js';
-import { resolveSourceCommit } from '../panoramic/graph/source-commit.js';
+import { isSourceTreeDirty, resolveSourceCommit } from '../panoramic/graph/source-commit.js';
 import {
   buildKnowledgeGraph,
   computeCollectorFingerprint,
@@ -1503,6 +1503,8 @@ export async function runBatch(
       // F217 FR-009：runBatch 主链基于当前工作树 AST 重新分析源码，写盘前注入 sourceCommit
       // （非 git 仓库 / rev-parse 失败时 resolveSourceCommit 返回 null，不抛异常）
       graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot);
+      // M11 卡 D：记录建图时点工作树是否脏（非 git 仓库时与 sourceCommit 同为 null）
+      graphJson.graph.sourceTreeDirty = graphJson.graph.sourceCommit === null ? null : isSourceTreeDirty(resolvedRoot);
       // F249 FR-006：与 graph-only 链路共用同一份全局组合指纹（零 I/O，见 collector-fingerprint.ts）
       graphJson.graph.fingerprint = computeCollectorFingerprint();
 

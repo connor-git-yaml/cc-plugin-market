@@ -52,7 +52,7 @@ describe('graph-quality-report.schema.json — staleReasons 契约登记（F249 
     expect(Object.keys(properties)).toContain('staleReasons');
   });
 
-  it('staleReasons 为 array，items.enum 恰为四个原因值（与 FreshnessStaleReason 联合类型对齐）', () => {
+  it('staleReasons 为 array，items.enum 恰为五个原因值（与 FreshnessStaleReason 联合类型对齐；M11 卡 D 加 source-tree-dirty-at-build）', () => {
     const properties = freshnessVerdictDef(loadSchema())['properties'] as Record<string, JsonSchema>;
     const staleReasons = properties['staleReasons'] as JsonSchema;
     expect(staleReasons['type']).toBe('array');
@@ -60,10 +60,24 @@ describe('graph-quality-report.schema.json — staleReasons 契约登记（F249 
     expect(items['type']).toBe('string');
     expect(items['enum']).toEqual([
       'source-commit',
+      'source-tree-dirty-at-build',
       'collector-fingerprint',
       'collector-fingerprint-unrecorded',
       'collector-fingerprint-invalid',
     ]);
+  });
+
+  it('M11 卡 D delta：$defs.GraphFreshnessVerdict.properties 已登记 builtFromDirtyTree（dirty 态回显「图采集自脏树」）', () => {
+    const properties = freshnessVerdictDef(loadSchema())['properties'] as Record<string, JsonSchema>;
+    expect((properties['builtFromDirtyTree'] as JsonSchema)['type']).toBe('boolean');
+  });
+
+  it('M11 卡 D：$defs.GraphFreshnessVerdict.properties 已登记 committedSourceChanges（additionalProperties:false 下未登记即整份输出非法）', () => {
+    const properties = freshnessVerdictDef(loadSchema())['properties'] as Record<string, JsonSchema>;
+    const field = properties['committedSourceChanges'] as JsonSchema;
+    expect(field).toBeDefined();
+    expect(field['type']).toBe('array');
+    expect((field['items'] as JsonSchema)['type']).toBe('string');
   });
 
   it('schema 的 enum 集合与运行时 ALL_STALE_REASONS 完全一致（防两处取值域漂移）', () => {

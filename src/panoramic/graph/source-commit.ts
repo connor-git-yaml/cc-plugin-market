@@ -2,9 +2,11 @@
  * F217 FR-009/010：sourceCommit 写盘注入 + freshness 四态判定。
  *
  * 唯一含 `child_process` 调用的模块——git 交互全部走只读命令
- * （`git rev-parse HEAD` / `git status --porcelain=v1 -z --untracked-files=all`）。
+ * （`git rev-parse HEAD` / `git status --porcelain=v1 -z --untracked-files=all` /
+ * `git diff --name-only -z --end-of-options <sha> <sha>`）。
  */
 import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { DIRTY_SOURCE_SURFACES, surfaceMatchesFile } from '../../collector-surface.js';
 import {
   computeCollectorFingerprint,
@@ -71,6 +73,28 @@ function isDirtyJudgedSourceFile(filePath: string): boolean {
 }
 
 /**
+ * M11 卡 D 对抗审查（角 A C-4）：`.gitignore`（含嵌套）是 walk 的**采集范围输入**而非旁观者——
+ * `source-discovery` 的 ts/js 与 py walk 都叠了 `isGitignored` 过滤层；只改 `.gitignore` 的 commit
+ * 会让一批文件进入 / 退出采集范围，而扩展名谓词对它必然落空。故与源码同列判定面（dirty 与 committed 两侧同源）。
+ */
+function isCollectionScopeInputFile(filePath: string): boolean {
+  return path.posix.basename(filePath) === '.gitignore';
+}
+
+function isJudgedSourceFile(filePath: string): boolean {
+  return isDirtyJudgedSourceFile(filePath) || isCollectionScopeInputFile(filePath);
+}
+
+/**
+ * git 对象名的形态校验（sha1 40 hex / sha256 64 hex）。`recordedSourceCommit` 来自 `JSON.parse` 的外部图产物，
+ * 不校验就会原样进入 git 位置参数：`-s` / `--quiet` 让 diff 输出被抑制而判 fresh，`--output=<path>` 是以调用者身份
+ * 的任意文件写，`HEAD` 这种合法 rev 无需恶意即可让判定恒 fresh（对抗审查角 A C-2 实测）。
+ */
+export function isCommitSha(value: string): boolean {
+  return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(value);
+}
+
+/**
  * 解析 `git status --porcelain=v1 -z --untracked-files=all` 的 NUL 分隔输出。
  *
  * 每条记录格式为 `XY PATH`；rename/copy 记录（X 或 Y 为 'R'/'C'）额外携带一个
@@ -99,6 +123,39 @@ function parsePorcelainZPaths(raw: string): string[] {
     i += 1;
   }
   return paths;
+}
+
+/**
+ * M11 卡 D（簇⑦）：`recordedSourceCommit..currentHead` 之间**提交历史**改动的采集面源码路径。
+ *
+ * source-commit 维度的 stale 语义由「HEAD 是否移动」改为「sourceCommit 之后的提交是否改动了采集面源码」：
+ * 只改文档 / 账本 / 图产物本身的 commit 不该让图变 stale，否则每次 commit 后 repo:check 必 warn
+ * （F270 / F275 / F277 三次再现，09-14 又手动重建两次）。判定面与 dirty 同源（`DIRTY_SOURCE_SURFACES`）。
+ * `git diff` 失败（sourceCommit 不在当前历史：历史改写 / 浅克隆）→ readFailed，调用方按 stale 保守处理。
+ */
+function getCommittedSourceChanges(projectRoot: string, fromCommit: string, toCommit: string): DirtySourceFilesResult {
+  // 不是 commit SHA 的值一律不进 argv（角 A C-2）；与「range 解析失败」同一保守出口
+  if (!isCommitSha(fromCommit) || !isCommitSha(toCommit)) {
+    return { paths: [], readFailed: true };
+  }
+  let raw: string;
+  try {
+    raw = execFileSync(
+      'git',
+      [
+        // 角 A C-1 / 角 B C-2：默认 diff.renames=true 会把「采集面 → 非采集面」的改名折叠成只列目的路径，旧路径从此
+        // 不进谓词；角 A W-7：diff.relative 会按 cwd 截断路径集。两项都钉死，判定不随用户 git 配置漂移。
+        '-c', 'diff.renames=false',
+        '-c', 'diff.relative=false',
+        'diff', '--name-only', '-z', '--end-of-options', fromCommit, toCommit,
+      ],
+      { cwd: projectRoot, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: MAX_GIT_OUTPUT_BYTES },
+    );
+  } catch {
+    return { paths: [], readFailed: true };
+  }
+  const changed = raw.split('\x00').filter((p) => p.length > 0 && isJudgedSourceFile(p));
+  return { paths: [...new Set(changed)].sort(), readFailed: false };
 }
 
 /** getDirtySourceFiles 的结果：区分"读取成功但可能为空"与"读取本身失败"（FIX-3）。 */
@@ -130,8 +187,19 @@ function getDirtySourceFiles(projectRoot: string): DirtySourceFilesResult {
   if (!raw) return { paths: [], readFailed: false };
 
   const allPaths = parsePorcelainZPaths(raw);
-  const dirtyPaths = allPaths.filter((p) => isDirtyJudgedSourceFile(p));
+  const dirtyPaths = allPaths.filter((p) => isJudgedSourceFile(p));
   return { paths: [...new Set(dirtyPaths)].sort(), readFailed: false };
+}
+
+/**
+ * M11 卡 D：建图时点的工作树是否脏（判定面与 freshness 的 dirty 同源）。写盘链路把结果记进
+ * `graph.graph.sourceTreeDirty`——`sourceCommit` 只是标签不是内容锚：脏树上建的图含未提交内容却盖着 HEAD 的章，
+ * 改动丢弃后树干净、HEAD 未动、committed diff 为空，三维全看不出图里残留着任何 commit 都不存在的节点
+ * （对抗审查角 A W-6 / 角 B C-1 实测）。porcelain 读取失败按脏保守记录。
+ */
+export function isSourceTreeDirty(projectRoot: string): boolean {
+  const result = getDirtySourceFiles(projectRoot);
+  return result.readFailed || result.paths.length > 0;
 }
 
 /**
@@ -156,11 +224,27 @@ function collectStaleReasons(
   recordedSourceCommit: string,
   currentHead: string,
   recordedFingerprint: unknown,
-): FreshnessStaleReason[] {
+  projectRoot: string,
+  recordedSourceTreeDirty: unknown,
+  dirtyResult: DirtySourceFilesResult,
+): { reasons: FreshnessStaleReason[]; committedSourceChanges?: string[] } {
   const reasons: FreshnessStaleReason[] = [];
+  let committedSourceChanges: string[] | undefined;
 
   if (recordedSourceCommit !== currentHead) {
-    reasons.push('source-commit');
+    // M11 卡 D：HEAD 移动本身不构成 stale，两棵树之间采集面源码有差异才算（两点 diff 是树比较：中途改了又改回来判 fresh
+    // 是对的，三点 diff 会把「图建在后代、HEAD 回到祖先」判成 fresh）；range 解析失败 / SHA 形态不合法按 stale 保守处理
+    const committed = getCommittedSourceChanges(projectRoot, recordedSourceCommit, currentHead);
+    if (committed.readFailed || committed.paths.length > 0) {
+      reasons.push('source-commit');
+      committedSourceChanges = committed.paths;
+    }
+  }
+
+  // 图采集自脏工作树而当前树已干净：未提交内容要么已提交（上面的 committed diff 抓得到）要么已丢弃（三维都抓不到），
+  // 两者不可区分，只能保守判 stale。树仍脏时不升格——由调用方按既有优先级判 dirty。
+  if (recordedSourceTreeDirty === true && !dirtyResult.readFailed && dirtyResult.paths.length === 0) {
+    reasons.push('source-tree-dirty-at-build');
   }
 
   if (recordedFingerprint === null || recordedFingerprint === undefined) {
@@ -176,17 +260,19 @@ function collectStaleReasons(
     }
   }
 
-  return reasons;
+  return committedSourceChanges === undefined ? { reasons } : { reasons, committedSourceChanges };
 }
 
 /**
- * 与当前 HEAD 比对 + collector 指纹比对 + 工作树 dirty 判定，产出四态之一。
+ * 与当前 HEAD 比对（M11 卡 D：比的是 sourceCommit..HEAD 之间是否有提交改动采集面源码，不是 HEAD 是否移动）
+ * + collector 指纹比对 + 工作树 dirty 判定，产出四态之一。
  *
  * 五级优先级（F249 FR-009，顺序本身是合同的一部分）：
  * 1. recordedSourceCommit 为 null/undefined → unknown-provenance（旧图产物 / 非 AST 重建路径）
  * 2. currentHead 无法解析（非 git 仓库 / rev-parse 失败）→ unknown-provenance
  *    （绝不据此比较出 stale；指纹状态**不改变**这一短路结果，SC-017）
- * 3. 聚合 stale：commit mismatch 与三类指纹原因任一命中 → stale + staleReasons
+ * 3. 聚合 stale：commit 区间源码差异 / 脏树建图且树已干净 / 三类指纹原因任一命中 → stale + staleReasons
+ *    （stale 的 verdict 同时携带工作树状态字段，供自动重建方拒绝在脏树上重建）
  * 4. 工作树存在未提交源码改动 → dirty
  * 5. 否则 fresh
  *
@@ -201,16 +287,9 @@ export function evaluateFreshness(
   recordedSourceCommit: string | null | undefined,
   projectRoot: string,
   recordedFingerprint?: unknown,
+  recordedSourceTreeDirty?: unknown,
 ): GraphFreshnessVerdict {
   const currentHead = resolveSourceCommit(projectRoot);
-
-  if (recordedSourceCommit === null || recordedSourceCommit === undefined) {
-    return {
-      state: 'unknown-provenance',
-      recordedSourceCommit,
-      currentHead,
-    };
-  }
 
   if (currentHead === null) {
     return {
@@ -220,23 +299,52 @@ export function evaluateFreshness(
     };
   }
 
-  const staleReasons = collectStaleReasons(recordedSourceCommit, currentHead, recordedFingerprint);
+  // 工作树状态先于任何判定读取，且**每个** verdict 都携带测量结果（`dirtyFiles: []` 表示「测过且干净」，与「没测」区分；
+  // 读取失败记 porcelainReadFailed）：stale 的 verdict 此前短路在 dirty 之前，repo:sync 在「stale」上看不到树是脏的，
+  // 会把未提交状态烤进图（角 B C-1）；图缺失 / 损坏时同样要能回答「树脏不脏」（delta 复审 W-4）。state 的优先级不变。
+  const dirtyResult = getDirtySourceFiles(projectRoot);
+  const treeState = dirtyResult.readFailed
+    ? { porcelainReadFailed: true as const }
+    : { dirtyFiles: dirtyResult.paths };
+
+  if (recordedSourceCommit === null || recordedSourceCommit === undefined) {
+    return {
+      state: 'unknown-provenance',
+      recordedSourceCommit,
+      currentHead,
+      ...treeState,
+    };
+  }
+
+  const { reasons: staleReasons, committedSourceChanges } = collectStaleReasons(
+    recordedSourceCommit,
+    currentHead,
+    recordedFingerprint,
+    projectRoot,
+    recordedSourceTreeDirty,
+    dirtyResult,
+  );
   if (staleReasons.length > 0) {
     return {
       state: 'stale',
       recordedSourceCommit,
       currentHead,
       staleReasons,
+      ...(committedSourceChanges !== undefined ? { committedSourceChanges } : {}),
+      ...treeState,
     };
   }
 
-  const dirtyResult = getDirtySourceFiles(projectRoot);
+  // 图采集自脏工作树而树仍脏：内容可能含已丢弃的未提交改动，但此刻分不清；state 仍是 dirty，
+  // 用 builtFromDirtyTree 把这一事实回显给消费方（delta 复审 CRITICAL-2：此前该记录在树脏期间被整个扔掉，零信号）
+  const builtFromDirtyTree = recordedSourceTreeDirty === true ? { builtFromDirtyTree: true as const } : {};
   if (dirtyResult.readFailed) {
     return {
       state: 'dirty',
       recordedSourceCommit,
       currentHead,
       porcelainReadFailed: true,
+      ...builtFromDirtyTree,
     };
   }
   if (dirtyResult.paths.length > 0) {
@@ -245,6 +353,7 @@ export function evaluateFreshness(
       recordedSourceCommit,
       currentHead,
       dirtyFiles: dirtyResult.paths,
+      ...builtFromDirtyTree,
     };
   }
 
@@ -252,5 +361,6 @@ export function evaluateFreshness(
     state: 'fresh',
     recordedSourceCommit,
     currentHead,
+    dirtyFiles: [],
   };
 }

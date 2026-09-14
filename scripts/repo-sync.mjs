@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { parseCommonProjectArgs } from '../plugins/spec-driver/scripts/lib/script-cli-args.mjs';
-import { syncRepository } from './lib/repo-maintenance-core.mjs';
+import { describeRepoSyncStepResult, syncRepository } from './lib/repo-maintenance-core.mjs';
 
 const args = parseCommonProjectArgs(process.argv.slice(2), { json: false });
 const result = syncRepository(args.projectRoot);
@@ -11,7 +11,10 @@ if (args.json) {
   process.stdout.write(
     [
       '[repo-sync] completed',
-      ...result.steps.map((step) => `- ${step.id}: ${step.title}`),
+      ...result.steps.map((step) => {
+        const detail = describeRepoSyncStepResult(step.result);
+        return `- ${step.id}: ${step.title}${detail ? ` → ${detail}` : ''}${step.status === 'warn' ? ' [warn]' : ''}`;
+      }),
     ].join('\n') + '\n',
   );
 }

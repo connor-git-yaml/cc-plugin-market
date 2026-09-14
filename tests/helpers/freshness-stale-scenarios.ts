@@ -94,6 +94,7 @@ export const MISMATCHED_COMMIT = 'f'.repeat(40);
  */
 export const ALL_STALE_REASONS: readonly FreshnessStaleReason[] = [
   'source-commit',
+  'source-tree-dirty-at-build',
   'collector-fingerprint',
   'collector-fingerprint-unrecorded',
   'collector-fingerprint-invalid',
@@ -114,10 +115,11 @@ export interface FreshnessStaleScenario {
 }
 
 /**
- * SC-009 五类样本：四种单一原因 + 一种多原因并存。
+ * SC-009 六类样本：五种单一原因 + 一种多原因并存。
  *
- * 覆盖完备性理由：`staleReasons` 的取值域恰好四个（见 `FreshnessStaleReason`），四类单一原因
- * 逐一覆盖取值域，第五类覆盖"多原因并存时全部保留且顺序确定"这条独立要求（FR-009）。
+ * 覆盖完备性理由：`staleReasons` 的取值域恰好五个（见 `FreshnessStaleReason`；M11 卡 D 加
+ * `source-tree-dirty-at-build`），五类单一原因逐一覆盖取值域，第六类覆盖"多原因并存时全部保留
+ * 且顺序确定"这条独立要求（FR-009）。
  */
 export const SC009_STALE_SCENARIOS: readonly FreshnessStaleScenario[] = [
   {
@@ -125,6 +127,12 @@ export const SC009_STALE_SCENARIOS: readonly FreshnessStaleScenario[] = [
     label: 'commit 不一致、指纹一致',
     expectedStaleReasons: ['source-commit'],
     buildGraph: () => baseFreshnessGraph({ sourceCommit: MISMATCHED_COMMIT }),
+  },
+  {
+    id: 'source-tree-dirty-at-build',
+    label: 'commit 一致、指纹一致，但图采集自脏工作树而当前树已干净',
+    expectedStaleReasons: ['source-tree-dirty-at-build'],
+    buildGraph: (currentHead) => baseFreshnessGraph({ sourceCommit: currentHead, sourceTreeDirty: true }),
   },
   {
     id: 'collector-fingerprint',

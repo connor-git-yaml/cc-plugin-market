@@ -219,12 +219,22 @@
             "type": "string",
             "enum": [
               "source-commit",
+              "source-tree-dirty-at-build",
               "collector-fingerprint",
               "collector-fingerprint-unrecorded",
               "collector-fingerprint-invalid"
             ]
           },
-          "description": "F249（FR-009）：state==='stale' 时的判别原因数组，顺序确定性，多原因并存时全部保留。可选字段（state!=='stale' 时缺席），故不进 required；但因本 $defs 为 additionalProperties:false，必须显式登记于此，否则携带该字段的 --json 输出会被判非法"
+          "description": "F249（FR-009）：state==='stale' 时的判别原因数组，顺序确定性，多原因并存时全部保留。可选字段（state!=='stale' 时缺席），故不进 required；但因本 $defs 为 additionalProperties:false，必须显式登记于此，否则携带该字段的 --json 输出会被判非法。M11 卡 D 新增 source-tree-dirty-at-build（图采集自脏工作树而当前树已干净）"
+        },
+        "committedSourceChanges": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "M11 卡 D：staleReasons 含 source-commit 时，recordedSourceCommit 与 currentHead 两棵树之间有差异的采集面源码路径（排序去重）；range 无法解析或 sourceCommit 形态不合法时为空数组。其它情况字段缺席"
+        },
+        "builtFromDirtyTree": {
+          "type": "boolean",
+          "description": "M11 卡 D：图记录 sourceTreeDirty=true（采集自脏工作树）而当前树仍脏时为 true（state 仍为 dirty）；树干净后同一记录升格为 stale source-tree-dirty-at-build。其它情况字段缺席"
         }
       }
     }

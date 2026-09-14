@@ -131,6 +131,10 @@ export interface TrimmedFreshnessVerdict extends GraphFreshnessVerdict {
   dirtyFileCount?: number;
   /** 被截掉的条数；0 表示未截断 */
   dirtyFilesTruncated?: number;
+  /** committedSourceChanges 的全量条数（存在该字段时必带；M11 卡 D） */
+  committedSourceChangeCount?: number;
+  /** committedSourceChanges 被截掉的条数；0 表示未截断 */
+  committedSourceChangesTruncated?: number;
 }
 
 /** MCP 返回体里 `dirtyFiles` 的呈现上限（超出部分只报计数，见 TrimmedFreshnessVerdict） */
@@ -382,7 +386,7 @@ function getOrComputeCacheEntry(
 
   const evaluate = deps?.evaluateFreshnessFn ?? evaluateFreshness;
   const meta = graph.graphData.graph;
-  const verdict = trimVerdictForMcp(evaluate(meta.sourceCommit, projectRoot, meta.fingerprint));
+  const verdict = trimVerdictForMcp(evaluate(meta.sourceCommit, projectRoot, meta.fingerprint, meta.sourceTreeDirty));
   const entry: HonestyCacheEntry = {
     graphPath: graph.graphPath,
     mtimeMs: graph.mtimeMs,
@@ -406,14 +410,28 @@ function getOrComputeCacheEntry(
  * 保证"这里只给了前 N 条"可见 —— 静默截断本身就是一种失真。
  */
 function trimVerdictForMcp(verdict: GraphFreshnessVerdict): TrimmedFreshnessVerdict {
+  let trimmed: TrimmedFreshnessVerdict = verdict;
   const files = verdict.dirtyFiles;
-  if (files === undefined) return verdict;
-  return {
-    ...verdict,
-    dirtyFiles: files.slice(0, MCP_DIRTY_FILES_LIMIT),
-    dirtyFileCount: files.length,
-    dirtyFilesTruncated: Math.max(0, files.length - MCP_DIRTY_FILES_LIMIT),
-  };
+  if (files !== undefined) {
+    trimmed = {
+      ...trimmed,
+      dirtyFiles: files.slice(0, MCP_DIRTY_FILES_LIMIT),
+      dirtyFileCount: files.length,
+      dirtyFilesTruncated: Math.max(0, files.length - MCP_DIRTY_FILES_LIMIT),
+    };
+  }
+  // M11 卡 D（delta 复审 W-1）：图 stale 期间两个 commit 之间的采集面改动可达几百条（本仓两周区间实测 324 条 / 18.8 KB），
+  // 每次 MCP 调用都带进 agent 上下文纯属浪费预算——同 dirtyFiles 一样有界化，计数与截断量显式可见
+  const changes = verdict.committedSourceChanges;
+  if (changes !== undefined) {
+    trimmed = {
+      ...trimmed,
+      committedSourceChanges: changes.slice(0, MCP_DIRTY_FILES_LIMIT),
+      committedSourceChangeCount: changes.length,
+      committedSourceChangesTruncated: Math.max(0, changes.length - MCP_DIRTY_FILES_LIMIT),
+    };
+  }
+  return trimmed;
 }
 
 // ============================================================
@@ -803,9 +821,9 @@ function buildComparisonScope(
 /**
  * 把 freshness verdict 翻译成工作树状态的三态判定 + 人读说明。
  *
- * 关键：只有 `fresh` 与"确实读到了 porcelain 结果"的 `dirty` 才是**测量过**的结论。
- * `stale` 在 `evaluateFreshness` 的优先级里排在 dirty 检测之前并短路返回，
- * 此时 `git status` 一次都没跑过 —— 任何 true/false 都是编的。
+ * 关键：只认**测量过**的结论。M11 卡 D 起 `evaluateFreshness` 在 git 可用时先读 porcelain、每个 state 都带
+ * `dirtyFiles`（`[]` = 测过且干净）或 `porcelainReadFailed`；字段缺席（git 不可用 / 旧版判定器的 stale 短路）
+ * 才是「没测」，任何 true/false 都是编的。
  */
 function describeWorkingTreeState(
   verdict: GraphFreshnessVerdict | null,
@@ -826,6 +844,14 @@ function describeWorkingTreeState(
     case 'fresh':
       return { value: false, suffix: '当前工作树无未提交的源码改动' };
     case 'stale':
+      if (verdict.porcelainReadFailed === true) {
+        return { value: null, suffix: '当前工作树状态检测失败（git status 读取失败），保守按可能有未提交改动处理' };
+      }
+      if (Array.isArray(verdict.dirtyFiles)) {
+        return verdict.dirtyFiles.length > 0
+          ? { value: true, suffix: '当前工作树另有未提交的源码改动（图已陈旧，两者叠加），未纳入本次比较' }
+          : { value: false, suffix: '当前工作树无未提交的源码改动（图已陈旧，但工作树干净）' };
+      }
       return { value: null, suffix: '当前工作树是否另有未提交改动未判定（图已陈旧，工作树状态未检测）' };
     default:
       return { value: null, suffix: '当前工作树是否另有未提交改动未判定（图来源版本不可知，工作树状态未检测）' };
