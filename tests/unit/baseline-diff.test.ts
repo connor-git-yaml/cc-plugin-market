@@ -182,14 +182,15 @@ describe('baseline-diff', () => {
       expect(r.schemaError).toMatch(/major version mismatch/);
     });
 
-    it('rejects minor version mismatch unless --ignore-quality', async () => {
+    it('minor version mismatch 只提示不拒绝（M11 卡 E delta W-Δ4：升版流程要拿 commit 历史里的旧 fixture 对比）；major mismatch 仍拒绝', async () => {
       const { diff } = await loadDiff();
       const oldP = writeFixture('old.json', makeFixture({ schemaVersion: '1.0' }));
       const newP = writeFixture('new.json', makeFixture({ schemaVersion: '1.1' }));
-      const strict = diff({ oldPath: oldP, newPath: newP, mode: 'regression', ignoreQuality: false });
-      expect(strict.overall).toBe('schema-mismatch');
-      const lenient = diff({ oldPath: oldP, newPath: newP, mode: 'regression', ignoreQuality: true });
-      expect(lenient.overall).toBe('pass');
+      const minor = diff({ oldPath: oldP, newPath: newP, mode: 'regression', ignoreQuality: false });
+      expect(minor.overall).toBe('pass');
+      expect(String(minor.schemaWarning)).toMatch(/1\.0 vs 1\.1/);
+      const major = diff({ oldPath: oldP, newPath: writeFixture('v2.json', makeFixture({ schemaVersion: '2.0' })), mode: 'regression', ignoreQuality: false });
+      expect(major.overall).toBe('schema-mismatch');
     });
   });
 
@@ -224,5 +225,42 @@ describe('baseline-diff', () => {
       expect(node.severity).toBe('red');
       expect(node.deltaPct).toBeNull();
     });
+  });
+});
+
+describe('M11 卡 E 对抗审查回补（W-5 / W-6 / delta W-Δ3 / W-Δ4）', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'baseline-diff-m11e-'));
+  const writeFixture = (name: string, value: Record<string, unknown>): string => {
+    const p = join(scratch, name);
+    writeFileSync(p, JSON.stringify(value));
+    return p;
+  };
+
+  it('perf.estimatedCostUsd 不再是回归门指标：它随缓存冷热变化（同 commit 同 token 数可差 3.4×），只展示不判定', async () => {
+    const { REGRESSION_THRESHOLDS, DISPLAY_ONLY_DIMENSIONS } = await import('../../scripts/baseline-diff.mjs');
+    expect(Object.keys(REGRESSION_THRESHOLDS)).not.toContain('perf.estimatedCostUsd');
+    expect(Object.keys(REGRESSION_THRESHOLDS)).toContain('perf.tokensInputPlusOutput');
+    expect(DISPLAY_ONLY_DIMENSIONS).toContain('perf.estimatedCostUsd');
+  });
+
+  it('只展示不判定 ≠ 从报告里消失：成本涨 24 倍时报告里仍有该行（severity=info），overall 不受影响', async () => {
+    const { diff } = await import('../../scripts/baseline-diff.mjs');
+    const oldP = writeFixture('cost-old.json', makeFixture({ schemaVersion: '1.2', perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50, estimatedCostUsd: 1 } }));
+    const newP = writeFixture('cost-new.json', makeFixture({ schemaVersion: '1.2', perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50, estimatedCostUsd: 24 } }));
+    const r = diff({ oldPath: oldP, newPath: newP, mode: 'regression', ignoreQuality: false });
+    const row = r.results.find((x: { field: string }) => x.field === 'perf.estimatedCostUsd');
+    expect(row).toMatchObject({ oldValue: 1, newValue: 24, severity: 'info' });
+    expect(r.overall).toBe('pass');
+  });
+
+  it('跨 minor 版本（1.1 vs 1.2）不再 exit 2：升版流程要拿 commit 历史里的旧 fixture 对比；只在结果里带 schemaWarning', async () => {
+    const { diff, checkSchemaCompat } = await import('../../scripts/baseline-diff.mjs');
+    expect(checkSchemaCompat({ schemaVersion: '1.1' }, { schemaVersion: '1.2' }, false).ok).toBe(true);
+    expect(checkSchemaCompat({ schemaVersion: '1.1' }, { schemaVersion: '2.0' }, false).ok).toBe(false);
+    const oldP = writeFixture('v11.json', makeFixture({ schemaVersion: '1.1', perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50, estimatedCostUsd: 1 } }));
+    const newP = writeFixture('v12.json', makeFixture({ schemaVersion: '1.2', perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50, estimatedCostUsd: 1 } }));
+    const r = diff({ oldPath: oldP, newPath: newP, mode: 'regression', ignoreQuality: false });
+    expect(r.overall).toBe('pass');
+    expect(String(r.schemaWarning)).toMatch(/1\.1 vs 1\.2/);
   });
 });

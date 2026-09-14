@@ -18,7 +18,10 @@ skeletonHash: {{frontmatter.skeletonHash}}
 {{/if}}{{#if frontmatter.tokenUsage}}tokenUsage:
   input: {{frontmatter.tokenUsage.input}}
   output: {{frontmatter.tokenUsage.output}}
-durationMs: {{frontmatter.durationMs}}
+{{#if frontmatter.tokenUsage.cacheCreation}}  cacheCreation: {{frontmatter.tokenUsage.cacheCreation}}
+{{/if}}{{#if frontmatter.tokenUsage.cacheRead}}  cacheRead: {{frontmatter.tokenUsage.cacheRead}}
+{{/if}}{{#if frontmatter.reportedCostUsd}}reportedCostUsd: {{frontmatter.reportedCostUsd}}
+{{/if}}durationMs: {{frontmatter.durationMs}}
 llmModel: "{{frontmatter.llmModel}}"
 fallbackReason: {{#if frontmatter.fallbackReason}}"{{frontmatter.fallbackReason}}"{{else}}null{{/if}}
 {{/if}}{{#if frontmatter.generatedByMode}}generatedByMode: {{frontmatter.generatedByMode}}

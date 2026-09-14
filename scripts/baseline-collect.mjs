@@ -26,7 +26,7 @@ import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SCHEMA_VERSION = '1.1'; // F147 升级：加 quality 段 + frozenFixture/pinnedAt/staleAfterDate/upstreamVersion
+export const SCHEMA_VERSION = '1.2'; // F147 1.1：加 quality 段 + frozenFixture/pinnedAt/staleAfterDate/upstreamVersion；M11 卡 E 1.2：perf 加 tokensCacheCreation / tokensCacheRead / reportedCostUsd，estimatedCostUsd 定义改为「CLI 报告成本优先、回退公式按缓存 TTL 定价」
 const COLLECTOR_VERSION = '0.3.0'; // F147 minor bump
 const STALE_AFTER_MONTHS = 6; // 竞品 fixture 超期 warning 阈值（自己 fixture 的 staleAfterDate 实际不强制）
 
@@ -216,11 +216,26 @@ export function findLatestBatchSummary(metaDir) {
   return candidates.length > 0 ? path.join(metaDir, candidates[0]) : null;
 }
 
+/**
+ * 「CLI 报告成本 (USD)」行的覆盖率注解 → { covered, total }；无注解（全覆盖）→ { covered: null, total: null, full: true }；无该行 → null。
+ * @param {string|null} reportedCostStr
+ */
+export function parseReportedCostCoverage(reportedCostStr) {
+  if (!reportedCostStr) return null;
+  const m = /（(\d+)\/(\d+) 个模块有报告）/.exec(reportedCostStr);
+  if (!m) return { covered: null, total: null, full: true };
+  const covered = Number(m[1]);
+  const total = Number(m[2]);
+  return { covered, total, full: covered === total };
+}
+
 export function parseBatchSummary(summaryPath) {
   const content = fs.readFileSync(summaryPath, 'utf-8');
 
   function pickRow(label) {
-    const re = new RegExp(`\\| ${label} \\| ([^|\\n]+?) \\|`, 'i');
+    // 标签按字面匹配（「CLI 报告成本 (USD)」含正则元字符）
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\| ${escaped} \\| ([^|\\n]+?) \\|`, 'i');
     const m = content.match(re);
     return m ? m[1].trim() : null;
   }
@@ -231,6 +246,11 @@ export function parseBatchSummary(summaryPath) {
   const skippedStr = pickRow('跳过');
   const inputTokensStr = pickRow('总 input tokens');
   const outputTokensStr = pickRow('总 output tokens');
+  // M11 卡 E：cache 两行由 cost-summary 恒输出；旧 batch-summary 没有这两行时为 null
+  const cacheCreationStr = pickRow('总 cache_creation tokens');
+  const cacheReadStr = pickRow('总 cache_read tokens');
+  // M11 卡 E：CLI 自报成本行（形如 "0.234517" 或 "0.500000（1/2 个模块有报告）"），取行首数字；没有该行（SDK / Codex 路径、旧产物）为 null
+  const reportedCostStr = pickRow('CLI 报告成本 (USD)');
   const llmDurationStr = pickRow('LLM 总耗时'); // 形如 "123.4s"
 
   const num = (s) => (s == null ? null : Number(s.replace(/[, ]/g, '')));
@@ -245,6 +265,11 @@ export function parseBatchSummary(summaryPath) {
     specSkippedCount: num(skippedStr),
     tokensInput: num(inputTokensStr),
     tokensOutput: num(outputTokensStr),
+    tokensCacheCreation: num(cacheCreationStr),
+    tokensCacheRead: num(cacheReadStr),
+    reportedCostUsd: reportedCostStr ? Number(/^[\d.]+/.exec(reportedCostStr)?.[0] ?? NaN) : null,
+    // 覆盖率注解「（k/n 个模块有报告）」：没有注解 = 全覆盖；部分覆盖的真值不能当整批成本（delta 复审 C-Δ2）
+    reportedCostCoverage: parseReportedCostCoverage(reportedCostStr),
     llmTotalDurationMs: llmSecs != null ? Math.round(llmSecs * 1000) : null,
   };
 }
@@ -594,7 +619,12 @@ export function assembleFixture({
       llmCallDurationsMs: llmStats.llmCallDurationsMs,
       tokensInput: batchStats.tokensInput,
       tokensOutput: batchStats.tokensOutput,
-      tokensCacheRead: null, // batch-summary 当前未输出 cache_read，留 null
+      // M11 卡 E：tokensInput 是 input + cache_creation + cache_read 的和；两项单列供成本口径
+      tokensCacheCreation: batchStats.tokensCacheCreation ?? null,
+      tokensCacheRead: batchStats.tokensCacheRead ?? null,
+      // CLI 自报成本（真值）；estimatedCostUsd 只在全覆盖时取它，否则按公式回退。两者都随缓存冷热变化，不是 token 的确定函数
+      reportedCostUsd: batchStats.reportedCostUsd ?? null,
+      reportedCostCoverage: batchStats.reportedCostCoverage ?? null,
       estimatedCostUsd: estimateCostUsd(batchStats, model),
       memoryPeakKb,
     },
@@ -622,7 +652,7 @@ export function upgradeFixtureToV11({ fixturePath, outputDir, projectRoot, froze
   }
   const old = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   if (old.schemaVersion === SCHEMA_VERSION && !force) {
-    return { upgraded: false, reason: 'already at 1.1 (use --force to recompute quality)' };
+    return { upgraded: false, reason: `already at ${SCHEMA_VERSION} (use --force to recompute quality)` };
   }
   // 读现有 outputDir 算 quality 段（不重跑 batch）
   const qualitySection = outputDir && fs.existsSync(outputDir)
@@ -631,9 +661,15 @@ export function upgradeFixtureToV11({ fixturePath, outputDir, projectRoot, froze
   const nowIso = new Date().toISOString();
   const staleAfterDate = new Date(Date.now() + STALE_AFTER_MONTHS * 30 * 24 * 3600 * 1000)
     .toISOString().slice(0, 10);
+  // 只换版本号不补字段会铸出「自称 1.2 但 perf 里没有 cache / 报告成本键」的假 1.2：缺的键补显式 null（= 未采集，不是 0）
+  const perfWithSchemaKeys = { ...(old.perf ?? {}) };
+  for (const key of SCHEMA_1_2_PERF_KEYS) {
+    if (!Object.hasOwn(perfWithSchemaKeys, key)) perfWithSchemaKeys[key] = null;
+  }
   const upgraded = {
     ...old,
     schemaVersion: SCHEMA_VERSION,
+    perf: perfWithSchemaKeys,
     meta: {
       ...old.meta,
       collectorVersion: COLLECTOR_VERSION,
@@ -648,14 +684,30 @@ export function upgradeFixtureToV11({ fixturePath, outputDir, projectRoot, froze
   return { upgraded: true, fixturePath, qualityNonNull: qualitySection != null };
 }
 
-function estimateCostUsd(batchStats, model) {
-  if (batchStats.tokensInput == null || batchStats.tokensOutput == null) return null;
-  // sonnet-4-6 价格：input $3/Mtok, output $15/Mtok（文档值，非 fact-checked，可在 plan 后续修订）
-  if (model && /sonnet/.test(model)) {
-    const cost = (batchStats.tokensInput * 3 + batchStats.tokensOutput * 15) / 1_000_000;
-    return Math.round(cost * 100) / 100;
+// claude-sonnet-4-6 单价（美元 / 百万 token）：input 3 / output 15；缓存读取 0.1× = 0.30；缓存创建按 **1 小时档 2× = 6**——
+// Claude Code 2.1.270 的缓存写入 100% 落在 `usage.cache_creation.ephemeral_1h_input_tokens`（对抗审查 C-1 用 total_cost_usd 三次对账，
+// 小数第 9 位全落在 $6 上；5 分钟档 1.25× = 3.75 低估 36%）。tokensInput 是三项之和（Fix 134），fresh = input − creation − read。
+// 本公式只是**回退**：有 CLI 自报的 total_cost_usd 时一律采用真值（自动跟随定价与 TTL）。
+const SONNET_PRICING_USD_PER_MTOK = Object.freeze({ input: 3, output: 15, cacheCreation: 6, cacheRead: 0.3 });
+
+export function estimateCostUsd(batchStats, model) {
+  // CLI 自报成本只在「有限、大于 0、覆盖全部模块」时当真值：部分覆盖（如 debt-intelligence 记录不带报告）会把子集当整批
+  // （delta 复审 C-Δ2 实测 1617× 低估）；0 与 NaN 都不是真值
+  const coverage = batchStats.reportedCostCoverage;
+  const fullCoverage = coverage == null ? true : coverage.full === true;
+  if (typeof batchStats.reportedCostUsd === 'number' && Number.isFinite(batchStats.reportedCostUsd) && batchStats.reportedCostUsd > 0 && fullCoverage) {
+    return batchStats.reportedCostUsd;
   }
-  return null;
+  if (batchStats.tokensInput == null || batchStats.tokensOutput == null) return null;
+  if (!model || !/sonnet/.test(model)) return null;
+  const creation = batchStats.tokensCacheCreation ?? 0;
+  const read = batchStats.tokensCacheRead ?? 0;
+  const fresh = batchStats.tokensInput - creation - read;
+  // 口径自相矛盾（input 不是三项之和）→ 不估，而不是静默夹成 0
+  if (fresh < 0) return null;
+  const p = SONNET_PRICING_USD_PER_MTOK;
+  const cost = (fresh * p.input + creation * p.cacheCreation + read * p.cacheRead + batchStats.tokensOutput * p.output) / 1_000_000;
+  return Math.round(cost * 100) / 100;
 }
 
 // ============================================================
@@ -668,6 +720,9 @@ function estimateCostUsd(batchStats, model) {
  *   且 fixture schema 完整（targetCommit / targetFileCountsByType / perf 关键字段非 null）。
  *   不再 enforce "≥ 500 文件"硬性要求；改成"已选定 baseline 的覆盖完整"。
  */
+/** schema 1.2 新增的 perf 键（M11 卡 E）：验收只查存在性，值允许 null */
+const SCHEMA_1_2_PERF_KEYS = ['tokensCacheCreation', 'tokensCacheRead', 'reportedCostUsd', 'reportedCostCoverage'];
+
 export function verifyArtifacts({ rootDir }) {
   const baselineDir = path.join(rootDir, 'tests/baseline');
   const errors = [];
@@ -692,6 +747,12 @@ export function verifyArtifacts({ rootDir }) {
     }
     if (parsed.perf?.tokensInput == null) {
       errors.push(`fixture ${path.relative(rootDir, fixturePath)} has null perf.tokensInput`);
+    }
+    // schema 1.2 的字段存在性（值可为 null，但键必须在）：只换版本号的假 1.2 在这里被抓（delta 复审 C-Δ1）
+    for (const key of SCHEMA_1_2_PERF_KEYS) {
+      if (!parsed.perf || !Object.hasOwn(parsed.perf, key)) {
+        errors.push(`fixture ${path.relative(rootDir, fixturePath)} missing perf.${key} (schema ${SCHEMA_VERSION} field)`);
+      }
     }
     if (!parsed.meta?.targetFileCountsByType) {
       errors.push(`fixture ${path.relative(rootDir, fixturePath)} missing meta.targetFileCountsByType`);

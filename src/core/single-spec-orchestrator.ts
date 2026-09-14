@@ -473,6 +473,10 @@ export async function generateSpec(
   // Feature 127：成本元数据采集
   let costInputTokens = 0;
   let costOutputTokens = 0;
+  let costCacheCreationTokens = 0;
+  let costCacheReadTokens = 0;
+  // M11 卡 E：CLI 自报成本只在有报告时累加，缺席（SDK / Codex 路径）时保持缺席而不是 0
+  let costReportedUsd: number | undefined;
   let costDurationMs = 0;
   let costLlmModel = '';
   let costFallbackReason: string | null = null;
@@ -512,14 +516,21 @@ export async function generateSpec(
     // Feature 127：记录 LLM#1 成本
     costInputTokens += llmResponse.inputTokens;
     costOutputTokens += llmResponse.outputTokens;
+    costCacheCreationTokens += llmResponse.cacheCreationInputTokens ?? 0;
+    costCacheReadTokens += llmResponse.cacheReadInputTokens ?? 0;
+    if (llmResponse.reportedCostUsd !== undefined) {
+      costReportedUsd = (costReportedUsd ?? 0) + llmResponse.reportedCostUsd;
+    }
     costDurationMs += llmResponse.duration;
     costLlmModel = llmResponse.model;
   } catch (error) {
     if (error instanceof LLMUnavailableError) {
       // LLM 不可用，降级为 AST-only 输出
       llmDegraded = true;
-      warnings.push('LLM 不可用，已降级为 AST-only Spec');
-      costFallbackReason = 'LLM 不可用';
+      // delta 复审 W-Δ8：错误链（如 Claude CLI 的 subtype=error_during_execution）此前全仓没有任何落盘点，操作者永远只看到「LLM 不可用」
+      const reason = error instanceof Error && error.message ? error.message : String(error);
+      warnings.push(`LLM 不可用，已降级为 AST-only Spec（${reason}）`);
+      costFallbackReason = `LLM 不可用: ${reason}`;
       onStageProgress?.({ stage: 'llm', message: '⚠ LLM 不可用，降级为 AST-only' });
       llmContent = generateAstOnlyContent(mergedSkeleton);
     } else {
@@ -635,6 +646,11 @@ ${sections.businessLogic}
           tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
           costInputTokens += enrichResponse.inputTokens;
           costOutputTokens += enrichResponse.outputTokens;
+          costCacheCreationTokens += enrichResponse.cacheCreationInputTokens ?? 0;
+          costCacheReadTokens += enrichResponse.cacheReadInputTokens ?? 0;
+          if (enrichResponse.reportedCostUsd !== undefined) {
+            costReportedUsd = (costReportedUsd ?? 0) + enrichResponse.reportedCostUsd;
+          }
           costDurationMs += enrichResponse.duration;
 
           const enrichedContent = enrichResponse.content.trim();
@@ -684,9 +700,15 @@ ${sections.businessLogic}
 
   // Feature 127：成本元数据（LLM#1 + enrichment 累加）
   const costMetadata: CostMetadata = {
-    tokenUsage: { input: costInputTokens, output: costOutputTokens },
+    tokenUsage: {
+      input: costInputTokens,
+      output: costOutputTokens,
+      cacheCreation: costCacheCreationTokens,
+      cacheRead: costCacheReadTokens,
+    },
     durationMs: costDurationMs,
     llmModel: costLlmModel,
+    ...(costReportedUsd !== undefined ? { reportedCostUsd: Number(costReportedUsd.toFixed(6)) } : {}),
     fallbackReason: costFallbackReason,
   };
 
@@ -732,6 +754,7 @@ ${sections.businessLogic}
     durationMs: costMetadata.durationMs,
     llmModel: costMetadata.llmModel,
     fallbackReason: costMetadata.fallbackReason,
+    ...(costMetadata.reportedCostUsd !== undefined ? { reportedCostUsd: costMetadata.reportedCostUsd } : {}),
     // Feature 133 P2-1：canonical spec 显式写入 sourceKind 字段，让用户在
     // 视觉/grep 扫描时一眼识别 spec 身份（不再依赖"无字段=canonical"的隐式默认）。
     // bundle_copy / derived 类型的 spec 由 spec-store / docs-bundle 等调用方

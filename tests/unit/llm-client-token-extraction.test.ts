@@ -78,6 +78,9 @@ describe('llm-client - SDK 路径 token 提取（Fix 134）', () => {
     expect(response.inputTokens).toBe(1800);
     expect(response.outputTokens).toBe(300);
     expect(response.content).toBe('reply');
+    // M11 卡 E：三项单价相差 12.5×，SDK 路径同样把 cache 两项单列暴露
+    expect(response.cacheCreationInputTokens).toBe(200);
+    expect(response.cacheReadInputTokens).toBe(1500);
   });
 
   it('cache 子字段缺失时退化为 input_tokens 主字段（向后兼容旧响应）', async () => {
@@ -100,6 +103,8 @@ describe('llm-client - SDK 路径 token 提取（Fix 134）', () => {
     // 2000 + 0 + 0 = 2000
     expect(response.inputTokens).toBe(2000);
     expect(response.outputTokens).toBe(500);
+    expect(response.cacheCreationInputTokens).toBe(0);
+    expect(response.cacheReadInputTokens).toBe(0);
   });
 
   it('cache 子字段为 null 时退化为 0（与 Anthropic SDK 类型定义对齐）', async () => {

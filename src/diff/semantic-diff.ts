@@ -69,10 +69,15 @@ ${specDescription}
   };
 
   const systemPrompt = buildSystemPrompt('semantic-diff');
-  const context = await assembleContext(skeleton, {
-    templateInstructions: systemPrompt,
-    codeSnippets: [prompt],
-  });
+  const context = {
+    // M11 卡 E：semantic-diff 的提示只走系统位（此前两条 LLM 路径都把 spec-generation 的「必须输出 9 个章节」抬到系统位，
+    // 而本函数要的是 ```json 块——jsonMatch 失败即静默「无漂移」）；用户位不再重复同一段（delta 复审 W-Δ7）
+    ...(await assembleContext(skeleton, {
+      templateInstructions: '',
+      codeSnippets: [prompt],
+    })),
+    systemPrompt,
+  };
 
   try {
     const response = await callLLM(context);

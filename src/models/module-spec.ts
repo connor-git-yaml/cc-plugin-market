@@ -35,6 +35,10 @@ export type LanguageDistribution = z.infer<typeof LanguageDistributionSchema>;
 export const TokenUsageSchema = z.object({
   input: z.number().int().nonnegative(),
   output: z.number().int().nonnegative(),
+  /** input 中写入缓存的部分（单价按缓存 TTL 为基价 1.25× 或 2×，Claude Code 2.1.270 全落 1 小时档 2×；M11 卡 E，旧产物可缺省） */
+  cacheCreation: z.number().int().nonnegative().optional(),
+  /** input 中从缓存读取的部分（单价 0.1×；M11 卡 E，旧产物可缺省） */
+  cacheRead: z.number().int().nonnegative().optional(),
 });
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
@@ -74,6 +78,8 @@ export const CostMetadataSchema = z.object({
   llmModel: z.string(),
   /** 降级原因；未降级时为 null */
   fallbackReason: z.string().nullable(),
+  /** M11 卡 E：Claude CLI 自报的本模块调用成本（美元，LLM#1 + enrichment 累加；SDK / Codex 路径与旧产物缺省） */
+  reportedCostUsd: z.number().nonnegative().optional(),
 });
 export type CostMetadata = z.infer<typeof CostMetadataSchema>;
 
@@ -101,6 +107,8 @@ export const SpecFrontmatterSchema = z.object({
   llmModel: z.string().optional(),
   /** 降级原因（Feature 127）；未降级时为 null */
   fallbackReason: z.string().nullable().optional(),
+  /** M11 卡 E：Claude CLI 自报的本模块调用成本（美元）；SDK / Codex 路径与旧产物缺省 */
+  reportedCostUsd: z.number().nonnegative().optional(),
   /** 生成本 spec 时的批处理模式（Bug 142 修复）；旧 spec 缺失此字段时视为 cache miss */
   generatedByMode: z.enum(['full', 'reading', 'code-only']).optional(),
   /**

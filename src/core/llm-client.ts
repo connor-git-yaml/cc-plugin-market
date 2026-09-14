@@ -53,12 +53,21 @@ export interface LLMResponse {
   content: string;
   /** 实际使用的模型 */
   model: string;
-  /** 发送的 token 数 */
+  /** 发送的 token 数（= input + cache_creation + cache_read，Fix 134 口径） */
   inputTokens: number;
   /** 接收的 token 数 */
   outputTokens: number;
   /** 请求耗时（毫秒） */
   duration: number;
+  /** 其中写入缓存的 token（单价按缓存 TTL 为基价 1.25×（5 分钟）或 2×（1 小时，Claude Code 2.1.270 全落此档）；M11 卡 E 单列，旧 provider 可缺省；成本真值以 reportedCostUsd 为准） */
+  cacheCreationInputTokens?: number;
+  /** 其中从缓存读取的 token（单价 0.1×；M11 卡 E 单列，旧 provider 可缺省） */
+  cacheReadInputTokens?: number;
+  /**
+   * M11 卡 E：Claude Code 自报的本次调用成本（美元，`result.total_cost_usd`，已按正确的缓存 TTL 定价）。
+   * 只有 CLI 路径提供；SDK / Codex 路径缺席。成本口径以此为真值，按 token 单价的公式只作回退。
+   */
+  reportedCostUsd?: number;
 }
 
 // ============================================================
@@ -322,7 +331,8 @@ async function callLLMviaSdk(
   cfg: LLMConfig,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
-  const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
+  // M11 卡 E：调用方可自带系统提示（semantic-diff 有自己的模式），否则按 spec 生成模式构建
+  const systemPrompt = context.systemPrompt ?? buildSystemPrompt('spec-generation', cfg.languageTerminology);
 
   const client = new Anthropic({
     apiKey: cfg.apiKey,
@@ -369,6 +379,8 @@ async function callLLMviaSdk(
         inputTokens,
         outputTokens: usage.output_tokens,
         duration,
+        cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+        cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
@@ -423,9 +435,10 @@ async function callLLMviaCliProxy(
   cfg: LLMConfig,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
-  const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
-  // 将系统提示和用户内容组合为完整 prompt
-  const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
+  // M11 卡 E：与 SDK 路径对齐——系统提示走 --system-prompt，stdin 只送用户内容；
+  // 此前整段拼接进 stdin，Claude Code 自己的人设系统提示（≈ 6k）叠在前面，模型看到的是两套系统提示。
+  // 调用方自带的系统提示（semantic-diff）优先，否则按 spec 生成模式构建（对抗审查 W-8：此前两条路径都硬编码 spec-generation）。
+  const systemPrompt = context.systemPrompt ?? buildSystemPrompt('spec-generation', cfg.languageTerminology);
 
   const maxAttempts = 3;
   let lastError: Error | undefined;
@@ -436,9 +449,10 @@ async function callLLMviaCliProxy(
     }
 
     try {
-      return await cliProxyCall(fullPrompt, {
+      return await cliProxyCall(context.prompt, {
         model: cfg.model,
         timeout: cfg.timeout,
+        systemPrompt,
       });
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

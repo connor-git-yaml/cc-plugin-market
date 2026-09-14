@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { SCHEMA_VERSION as CURRENT_SCHEMA_VERSION } from '../../scripts/baseline-collect.mjs';
 
 interface CollectorModule {
   parseArgs: (argv: string[]) => {
@@ -263,13 +264,15 @@ describe('baseline-collect', () => {
 
     function validFixture(): Record<string, unknown> {
       return {
-        schemaVersion: '1.1',
+        // 跟随 collector 当前 schema（M11 卡 E 升到 1.2：perf 加 cache / reportedCostUsd 字段），不在测试里写死旧版本号
+        schemaVersion: CURRENT_SCHEMA_VERSION,
         meta: {
           tool: 'spectra',
           targetCommit: 'abc1234567',
           targetFileCountsByType: { ts: 50, tsx: 0, py: 0, md: 0, other: 0 },
         },
-        perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50 },
+        // schema 1.2 的键必须在场（值可为 null）——只换版本号的假 1.2 会被 verifyArtifacts 抓住
+        perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50, tokensCacheCreation: null, tokensCacheRead: null, reportedCostUsd: null, reportedCostCoverage: null },
       };
     }
 
@@ -289,6 +292,17 @@ describe('baseline-collect', () => {
       const r = verifyArtifacts({ rootDir: tempDir });
       expect(r.ok).toBe(true);
       expect(r.errors).toEqual([]);
+    });
+
+    it('M11 卡 E（delta C-Δ1）：自称 1.2 但 perf 缺 cache / 报告成本键的假 1.2 → fail 并点名缺的键', async () => {
+      const { verifyArtifacts } = await loadCollector();
+      const baselineDir = join(tempDir, 'tests', 'baseline');
+      writeFixturesForAll(baselineDir, (f) => {
+        f.perf = { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50 };
+      });
+      const r = verifyArtifacts({ rootDir: tempDir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.some((e: string) => e.includes('missing perf.tokensCacheCreation'))).toBe(true);
     });
 
     it('fails when required fixture missing', async () => {

@@ -34,6 +34,11 @@ export interface AssemblyOptions {
 export interface AssembledContext {
   /** 组装后的完整 prompt */
   prompt: string;
+  /**
+   * M11 卡 E：调用方自带的系统提示（如 semantic-diff）。缺席时 LLM 客户端按 spec 生成模式构建系统提示。
+   * SDK 路径进 `system:`，CLI 路径进 `--system-prompt`，两条路径同源。
+   */
+  systemPrompt?: string;
   /** token 计数 */
   tokenCount: number;
   /** 各部分 token 分布（细粒度，按内部分类）*/

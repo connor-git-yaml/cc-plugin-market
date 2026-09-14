@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "meta": {
     "tool": "spectra",
     "spectraVersion": "4.6.0",
@@ -17,7 +17,7 @@
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-09-14T09:33:17.706Z",
+    "runTimestampUtc": "2026-09-14T17:36:31.414Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
@@ -40,37 +40,39 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-09-14T09:33:17.706Z",
+    "pinnedAt": "2026-09-14T17:36:31.414Z",
     "staleAfterDate": "2027-03-13",
     "upstreamVersion": "4.6.0",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 50348,
-    "actualTokens": 981111,
-    "biasRatio": 19.49
+    "actualTokens": 210262,
+    "biasRatio": 4.18
   },
   "perf": {
-    "totalWallMs": 1913666,
+    "totalWallMs": 1472300,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 119300,
-      "p95": 195000,
-      "min": 94300,
-      "max": 195000,
+      "p50": 118500,
+      "p95": 136600,
+      "min": 96500,
+      "max": 136600,
       "samplesCount": 4
     },
-    "tokensInput": 906725,
-    "tokensOutput": 74386,
-    "tokensCacheRead": null,
-    "estimatedCostUsd": 3.84,
-    "memoryPeakKb": 549760
+    "tokensInput": 106238,
+    "tokensOutput": 104024,
+    "tokensCacheCreation": 81408,
+    "tokensCacheRead": 24791,
+    "reportedCostUsd": 2.056362,
+    "estimatedCostUsd": 2.056362,
+    "memoryPeakKb": 545312
   },
   "output": {
     "graphNodeCount": 76,
     "graphEdgeCount": 101,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 49464,
+    "graphSizeBytes": 49420,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -92,12 +94,11 @@
       "modulesWithDataModel": 6,
       "modulesWithAllFour": 6,
       "modulesWithInputsOutputs": 6,
-      "averageSpecLines": 325,
-      "shorterThan100Lines": 2,
+      "averageSpecLines": 396,
+      "shorterThan100Lines": 1,
       "longerThan1000Lines": 0,
       "outlierFiles": [
-        "_index.spec.md (63 lines, too short)",
-        "sample.spec.md (94 lines, too short)"
+        "_index.spec.md (63 lines, too short)"
       ],
       "moduleCount": 7
     },

@@ -11,12 +11,12 @@
  *   --mode=regression       默认；用 REGRESSION_THRESHOLDS 判定（黄/红）
  *   --mode=reproducibility  用 REPRODUCIBILITY_THRESHOLDS 判定（任何超阈值即 FAIL）
  *   --format=json|text      输出格式（默认 text）
- *   --ignore-quality        允许 schemaVersion 1.0 与 1.1 跨比 perf（不比 quality 字段）
+ *   --ignore-quality        保留旗标（历史用法）；minor 版本不一致现在只提示不拒绝，major 不一致仍拒绝
  *
  * 退出码：
  *   0 = PASS（含黄色 warning）
  *   1 = FAIL（红色或 reproducibility 超阈值）
- *   2 = schemaVersion mismatch（major 段不同 + 未指定 --ignore-quality）
+ *   2 = schemaVersion major 段不一致
  */
 
 import * as fs from 'node:fs';
@@ -28,10 +28,14 @@ import * as fs from 'node:fs';
 export const REGRESSION_THRESHOLDS = {
   'perf.totalWallMs': { yellowMin: 10, redMin: 20 },
   'perf.tokensInputPlusOutput': { yellowMin: 5, redMin: 15 },
-  'perf.estimatedCostUsd': { yellowMin: 10, redMin: 20 },
+  // M11 卡 E：perf.estimatedCostUsd 不再进回归门——它随缓存冷热变化（同 commit、token 数完全相同的两次采集实测 $6.98 ↔ $23.95），
+  // 不是 token 的确定函数；token 数才是回归信号，成本只展示（见 DISPLAY_ONLY_DIMENSIONS）
   'output.graphNodeCount': { yellowMin: 10, redMin: 20, twoSided: true },
   'output.specSuccessRatio': { yellowBelow: 95, redBelow: 90 },
 };
+
+/** 只展示、不判定的维度（severity 恒 info）：成本随缓存冷热变化，删出阈值表后不能从报告里消失（delta 复审 W-Δ3） */
+export const DISPLAY_ONLY_DIMENSIONS = ['perf.estimatedCostUsd', 'perf.reportedCostUsd'];
 
 export const REPRODUCIBILITY_THRESHOLDS = {
   'perf.totalWallMs': { redMin: 5, twoSided: true },
@@ -92,10 +96,12 @@ export function checkSchemaCompat(oldFx, newFx, ignoreQuality) {
   if (oldMajor !== newMajor) {
     return { ok: false, reason: `major version mismatch: ${oldV} vs ${newV}` };
   }
-  if (oldV !== newV && !ignoreQuality) {
-    // minor diff allowed only with --ignore-quality (避免 quality 字段错位)
-    return { ok: false, reason: `minor version mismatch ${oldV} vs ${newV}; pass --ignore-quality to compare perf only` };
+  // minor 不一致（1.1 vs 1.2）是升版流程的常态（CLAUDE.local.md「跑 diff 对比旧版本 fixture」），只提示不拒绝；
+  // 字段定义可能不同（如 estimatedCostUsd 1.2 起优先取 CLI 真值），提示里说明
+  if (oldV !== newV) {
+    return { ok: true, warning: `schemaVersion ${oldV} vs ${newV}：跨 minor 版本比较，字段定义可能不同（1.2 起 estimatedCostUsd 优先取 CLI 自报成本）` };
   }
+  void ignoreQuality;
   return { ok: true };
 }
 
@@ -123,6 +129,14 @@ function getValue(obj, dottedPath) {
 
 export function compareDimensions(oldFx, newFx, thresholdsTable, mode) {
   const results = [];
+  // 只展示的维度：算 Δ% 但 severity 恒 info，不参与 overall
+  for (const field of DISPLAY_ONLY_DIMENSIONS) {
+    const oldV = getValue(oldFx, field);
+    const newV = getValue(newFx, field);
+    const unavailable = oldV == null || newV == null;
+    const deltaPct = unavailable || oldV === 0 ? null : Math.round(((newV - oldV) / Math.abs(oldV)) * 1000) / 10;
+    results.push({ field, oldValue: oldV, newValue: newV, deltaPct, severity: unavailable ? 'na' : 'info' });
+  }
   for (const [field, t] of Object.entries(thresholdsTable)) {
     const oldV = getValue(oldFx, field);
     const newV = getValue(newFx, field);
@@ -211,6 +225,7 @@ export function formatText(diff, oldPath, newPath, mode, { useColor = false } = 
     lines.push(`  ${f} ${oldS} ${newS} ${dS} ${color}${sev}${reset}`);
   }
   lines.push('');
+  if (diff.schemaWarning) lines.push(`  note: ${diff.schemaWarning}`);
   lines.push(`overall: ${diff.overall}`);
   return lines.join('\n');
 }
@@ -231,7 +246,7 @@ export function diff({ oldPath, newPath, mode, ignoreQuality }) {
   const hasRed = results.some((r) => r.severity === 'red');
   const hasYellow = results.some((r) => r.severity === 'yellow');
   const overall = hasRed ? 'fail' : hasYellow ? 'warn' : 'pass';
-  return { ok: !hasRed, results, overall };
+  return { ok: !hasRed, results, overall, ...(compat.warning ? { schemaWarning: compat.warning } : {}) };
 }
 
 async function main() {

@@ -38,6 +38,14 @@ export interface EstimatedCost {
 export interface CostSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
+  /** totalInputTokens 中写入缓存的部分（单价按缓存 TTL 为基价 1.25× 或 2×，Claude Code 2.1.270 全落 1 小时档；M11 卡 E） */
+  totalCacheCreationTokens: number;
+  /** totalInputTokens 中从缓存读取的部分（单价 0.1×；M11 卡 E） */
+  totalCacheReadTokens: number;
+  /** Claude CLI 自报成本之和（美元）；没有任何模块带报告时缺席（M11 卡 E 对抗审查 C-1：成本真值） */
+  totalReportedCostUsd?: number;
+  /** 带报告成本的模块数（与 byModule.length 比较可知覆盖是否完整） */
+  reportedCostModuleCount?: number;
   totalDurationMs: number;
   /** 按模块的明细，降序排列 */
   byModule: Array<{
@@ -82,12 +90,22 @@ export function aggregateCostSummary(
 ): CostSummary {
   let totalInput = 0;
   let totalOutput = 0;
+  let totalCacheCreation = 0;
+  let totalCacheRead = 0;
   let totalDuration = 0;
   let totalLoc = 0;
+  let totalReportedCost: number | undefined;
+  let reportedCostModuleCount = 0;
 
   for (const rec of records) {
     totalInput += rec.cost.tokenUsage.input;
     totalOutput += rec.cost.tokenUsage.output;
+    totalCacheCreation += rec.cost.tokenUsage.cacheCreation ?? 0;
+    totalCacheRead += rec.cost.tokenUsage.cacheRead ?? 0;
+    if (rec.cost.reportedCostUsd !== undefined) {
+      totalReportedCost = (totalReportedCost ?? 0) + rec.cost.reportedCostUsd;
+      reportedCostModuleCount += 1;
+    }
     totalDuration += rec.cost.durationMs;
     totalLoc += rec.loc;
   }
@@ -135,6 +153,9 @@ export function aggregateCostSummary(
   const summary: CostSummary = {
     totalInputTokens: totalInput,
     totalOutputTokens: totalOutput,
+    totalCacheCreationTokens: totalCacheCreation,
+    totalCacheReadTokens: totalCacheRead,
+    ...(totalReportedCost !== undefined ? { totalReportedCostUsd: totalReportedCost, reportedCostModuleCount } : {}),
     totalDurationMs: totalDuration,
     byModule,
     byGenerator,
@@ -179,6 +200,15 @@ export function renderSummaryCostSection(summary: CostSummary): string {
   lines.push('|------|------|');
   lines.push(`| 总 input tokens | ${summary.totalInputTokens.toLocaleString()} |`);
   lines.push(`| 总 output tokens | ${summary.totalOutputTokens.toLocaleString()} |`);
+  // M11 卡 E：只要调用过 LLM 就两行都输出（为 0 也写），baseline-collect 按行名机器解析并按单价估成本；未调用 LLM 时上方已提前返回整节
+  lines.push(`| 总 cache_creation tokens | ${summary.totalCacheCreationTokens.toLocaleString()} |`);
+  lines.push(`| 总 cache_read tokens | ${summary.totalCacheReadTokens.toLocaleString()} |`);
+  // M11 卡 E：CLI 自报成本（真值）——只有 CLI 路径有；部分模块缺席时标注覆盖数，baseline-collect 取行首数字
+  if (summary.totalReportedCostUsd !== undefined) {
+    const covered = summary.reportedCostModuleCount ?? 0;
+    const coverageNote = covered < summary.byModule.length ? `（${covered}/${summary.byModule.length} 个模块有报告）` : '';
+    lines.push(`| CLI 报告成本 (USD) | ${summary.totalReportedCostUsd.toFixed(6)}${coverageNote} |`);
+  }
   lines.push(`| 总 token 数 | ${totalTokens.toLocaleString()} |`);
   lines.push(`| LLM 总耗时 | ${(summary.totalDurationMs / 1000).toFixed(1)}s |`);
   if (summary.totalLoc > 0) {

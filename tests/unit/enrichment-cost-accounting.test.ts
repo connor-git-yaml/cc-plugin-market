@@ -231,4 +231,32 @@ describe('single-spec-orchestrator: enrichment cost accounting (Feature 127)', (
     expect(result.costMetadata!.tokenUsage.output).toBe(110);
     expect(result.tokenUsage).toBe(300);
   });
+
+  it('LLM#1 与 enrichment 的 cacheCreation / cacheRead 分别累加进 costMetadata.tokenUsage（M11 卡 E）', async () => {
+    const targetFile = path.join(tempDir, 'big.ts');
+    fs.writeFileSync(targetFile, 'export const x = 1;');
+    mocks.analyzeFiles.mockResolvedValue([createSkeletonWithManyExports(targetFile)]);
+
+    mocks.callLLM
+      .mockResolvedValueOnce({ content: 'main', model: 'claude-sonnet-4-6', inputTokens: 120, outputTokens: 80, duration: 1000, cacheCreationInputTokens: 100, cacheReadInputTokens: 15 })
+      .mockResolvedValueOnce({ content: 'enriched-' + 'A'.repeat(2000), model: 'claude-sonnet-4-6', inputTokens: 70, outputTokens: 30, duration: 500, cacheCreationInputTokens: 50, cacheReadInputTokens: 10 });
+
+    const result = await generateSpec(targetFile, { outputDir: path.join(tempDir, 'specs'), projectRoot: tempDir });
+
+    expect(result.costMetadata!.tokenUsage.input).toBe(190);
+    expect(result.costMetadata!.tokenUsage.cacheCreation).toBe(150);
+    expect(result.costMetadata!.tokenUsage.cacheRead).toBe(25);
+  });
+
+  it('响应没有 cache 字段（旧 provider / Codex 路径）时 costMetadata 的两项为 0，不是 NaN 或 undefined', async () => {
+    const targetFile = path.join(tempDir, 'big.ts');
+    fs.writeFileSync(targetFile, 'export const x = 1;');
+    mocks.analyzeFiles.mockResolvedValue([createSkeletonWithManyExports(targetFile)]);
+    mocks.callLLM
+      .mockResolvedValueOnce({ content: 'main', model: 'gpt-5.6-sol', inputTokens: 120, outputTokens: 80, duration: 1000 })
+      .mockResolvedValueOnce({ content: 'enriched-' + 'A'.repeat(2000), model: 'gpt-5.6-sol', inputTokens: 70, outputTokens: 30, duration: 500 });
+    const result = await generateSpec(targetFile, { outputDir: path.join(tempDir, 'specs'), projectRoot: tempDir });
+    expect(result.costMetadata!.tokenUsage.cacheCreation).toBe(0);
+    expect(result.costMetadata!.tokenUsage.cacheRead).toBe(0);
+  });
 });
