@@ -18,13 +18,23 @@
  * @param {*} val
  * @returns {string}
  */
+/**
+ * 裸写会被 YAML 解析器读成非 string 的字符串形态（按 YAML 1.1 / 1.2 core schema 取并集，比本仓 simple-yaml
+ * 的实际强制转换面更宽——override 文件也会被编辑器 / 外部工具按标准 YAML 读）：
+ * 整数 / 小数 / 指数 / 前导零 / `.5` / `5.` / 十六进制 / 八进制 / 二进制 / inf / nan / 布尔与其 yes-no-on-off 别名 / null 与 `~` /
+ * YAML 1.1 时间戳（`2001-01-01`、`2001-12-14t21:59:43.10-05:00`）。空容器 `[]` / `{}` 由上方特殊字符类顺带覆盖，不在此列。
+ * 数字分支至少含一个数字（`-` / `+` / `.` / `e5` 是普通字符串，不加引号——过度引与漏引两个方向都由测试钉住）。
+ * M11 卡 C：此前只认 `\d+`，phase id `0.5 / 3.5 / 5.5 / 6.5` 被吐成数字，generate-template 的产物存成 override 即 schema-fallback。
+ */
+const AMBIGUOUS_YAML_SCALAR = /^(?:[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][-+]?\d+)?|[-+]?0[xX][0-9a-fA-F_]+|[-+]?0[oO]?[0-7_]+|[-+]?0[bB][01_]+|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)|\d{4}-\d{1,2}-\d{1,2}(?:[Tt ].*)?|true|True|TRUE|false|False|FALSE|null|Null|NULL|~|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF|y|Y|n|N)$/;
+
 export function yamlScalar(val) {
   if (val === null || val === undefined) return 'null';
   if (typeof val === 'boolean') return String(val);
   if (typeof val === 'number') return String(val);
   const s = String(val);
-  // 需要引号的情况：含特殊字符或看起来像数字/布尔
-  if (/[\s:{}[\],&*#?|<>=!%@`]/.test(s) || s === '' || /^(true|false|null|\d+)$/.test(s)) {
+  // 需要引号的情况：含特殊字符、空串、或裸写会被读成数字 / 布尔 / null / 空容器
+  if (/[\s:{}[\],&*#?|<>=!%@`]/.test(s) || s === '' || AMBIGUOUS_YAML_SCALAR.test(s)) {
     return `"${s.replace(/"/g, '\\"')}"`;
   }
   return s;

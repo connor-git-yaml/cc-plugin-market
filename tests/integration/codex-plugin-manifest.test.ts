@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { loadReleaseContract } from '../../scripts/lib/release-contract-core.mjs';
 
 // Feature 213（T019）— 对真实两份 .codex-plugin/plugin.json 做结构性断言（FR-010(a) 必选层）

@@ -15,7 +15,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { STATE_MATRIX, buildReport, summarize, checkAnchors } from '../../scripts/lib/spec-drift-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

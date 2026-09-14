@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { checkPublishGap, readBuildMetaFromTarball, buildPackEnv, BuildMetaMissingError, TarballReadError, defaultExecNpmPackMeta } from '../../scripts/lib/publish-gap-check.mjs';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';

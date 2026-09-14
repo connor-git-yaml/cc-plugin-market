@@ -16,7 +16,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import * as core from '../../scripts/lib/worktree-local-state-core.mjs';
 
 interface CheckResult {

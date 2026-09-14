@@ -21,11 +21,11 @@ import {
   firstExistingPath,
   isObject,
   normalizeForCompare,
-  parseProductMapping,
   readMarkdownHeading,
   slugToTitle,
   toPosix,
 } from './product-governance-helpers.mjs';
+import { parseProductMapping } from './sync-product-mapping.mjs';
 import { appendWarningsSection, dedupeStringValues } from './script-diagnostics.mjs';
 import { writeJsonArtifact, writeMarkdownArtifact, writeYamlArtifact } from './script-report-io.mjs';
 import { parseYamlDocument } from './simple-yaml.mjs';
@@ -506,6 +506,9 @@ function patchEntityQuality(entityPath, report, projectRoot, productId) {
     return entity;
   });
 }
+
+/** 本 pass 回填进 catalog-index.yaml 每个产品条目的字段（catalog generator 据此区分「后续 pass 回填」与「字段脱落」）。 */
+export const QUALITY_CATALOG_INDEX_FIELDS = Object.freeze(['qualityStatus', 'qualityReportPath']);
 
 function patchCatalogIndex(projectRoot, summaries) {
   const summaryById = new Map(summaries.map((product) => [product.id, product]));

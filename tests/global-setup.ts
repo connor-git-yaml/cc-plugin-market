@@ -45,7 +45,6 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve } from 'node:path';
 import type { GlobalSetupContext } from 'vitest/node';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析（沿用 graph-quality-core.test.ts 既有约定）
 import { BUILD_INPUT_PATHS, BUILD_META_NAME, hashDistTree } from '../scripts/lib/spectra-version-gate.mjs';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');

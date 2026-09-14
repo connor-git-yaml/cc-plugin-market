@@ -13,8 +13,12 @@ import path from 'node:path';
 export const AGENTS_BYTE_BUDGET = 32768;
 export const WORKTREEINCLUDE_FILENAME = '.worktreeinclude';
 
-/** Codex 在仓库根同层「二选一」读取的候选文档（FR-008：按 max 不按 sum）。 */
-const AGENTS_CANDIDATES = ['AGENTS.md', 'AGENTS.override.md'];
+/**
+ * Codex 在仓库根同层「二选一」读取的候选文档（FR-008：按 max 不按 sum）。
+ * 导出并冻结：候选集口径只此一处，编排器 / spec 引用时从这里现取或读 repo:check 的 evidence.candidates，
+ * 不得凭印象改写（F277 R2-SC-C03：scope 阶段曾把 CLAUDE.md 写进候选集传入 spec，M11 簇④ 第 2 项）。
+ */
+export const AGENTS_CANDIDATES = Object.freeze(['AGENTS.md', 'AGENTS.override.md']);
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -338,6 +342,7 @@ export function validateAgentsByteBudget({ projectRoot }) {
       createCheck('agents-byte-budget', 'AGENTS 文档字节数在 Codex 预算内', 'skip', {
         reason: 'no-agents-doc',
         budgetBytes: AGENTS_BYTE_BUDGET,
+        candidates: [...AGENTS_CANDIDATES],
       }),
     );
     return { status: 'skip', checks, warnings, errors };
@@ -359,6 +364,7 @@ export function validateAgentsByteBudget({ projectRoot }) {
       oversized.length > 0 ? 'fail' : 'pass',
       {
         budgetBytes: AGENTS_BYTE_BUDGET,
+        candidates: [...AGENTS_CANDIDATES],
         files: present,
         largest: largest.name,
         largestBytes: largest.bytes,

@@ -19,7 +19,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { validateModelLiteralGate } from '../../scripts/lib/model-literal-gate-core.mjs';
 
 interface Offender {

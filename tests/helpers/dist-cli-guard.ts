@@ -26,7 +26,6 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析（沿用 tests/global-setup.ts 既有约定）
 import { BUILD_META_NAME } from '../../scripts/lib/spectra-version-gate.mjs';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');

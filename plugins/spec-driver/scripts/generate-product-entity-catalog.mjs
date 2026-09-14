@@ -16,6 +16,12 @@ import {
 import { readJsonArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
 import { parseYamlDocument } from './lib/simple-yaml.mjs';
 import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
+import { parseProductMapping } from './lib/sync-product-mapping.mjs';
+import { QUALITY_CATALOG_INDEX_FIELDS } from './lib/product-quality-core.mjs';
+import { SCORECARD_CATALOG_INDEX_FIELDS } from './lib/product-scorecard-core.mjs';
+
+/** 由后续 pass（quality / scorecard）回填进 catalog-index 的字段：本 generator 产不出它们不算脱落。 */
+const LATER_PASS_CATALOG_FIELDS = new Set([...QUALITY_CATALOG_INDEX_FIELDS, ...SCORECARD_CATALOG_INDEX_FIELDS]);
 
 const DEFAULT_KIND = 'product';
 const DEFAULT_OWNER = 'unknown';
@@ -198,6 +204,7 @@ export function generateProductEntityCatalog(options = {}) {
   };
 
   const catalogIndexPath = getCatalogIndexPath(projectRoot);
+  warnings.push(...detectDroppedCatalogFields(catalogIndexPath, entities));
   writeYamlArtifact(catalogIndexPath, catalogIndex);
 
   return {
@@ -213,28 +220,38 @@ function compactArray(items) {
   return items.filter(Boolean);
 }
 
-function parseProductMapping(content) {
-  const document = parseYamlDocument(content);
-  const rawProducts = isObject(document.products) ? document.products : {};
-  const products = {};
-
-  for (const [productId, rawProduct] of Object.entries(rawProducts)) {
-    const product = isObject(rawProduct) ? rawProduct : {};
-    products[productId] = {
-      description: typeof product.description === 'string' ? product.description : '',
-      specs: Array.isArray(product.specs)
-        ? product.specs
-            .filter((entry) => isObject(entry) && typeof entry.id === 'string')
-            .map((entry) => ({
-              id: entry.id,
-              type: typeof entry.type === 'string' ? entry.type : '',
-              summary: typeof entry.summary === 'string' ? entry.summary : '',
-            }))
-        : [],
-    };
+/**
+ * 上轮入库的 catalog-index 里有、本轮 generator 产不出的产品字段 → warning（账本 2026-09-14：旧版 generator 的字段
+ * 在重跑时静默脱落而 `warnings: []`）。后续 pass 回填的字段（quality / scorecard）按各自导出的清单豁免。
+ * @param {string} catalogIndexPath
+ * @param {Array<Record<string, unknown>>} entities 本轮产出的产品条目
+ * @returns {string[]}
+ */
+function detectDroppedCatalogFields(catalogIndexPath, entities) {
+  if (!fs.existsSync(catalogIndexPath)) {
+    return [];
   }
-
-  return { products };
+  let previous;
+  try {
+    previous = parseYamlDocument(fs.readFileSync(catalogIndexPath, 'utf-8'));
+  } catch {
+    return [`catalog-index 上轮产物无法解析，跳过字段脱落比对: ${catalogIndexPath}`];
+  }
+  const previousById = new Map(
+    (Array.isArray(previous?.products) ? previous.products : [])
+      .filter((product) => isObject(product) && typeof product.id === 'string')
+      .map((product) => [product.id, product]),
+  );
+  const warnings = [];
+  for (const entity of entities) {
+    const before = previousById.get(entity.id);
+    if (!before) continue;
+    const dropped = Object.keys(before).filter((key) => !(key in entity) && !LATER_PASS_CATALOG_FIELDS.has(key));
+    if (dropped.length > 0) {
+      warnings.push(`catalog-index 字段脱落: 产品 ${entity.id} 上轮有 ${dropped.join(', ')}，本轮 generator 产不出（旧版 generator 遗留；要保留就恢复产出逻辑，否则接受脱落）`);
+    }
+  }
+  return warnings;
 }
 
 function parseCurrentSpec(content) {

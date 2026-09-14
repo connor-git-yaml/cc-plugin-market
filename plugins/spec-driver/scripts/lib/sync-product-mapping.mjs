@@ -202,7 +202,39 @@ export function detectUnmappedSpecs(mapping, scannedSpecs) {
       dirName: entry.dirName,
       title: entry.title ?? null,
       summary: entry.summary ?? null,
+      // M11 簇④ 第 9 项：fix-report 通道扫到的目录也可能未映射，sync 子代理归属时需要知道它不是 spec.md
+      artifact: entry.artifact ?? 'spec',
     }));
+}
+
+/**
+ * M11 簇④ 第 13 项：产品名修正的 in-place 文本补丁——只改产品 key 行，注释头 / `name` / `owner` / 行内注释 / 顶层非
+ * products 键全部原样保留（整体序列化会把这些全剥掉，文件自述「可手动编辑」对它们一直不成立）。
+ * 目标 key 已存在（需要合并两组条目、重排结构）时不做补丁，返回 applied:false 交调用方整体序列化并告警。
+ *
+ * 纯函数。
+ * @param {string} text product-mapping.yaml 原文
+ * @param {Array<{ from: string, to: string }>} renames
+ * @returns {{ applied: boolean, text: string, reason?: string }}
+ */
+export function patchProductMappingText(text, renames) {
+  let patched = text;
+  for (const { from, to } of renames) {
+    const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fromLine = new RegExp(`^(  ${escape(from)}:)([ \t]*(?:#.*)?)$`, 'm');
+    // 目标 key 的**存在性**判定放宽到任意尾部（`spec-driver: ~` / `: {}` / 流式对象也算已存在，对抗审查 C-3：
+    // 光杆判据会漏掉标量形态、产出重复键 YAML 并静默丢掉整个产品的 specs）；from 侧仍要求光杆（产品条目必是 mapping）
+    const toLine = new RegExp(`^  ${escape(to)}:`, 'm');
+    if (toLine.test(patched)) {
+      return { applied: false, text, reason: `产品 ${from} 与 ${to} 同时存在，须合并条目，in-place 补丁不覆盖该形态` };
+    }
+    const matches = patched.match(new RegExp(fromLine.source, 'gm')) ?? [];
+    if (matches.length !== 1) {
+      return { applied: false, text, reason: `产品 key 行「  ${from}:」出现 ${matches.length} 次，无法定位` };
+    }
+    patched = patched.replace(fromLine, (_whole, _key, tail) => `  ${to}:${tail ?? ''}`);
+  }
+  return { applied: true, text: patched };
 }
 
 /**

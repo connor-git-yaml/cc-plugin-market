@@ -36,7 +36,6 @@ import {
 } from '../../src/core/query-mappers/java-mapper.js';
 // extractor 是 .mjs，TS 类型解析按 JS 处理；这里是静态 ESM import
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error - mjs 模块在 TS 类型层未声明，运行时由 ESM loader 解析
 import * as extractor from '../../scripts/lib/java-call-extractor.mjs';
 
 // ════════════════════════ Fixture 工具（自动清理）════════════════════════

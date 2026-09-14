@@ -26,6 +26,8 @@
  * @returns {'FEATURE' | 'FIX' | 'REFACTOR' | 'ENHANCEMENT'}
  */
 export function classifySpecType(specEntry) {
+  // M11 簇④ 第 9 项：fix-report 通道扫到的目录按定义是 fix 卡，不看目录名
+  if (specEntry.artifact === 'fix-report') return 'FIX';
   const name = specEntry.dirName.toLowerCase();
 
   // fix 类型匹配：需要防止 "fix" 误匹配包含 fix 子串的非修复目录
@@ -105,6 +107,7 @@ export function buildTimeline(specEntries, productId) {
       specId: entry.id,
       dirName: entry.dirName,
       type,
+      artifact: entry.artifact ?? 'spec',
       title: entry.title ?? null,
       summary: entry.summary ?? null,
     };

@@ -10,7 +10,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import {
   checkAnchors,
   checkOneAnchor,
@@ -18,13 +17,11 @@ import {
   analyzeConsistentSnapshot,
   STATE_MATRIX,
 } from '../../scripts/lib/spec-drift-check.mjs';
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import {
   createSharedProject,
   FINGERPRINT_VERSION,
   NORMALIZATION_PROFILE,
 } from '../../scripts/lib/spec-drift-fingerprint.mjs';
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { resolveReferences } from '../../scripts/lib/spec-drift-resolve.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

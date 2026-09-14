@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 // .mjs 模块 TS 类型未声明，运行时由 ESM loader 解析
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error - mjs 静态 ESM import
 import {
   extractCallerLabel,
   median,

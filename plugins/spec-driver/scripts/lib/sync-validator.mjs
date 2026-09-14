@@ -18,7 +18,7 @@
 // ────────────────────────────────────────────────────────────
 
 /**
- * 对合并结果执行三项验证检查。
+ * 对合并结果执行四项验证检查（fr-count / fr-floor / no-contradiction / changelog-coverage）。
  *
  * @param {object} skeleton — MergeSkeleton（冲突解决后）
  * @param {{ productId: string, entries: Array<{ specId: string, type: string }> }} timeline
@@ -29,6 +29,7 @@
 export function validateMergeResult(skeleton, timeline, parsedSpecs) {
   const checks = [
     checkFRCount(skeleton, timeline, parsedSpecs),
+    checkFRFloor(timeline, parsedSpecs),
     checkNoContradiction(skeleton),
     checkChangelogCoverage(skeleton, timeline),
   ];
@@ -76,6 +77,41 @@ function checkFRCount(skeleton, timeline, parsedSpecs) {
       extractedFRCount,
       skeletonFRCount,
     },
+  };
+}
+
+/**
+ * fr-floor 检查（M11 簇④ 第 11 项，对抗审查 C-2 后重写）：绝对下界——每份 spec 抽取的 FR 条数 ≥ 需求节里
+ * **独立扫描器**（`lib/sync-fr-floor.mjs`，不共享抽取器的任何正则 / 围栏 helper）扫到的条目编号数。
+ * 覆盖面：抽取器判据被改坏（漏掉某种条目形态）、flush / 去重 / 节路由吃掉条目——两条路径各自实现同一份形态约定，
+ * 一边坏了另一边仍报数。**不覆盖**：两边约定之外的写法（表格 / 反引号 / 引用块——那是候选，由 candidate-not-extracted 兜住）。
+ * fr-count 只保证「合并不丢」；fix-report 通道的条目两侧都是 0，不参与。
+ *
+ * @param {object} timeline
+ * @param {Record<string, { requirements?: Array<object>, frEntryIdsInRequirements?: Set<string> }>} parsedSpecs
+ * @returns {object} ValidationCheck
+ */
+function checkFRFloor(timeline, parsedSpecs) {
+  const violations = [];
+  let entryIdCount = 0;
+  let extractedFRCount = 0;
+  for (const entry of timeline.entries) {
+    const parsed = parsedSpecs?.[entry.specId];
+    const ids = parsed?.frEntryIdsInRequirements;
+    const floor = ids instanceof Set ? ids.size : Array.isArray(ids) ? new Set(ids).size : 0;
+    const extracted = Array.isArray(parsed?.requirements) ? parsed.requirements.length : 0;
+    entryIdCount += floor;
+    extractedFRCount += extracted;
+    if (extracted < floor) violations.push(`${entry.specId}（抽取 ${extracted} < 独立扫描 ${floor}）`);
+  }
+  const passed = violations.length === 0;
+  return {
+    name: 'fr-floor',
+    passed,
+    detail: passed
+      ? `各 spec 抽取条数均 ≥ 需求节独立扫描条目数（独立扫描 ${entryIdCount} / 抽取 ${extractedFRCount}）`
+      : `抽取条数低于需求节独立扫描条目数：${violations.join('，')}——抽取器吃掉了条目`,
+    data: { entryIdCount, extractedFRCount, violationCount: violations.length },
   };
 }
 

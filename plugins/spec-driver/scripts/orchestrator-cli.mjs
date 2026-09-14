@@ -89,11 +89,15 @@ async function buildOrchestrator(mode, projectRoot, extra = {}) {
 async function cmdGetPhases(mode, args) {
   const projectRoot = parseProjectRoot(args);
   try {
-    const { orch } = await buildOrchestrator(mode, projectRoot);
+    const { orch, resolverResult } = await buildOrchestrator(mode, projectRoot);
     const phases = orch.getPhases();
     output({
       success: true,
       mode,
+      // M11 卡 C（对抗审查 W-5）：get-phases 成了门挂载事实的第二个权威面，stdout JSON 必须带 resolver 诊断——
+      // 项目 overrides 被整份回退（gate-mounting-lost / schema-fallback / version-mismatch）时，只读 stdout 的消费方
+      // 才知道 gates_* 是 base 的挂载而不是自己写的 override
+      diagnostics: (resolverResult.diagnostics || []).map((d) => ({ level: d.level, code: d.code, message: d.message })),
       phase_count: phases.length,
       phases: phases.map((p) => ({
         id: p.id,
@@ -101,6 +105,9 @@ async function cmdGetPhases(mode, args) {
         display_name: p.display_name,
         agent: p.agent,
         agent_mode: p.agent_mode,
+        // M11 卡 C：门挂在哪个 phase 此前被这层投影丢掉，编排器只能回头翻 yaml（簇④ 第 1 项）
+        gates_before: p.gates_before ?? null,
+        gates_after: p.gates_after ?? null,
         conditional: p.conditional || null,
         is_critical: p.is_critical || false,
       })),
@@ -409,9 +416,9 @@ async function cmdGenerateTemplate(mode, options) {
     '',
   ].join('\n');
 
-  // Fix 1：version 单独输出，强制带引号保留字符串语义
-  // serializeYaml 的 yamlScalar 会把 "1.0" 输出为无引号 1.0，被 simple-yaml 解析为 number 1，
-  // 触发 version-mismatch。改为 JSON.stringify 保证字符串字面量始终带双引号。
+  // Fix 1：version 单独输出，强制带引号保留字符串语义。
+  // 历史：yamlScalar 曾把 "1.0" 输出为无引号 1.0（被 simple-yaml 解析为 number 1 → version-mismatch），故此处改用 JSON.stringify；
+  // M11 卡 C 起 yamlScalar 自己也会给 "1.0" 加引号，两条路径不相交（body 只含 modes），本行保留是为了不依赖序列化器的判据。
   const versionLine = `version: ${JSON.stringify(baseConfig.version)}\n`;
 
   // 仅序列化 modes 部分（不包含 version）

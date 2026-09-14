@@ -17,7 +17,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import {
   PROTOCOL_TEXT_SOURCE,
   PROTOCOL_VERIFY_DISCLOSURE_PHRASES,

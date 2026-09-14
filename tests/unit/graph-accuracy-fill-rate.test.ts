@@ -9,7 +9,6 @@
  */
 import { describe, expect, it } from 'vitest';
 
-// @ts-expect-error — graph-accuracy.mjs 是 mjs，JS 模块；类型由我们手动声明
 import { computeFillRate } from '../../scripts/graph-accuracy.mjs';
 
 interface MockNode {

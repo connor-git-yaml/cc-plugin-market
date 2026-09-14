@@ -15,9 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { linkReferences, checkAnchors } from '../../scripts/lib/spec-drift-core.mjs';
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { FINGERPRINT_VERSION, NORMALIZATION_PROFILE } from '../../scripts/lib/spec-drift-fingerprint.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

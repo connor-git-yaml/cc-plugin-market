@@ -9,6 +9,8 @@
  * CLI 参数：
  *   --project-root <path>  项目根目录（默认 cwd）
  *   --dry-run              不修改文件，仅预览
+ *   --preflight            只输出 mapping 条目数 / 扫描数 / 未映射数 / 缺目录（派发前机械对拍，不写任何文件）
+ *   --lint                 spec 写法 lint：候选未抽取 / 需求节之外的条目 / 重复编号 / 零 FR 变成结构化 findings 与 exit 1（隐含 --dry-run）
  *   --json                 JSON 格式输出
  *
  * @module sync-merge-engine
@@ -24,8 +26,8 @@ import {
   correctProductNames,
   detectUnmappedSpecs,
   serializeProductMapping,
-  extractSpecId,
   NAME_CORRECTION_RULES,
+  patchProductMappingText,
 } from './lib/sync-product-mapping.mjs';
 import { buildTimeline } from './lib/sync-timeline-builder.mjs';
 import { executeMerge } from './lib/sync-merge-strategy.mjs';
@@ -34,6 +36,8 @@ import { validateMergeResult } from './lib/sync-validator.mjs';
 
 // 复用现有 helper
 import { getProductsRoot } from './lib/product-artifact-paths.mjs';
+import { indexSpecDirectories } from './lib/spec-directory-index.mjs';
+import { scanRequirementEntryIds } from './lib/sync-fr-floor.mjs';
 import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 // ────────────────────────────────────────────────────────────
@@ -46,12 +50,21 @@ import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
  * @returns {{ projectRoot: string, dryRun: boolean, json: boolean }}
  */
 function parseArgs(argv) {
-  const args = { projectRoot: process.cwd(), dryRun: false, json: false };
+  const args = { projectRoot: process.cwd(), dryRun: false, json: false, preflight: false, lint: false };
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--dry-run') {
       args.dryRun = true;
+      continue;
+    }
+    // M11 簇④ 第 10 / 11 项：派发前机械对拍（只数不写）/ 写法 lint（告警变 exit 1，隐含 dry-run）
+    if (token === '--preflight') {
+      args.preflight = true;
+      continue;
+    }
+    if (token === '--lint') {
+      args.lint = true;
       continue;
     }
     if (token === '--json') {
@@ -78,74 +91,146 @@ function parseArgs(argv) {
  * @param {string} projectRoot
  * @returns {Array<{ id: string, dirName: string, title: string|null, summary: string|null, status: string|null, filePath: string, createdDate: string|null }>}
  */
-/**
- * specs/ 下的全部目录名（不存在则空）；scanSpecs 只保留有 spec.md 的，这里不筛。
- * @param {string} specsDir
- * @returns {string[]}
- */
-function listSpecDirNames(specsDir) {
-  try {
-    return fs.readdirSync(specsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-  } catch {
-    return [];
-  }
+/** spec.md 仍是模板占位（fix 模式收口时没填 spec，实质在 fix-report.md）：H1 含 `[FEATURE NAME]` 或分支占位符未替换 */
+export function isTemplatePlaceholderSpec(content) {
+  // 三个模板字面量任一在场即占位：H1 的 `[FEATURE NAME]`、分支占位 `[###-feature-name]`、样板 FR 正文 `[specific capability`
+  // （对抗审查 W-3：只改 H1 的半填模板此前被当真 spec 抽出 7 条样板 FR，同时丢掉 fix-report）
+  return /^#[^\n]*\[FEATURE NAME\]/m.test(content) || content.includes('[###-feature-name]') || content.includes('[specific capability');
 }
 
+/**
+ * 扫描 specs/ 目录：有实质 spec.md 的目录走 spec 通道；spec.md 缺失或仍是模板占位、但有 fix-report.md 的目录走
+ * fix-report 通道（M11 簇④ 第 9 项：本仓 94 个只有 fix-report 的目录此前对活文档结构性不可见）。
+ * @param {string} projectRoot
+ * @returns {{ entries: Array<object>, placeholderOnly: string[], shadowedFixReports: Array<{ id: string, dirName: string, by: string }> }}
+ *   placeholderOnly = spec.md 占位且无 fix-report 的目录名；shadowedFixReports = 与实质 spec.md 目录同编号而被跳过的 fix-report 目录
+ */
 function scanSpecs(projectRoot) {
   const specsDir = path.join(projectRoot, 'specs');
   const entries = [];
+  const placeholderOnly = [];
+  const shadowedFixReports = [];
 
-  let dirList;
+  // 匹配 NNN-* / NNN-NN-* 目录（编号口径与 product-mapping / catalog / scorecard 共用 spec-directory-index）
+  for (const [id, dirNames] of indexSpecDirectories(specsDir)) {
+    for (const dirName of dirNames) {
+      const specFilePath = path.join(specsDir, dirName, 'spec.md');
+      const fixReportPath = path.join(specsDir, dirName, 'fix-report.md');
+
+      let specContent = null;
+      if (fs.existsSync(specFilePath)) {
+        try {
+          specContent = fs.readFileSync(specFilePath, 'utf-8');
+        } catch {
+          entries.push({ id, dirName, artifact: 'spec', title: null, summary: null, status: null, filePath: specFilePath, createdDate: null });
+          continue;
+        }
+      }
+
+      if (specContent !== null && !isTemplatePlaceholderSpec(specContent)) {
+        const { title, summary, status, createdDate } = parseSpecMeta(specContent);
+        entries.push({ id, dirName, artifact: 'spec', title, summary, status, filePath: specFilePath, createdDate });
+        continue;
+      }
+
+      if (fs.existsSync(fixReportPath)) {
+        const parsed = parseFixReportContent(fixReportPath);
+        entries.push({
+          id,
+          dirName,
+          artifact: 'fix-report',
+          title: parsed.title,
+          summary: parsed.overview ? truncateWithMarker(parsed.overview, 200) : null,
+          status: null,
+          filePath: fixReportPath,
+          createdDate: null,
+        });
+        continue;
+      }
+
+      if (specContent !== null) placeholderOnly.push(dirName);
+    }
+  }
+
+  // 对抗审查 C-1：同编号既有实质 spec.md 目录又有 fix-report 目录时，fix-report 通道条目**跳过**——parsedSpecs / 时间线按编号
+  // 索引，两条同编号条目会让该 spec 的每条 FR 进第 5 章两次（本仓 133 / 201 实测 49 条虚假冲突），字典序反过来时更会让
+  // requirements 恒空的 fix-report 解析覆盖真 spec、FR 被彻底销毁。同编号的 FR 账只能有一份来源。
+  const specDirsById = new Map();
+  for (const entry of entries) if (entry.artifact === 'spec') specDirsById.set(entry.id, [...(specDirsById.get(entry.id) || []), entry.dirName]);
+  const kept = [];
+  for (const entry of entries) {
+    if (entry.artifact === 'fix-report' && specDirsById.has(entry.id)) {
+      shadowedFixReports.push({ id: entry.id, dirName: entry.dirName, by: specDirsById.get(entry.id)[0] });
+      continue;
+    }
+    kept.push(entry);
+  }
+  return { entries: kept, placeholderOnly, shadowedFixReports };
+}
+
+const FIX_REPORT_FIELD_MAX_CHARS = 1500;
+
+/** 截断带标记（对抗审查 I-3）：下游子代理据此知道字段不完整，而不是把被截断的段当完整段用 */
+function truncateWithMarker(text, max) {
+  return text.length > max ? `${text.slice(0, max)}…[截断，原文 ${text.length} 字符]` : text;
+}
+
+function fixReportSectionText(sections, predicate) {
+  const hit = sections.find(({ heading }) => predicate(heading));
+  if (!hit) return null;
+  const text = hit.content.trim();
+  return text.length > 0 ? truncateWithMarker(text, FIX_REPORT_FIELD_MAX_CHARS) : null;
+}
+
+/**
+ * 宽松解析 fix-report.md（M11 簇④ 第 9 项）：返回与 parseSpecContent 同形的对象（requirements 恒空，不进 FR 账），
+ * 外加 `fixReport` 四段——问题描述 / 修复策略 / Spec 影响 / 根因——供 sync 子代理写进第 12 章变更历史与第 9 章已知限制。
+ * 全仓 94 份的标题统计（2026-09-14）：问题描述 81 / Spec 影响 77 / 修复策略 74 / 5-Why 根因追溯 72，其余按包含关系兜底。
+ * @param {string} filePath
+ * @returns {object}
+ */
+export function parseFixReportContent(filePath) {
+  const result = {
+    title: null,
+    overview: null,
+    frontMatter: null,
+    userStories: [],
+    requirements: [],
+    successCriteria: [],
+    constraints: null,
+    dependencies: null,
+    frCandidateIds: new Set(),
+    frEntryIdsInRequirements: new Set(),
+    requirementsHeadingCount: 0,
+    frEntriesOutside: [],
+    duplicateFRIds: [],
+    fixReport: { problem: null, strategy: null, specImpact: null, rootCause: null },
+  };
+
+  let content;
   try {
-    dirList = fs.readdirSync(specsDir);
+    content = fs.readFileSync(filePath, 'utf-8');
   } catch {
-    return entries;
+    return result;
   }
 
-  // 匹配 NNN-* / NNN-NN-* 目录（编号口径与 product-mapping 共用 extractSpecId）
-  for (const dirName of dirList.sort()) {
-    const id = extractSpecId(dirName);
-    if (!id || !/^-\S/.test(dirName.slice(id.length))) {
-      continue;
-    }
+  const titleMatch = /^#\s+(.+?)\s*$/m.exec(content);
+  if (titleMatch) result.title = titleMatch[1].trim();
 
-    const specFilePath = path.join(specsDir, dirName, 'spec.md');
-
-    if (!fs.existsSync(specFilePath)) {
-      continue;
-    }
-
-    let content;
-    try {
-      content = fs.readFileSync(specFilePath, 'utf-8');
-    } catch {
-      entries.push({
-        id,
-        dirName,
-        title: null,
-        summary: null,
-        status: null,
-        filePath: specFilePath,
-        createdDate: null,
-      });
-      continue;
-    }
-
-    // 宽松解析 spec.md
-    const { title, summary, status, createdDate } = parseSpecMeta(content);
-
-    entries.push({
-      id,
-      dirName,
-      title,
-      summary,
-      status,
-      filePath: specFilePath,
-      createdDate,
-    });
+  const sections = splitByH2(content);
+  const problem = fixReportSectionText(sections, (h) => h.includes('问题描述') || h.includes('问题与证据') || h.includes('问题'));
+  const strategy = fixReportSectionText(sections, (h) => h.includes('修复策略') || /^修复/.test(h.trim()));
+  const specImpact = fixReportSectionText(sections, (h) => /spec/i.test(h) && h.includes('影响'));
+  const rootCauseSection = sections.find(({ heading }) => heading.includes('5-Why') || heading.includes('根因'));
+  let rootCause = null;
+  if (rootCauseSection) {
+    const line = rootCauseSection.content.split('\n').find((l) => /\*\*(Root Cause|根因)\*\*/i.test(l));
+    rootCause = line ? truncateWithMarker(line.trim(), FIX_REPORT_FIELD_MAX_CHARS) : null;
   }
-
-  return entries;
+  result.fixReport = { problem, strategy, specImpact, rootCause };
+  result.overview = problem ? problem.split(/\n\s*\n/)[0].trim() : null;
+  result.artifact = 'fix-report';
+  return result;
 }
 
 /**
@@ -240,6 +325,8 @@ export function parseSpecContent(specFilePath) {
   // 路由，20 份 spec 的 301 条 FR 被后续标题静默归零、候选计数同时被抹成 0 导致 warning 失明（2026-09-14 delta 审查 C-1）。
   // 现改为：命中即累加；requirements 排除非功能 / 模糊点类标题；Edge Cases（`边界`）不是约束，不再路由进 constraints（W-5）。
   result.frCandidateIds = new Set();
+  // M11 簇④ 第 11 项：需求节里独立扫描器（sync-fr-floor.mjs）扫到的条目编号——fr-floor 的外部基线，不共享抽取器判据
+  result.frEntryIdsInRequirements = new Set();
   result.requirementsHeadingCount = 0;
   // 需求类 H2 之外的 FR 条目写法（`## Clarifications` 下的「新增需求」、`## FR-002：…` 这样的 H2 位条目）：
   // 它们不抽取，但必须可见——候选集若只从被路由到的节收集，路由层的丢失对护栏结构性不可见（角 A 审查 C-1：
@@ -260,6 +347,8 @@ export function parseSpecContent(specFilePath) {
       result.requirementsHeadingCount += 1;
       result.requirements.push(...extractFunctionalRequirements(sectionContent));
       for (const id of collectFRCandidateIds(sectionContent)) result.frCandidateIds.add(id);
+      // fr-floor 的外部基线走独立扫描器（sync-fr-floor.mjs，不共享本文件任何判据）；collectFREntryIds 只服务 lint 的 outside 判定
+      for (const id of scanRequirementEntryIds(sectionContent)) result.frEntryIdsInRequirements.add(id);
     } else {
       for (const id of collectFREntryIds(sectionContent)) result.frEntriesOutside.push({ id, heading: `## ${heading}` });
     }
@@ -419,6 +508,8 @@ function extractUserStories(sectionContent) {
 // 候选 = 条目前缀 ∪ 表格行 ∪ 反引号包裹 ∪ 行首裸编号段落，编号用宽判据；由构造保证 候选 ⊇ 条目，
 // 陌生写法（四位编号、反引号 ID、表格）只会进候选、由「候选编号未抽取」warning 兜住而不会静默消失。
 const FR_ID = String.raw`FR-(?:[A-Z]-?)?\d{1,3}(?:\.\d+)*(?:[A-Za-z]|-(?!FR-)[A-Za-z0-9]+)?`;
+/** FR 编号语法（单一事实源，供 check-fr-matrix 等消费端 `new RegExp` 复用，不再手抄） */
+export const FR_ID_SOURCE = FR_ID;
 const FR_ID_LOOSE = String.raw`FR-[A-Za-z]?-?\d+(?:\.\d+)*[A-Za-z0-9-]*`;
 const LIST_MARK = String.raw`(?:[-*+]|\d+[.)])\s+`;
 const HEADING_MARK = String.raw`#{3,6}\s+`;
@@ -561,8 +652,13 @@ function extractBulletList(sectionContent) {
 export function syncMergeEngine(options = {}) {
   const startTime = Date.now();
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
-  const dryRun = Boolean(options.dryRun);
+  const preflight = Boolean(options.preflight);
+  const lint = Boolean(options.lint);
+  // preflight 与 lint 都只读：不写 mapping、不写活文档
+  const dryRun = Boolean(options.dryRun) || preflight || lint;
   const warnings = [];
+  /** @type {Array<{ productId: string, specId: string, kind: string, detail: string }>} */
+  const lintFindings = [];
 
   // ── 前置校验 ──
 
@@ -583,19 +679,30 @@ export function syncMergeEngine(options = {}) {
 
   // ── Phase 1: 扫描 specs ──
 
-  const scannedSpecs = scanSpecs(projectRoot);
-  // 同一编号多个含 spec.md 的目录：parsedSpecs 按编号索引会后者覆盖前者（094-0x 坍缩的同型残留，角 B 审查 W-B8）
+  const { entries: scannedSpecs, placeholderOnly, shadowedFixReports } = scanSpecs(projectRoot);
+  // 全局 lint findings（不属于某个产品）：productId 为 null
+  const lintGlobal = (specId, kind, detail) => {
+    warnings.push(detail);
+    lintFindings.push({ productId: null, specId, kind, detail });
+  };
+  for (const { id, dirName, by } of shadowedFixReports) {
+    lintGlobal(id, 'duplicate-dirs', `编号 ${id} 的 fix-report 目录 ${dirName} 与实质 spec.md 目录 ${by} 同编号：fix-report 通道条目已跳过（同编号的 FR 账只能有一份来源），请改名或合并`);
+  }
+  // 同一编号多个目录：分开数「实质 spec.md」与「fix-report 通道」两类（对抗审查 W-2：此前文案把 fix-report 目录也说成「含 spec.md」）
   const dirsByScannedId = new Map();
-  for (const spec of scannedSpecs) dirsByScannedId.set(spec.id, [...(dirsByScannedId.get(spec.id) || []), spec.dirName]);
-  for (const [id, dirs] of dirsByScannedId) {
-    if (dirs.length > 1) warnings.push(`编号 ${id} 有 ${dirs.length} 个含 spec.md 的目录（${dirs.join(', ')}），按编号索引时后者覆盖前者，请改名或合并`);
+  for (const spec of scannedSpecs) dirsByScannedId.set(spec.id, [...(dirsByScannedId.get(spec.id) || []), spec]);
+  for (const [id, specs] of dirsByScannedId) {
+    const specDirs = specs.filter((s) => s.artifact === 'spec').map((s) => s.dirName);
+    const fixDirs = specs.filter((s) => s.artifact === 'fix-report').map((s) => s.dirName);
+    if (specDirs.length > 1) {
+      // 按编号索引时后者覆盖前者（094-0x 坍缩的同型残留，角 B 审查 W-B8）——这是 FR 账被静默改写的前提，升为 lint finding（对抗审查 W-5）
+      lintGlobal(id, 'duplicate-dirs', `编号 ${id} 有 ${specDirs.length} 个含实质 spec.md 的目录（${specDirs.join(', ')}），按编号索引时后者覆盖前者，请改名或合并`);
+    } else if (fixDirs.length > 1) {
+      warnings.push(`编号 ${id} 有 ${fixDirs.length} 个 fix-report 目录（${fixDirs.join(', ')}）：时间线各记一条 FIX、FR 账为空，不影响守恒`);
+    }
   }
   // 全部 NNN-* 目录（含只有 blueprint.md 的）按编号索引，供「映射悬空」判定区分「无目录」与「有目录无 spec.md」
-  const specDirsById = new Map();
-  for (const dirName of listSpecDirNames(specsDir)) {
-    const id = extractSpecId(dirName);
-    if (id && /^-\S/.test(dirName.slice(id.length))) specDirsById.set(id, dirName);
-  }
+  const specDirsById = new Map([...indexSpecDirectories(specsDir)].map(([id, dirNames]) => [id, dirNames[0]]));
   if (scannedSpecs.length === 0) {
     warnings.push('specs/ 目录下未找到有效的 spec 目录');
   }
@@ -630,12 +737,59 @@ export function syncMergeEngine(options = {}) {
     warnings.push(`发现 ${unmappedSpecs.length} 个未映射的 spec: ${unmappedSpecs.map((s) => s.specId).join(', ')}`);
   }
 
+  // ── M11 簇④ 第 10 项：派发前机械对拍——只数不写，让编排器把 mapping 条目数 / 扫描数 / 未映射数注入 sync 子代理 prompt ──
+  if (preflight) {
+    // 对抗审查 W-1：分母与 Phase 5 **同源**——同编号多条目全部计入（此前 Map 按编号去重，54 vs 56 造出假风险项）；
+    // 同编号在 mapping 里列两次也照 Phase 5 的 includes 语义只算一次条目集
+    const products = {};
+    for (const [productId, productDef] of Object.entries(correctedMapping.products)) {
+      const productEntries = scannedSpecs.filter((spec) => productDef.specs.includes(spec.id));
+      const scanned = productEntries.filter((spec) => spec.artifact === 'spec');
+      const fixReports = productEntries.filter((spec) => spec.artifact === 'fix-report');
+      const presentIds = new Set(productEntries.map((spec) => spec.id));
+      const absent = [...new Set(productDef.specs)].filter((id) => !presentIds.has(id));
+      const duplicateMappedIds = [...new Set(productDef.specs.filter((id, index) => productDef.specs.indexOf(id) !== index))];
+      // 只有 blueprint.md 的目录是有意登记进变更历史的（与 Phase 5 的悬空判定同口径），不算缺目录
+      const blueprintOnly = absent.filter((id) => {
+        const dirName = specDirsById.get(id);
+        return dirName !== undefined && fs.existsSync(path.join(specsDir, dirName, 'blueprint.md'));
+      });
+      products[productId] = {
+        mappedCount: new Set(productDef.specs).size,
+        entryCount: productEntries.length,
+        scannedCount: scanned.length,
+        fixReportCount: fixReports.length,
+        duplicateMappedIds,
+        blueprintOnly,
+        missing: absent.filter((id) => !blueprintOnly.includes(id)),
+      };
+    }
+    const specCount = scannedSpecs.filter((spec) => spec.artifact === 'spec').length;
+    const fixReportCount = scannedSpecs.length - specCount;
+    const duplicateIds = [...dirsByScannedId].filter(([, specs]) => specs.length > 1).map(([id]) => id);
+    return {
+      schemaVersion: '1.0.0',
+      preflight: true,
+      scanned: {
+        specCount, fixReportCount, placeholderOnlyCount: placeholderOnly.length, total: scannedSpecs.length,
+        // 对抗审查 W-4 / W-1：占位目录与同编号多目录指名，编排器与人都能直接行动
+        placeholderOnly: [...placeholderOnly],
+        duplicateIds,
+        shadowedFixReports: shadowedFixReports.map(({ id, dirName, by }) => ({ id, dirName, by })),
+      },
+      products,
+      unmapped: unmappedSpecs.map((spec) => spec.specId),
+      warnings,
+    };
+  }
+
   // ── Phase 5: 逐产品处理 ──
 
   const products = {};
   const validationReports = [];
   let totalActiveFR = 0;
   let totalConflicts = 0;
+  let totalFixReports = 0;
 
   for (const [productId, productDef] of Object.entries(correctedMapping.products)) {
     // 获取该产品下的 spec 条目
@@ -648,22 +802,35 @@ export function syncMergeEngine(options = {}) {
       continue;
     }
 
-    // 解析每个 spec 的内容
+    // 解析每个 spec 的内容；fix-report 通道的条目不进 FR 账、不发 FR 写法告警
     const parsedSpecs = {};
+    const fixReports = [];
+    const lintAt = (specId, kind, detail) => {
+      warnings.push(`[${productId}] spec ${specId}: ${detail}`);
+      lintFindings.push({ productId, specId, kind, detail });
+    };
     for (const entry of productSpecEntries) {
+      if (entry.artifact === 'fix-report') {
+        // 第二道闸：fix-report 解析（requirements 恒空）绝不覆盖已解析的实质 spec（scanSpecs 已跳过同编号 fix-report，此处防回流）
+        if (parsedSpecs[entry.id] && parsedSpecs[entry.id].artifact !== 'fix-report') continue;
+        const parsed = parseFixReportContent(entry.filePath);
+        parsedSpecs[entry.id] = parsed;
+        fixReports.push({ specId: entry.id, dirName: entry.dirName, title: parsed.title, ...parsed.fixReport });
+        continue;
+      }
       const parsed = parseSpecContent(entry.filePath);
       parsedSpecs[entry.id] = parsed;
       const extractedIds = new Set((parsed.requirements || []).map((fr) => fr.id));
       const missing = [...(parsed.frCandidateIds || [])].filter((id) => !extractedIds.has(id));
       if (missing.length > 0) {
-        warnings.push(`[${productId}] spec ${entry.id}: Requirements 节有 ${missing.length} 个 FR 编号出现在候选行但未抽取（${missing.join(', ')}），请核对写法`);
+        lintAt(entry.id, 'candidate-not-extracted', `Requirements 节有 ${missing.length} 个 FR 编号出现在候选行但未抽取（${missing.join(', ')}），请核对写法`);
       }
       const repeats = parsed.duplicateFRIds || [];
       if (repeats.length > 0) {
         const counts = new Map();
         for (const id of repeats) counts.set(id, (counts.get(id) || 1) + 1);
         const detail = [...counts].map(([id, n]) => `${id} ×${n}`).join(', ');
-        warnings.push(`[${productId}] spec ${entry.id}: ${counts.size} 个 FR 编号重复出现，已按出现顺序并入首条描述（${detail}），请核对是否为同一条需求`);
+        lintAt(entry.id, 'duplicate-ids', `${counts.size} 个 FR 编号重复出现，已按出现顺序并入首条描述（${detail}），请核对是否为同一条需求`);
       }
       const outside = parsed.frEntriesOutside || [];
       if (outside.length > 0) {
@@ -671,9 +838,9 @@ export function syncMergeEngine(options = {}) {
         for (const { id, heading } of outside) byHeading.set(heading, [...(byHeading.get(heading) || []), id]);
         const detail = [...byHeading].map(([heading, ids]) => `「${heading}」: ${ids.join(', ')}`).join('；');
         const prefix = parsed.requirementsHeadingCount === 0 ? '未找到需求类 H2；' : '';
-        warnings.push(`[${productId}] spec ${entry.id}: ${prefix}需求类 H2 之外有 ${outside.length} 条 FR 条目写法未纳入抽取（${detail}），请移入需求节或核对`);
+        lintAt(entry.id, 'entries-outside-requirements', `${prefix}需求类 H2 之外有 ${outside.length} 条 FR 条目写法未纳入抽取（${detail}），请移入需求节或核对`);
       } else if (extractedIds.size === 0) {
-        warnings.push(`[${productId}] spec ${entry.id}: 未抽出任何 FR（需求可能写成散文、表格或位于非需求标题下）`);
+        lintAt(entry.id, 'zero-fr', '未抽出任何 FR（需求可能写成散文、表格或位于非需求标题下）');
       }
     }
 
@@ -685,8 +852,10 @@ export function syncMergeEngine(options = {}) {
       const dirName = specDirsById.get(mappedId);
       if (!dirName) {
         warnings.push(`[${productId}] 映射条目 ${mappedId} 在 specs/ 下没有对应目录`);
+      } else if (placeholderOnly.includes(dirName)) {
+        warnings.push(`[${productId}] 映射条目 ${mappedId} 的目录 ${dirName} 的 spec.md 仍是模板占位且无 fix-report.md（既不进 FR 账也不进时间线）`);
       } else if (!fs.existsSync(path.join(specsDir, dirName, 'blueprint.md'))) {
-        warnings.push(`[${productId}] 映射条目 ${mappedId} 的目录 ${dirName} 既无 spec.md 也无 blueprint.md`);
+        warnings.push(`[${productId}] 映射条目 ${mappedId} 的目录 ${dirName} 既无实质 spec.md 也无 blueprint.md`);
       }
     }
 
@@ -715,7 +884,10 @@ export function syncMergeEngine(options = {}) {
       mergeSkeleton: resolvedSkeleton,
       conflicts,
       validation,
+      // M11 簇④ 第 9 项：fix 卡的行为变化摘要，供 sync 子代理写进第 12 章变更历史 / 第 9 章已知限制
+      fixReports,
     };
+    totalFixReports += fixReports.length;
   }
 
   // ── Phase 6: 组装输出 ──
@@ -731,7 +903,13 @@ export function syncMergeEngine(options = {}) {
     warnings,
     stats: {
       totalProducts: Object.keys(products).length,
-      totalSpecs: scannedSpecs.length,
+      // 对抗审查 W-6：totalSpecs 保持「有实质 spec.md 的目录数」旧义；fix-report 通道目录数单列
+      totalSpecs: scannedSpecs.filter((spec) => spec.artifact === 'spec').length,
+      totalFixReportDirs: scannedSpecs.filter((spec) => spec.artifact === 'fix-report').length,
+      totalFixReports,
+      placeholderOnlySpecs: placeholderOnly.length,
+      placeholderOnlyDirs: [...placeholderOnly],
+      shadowedFixReports: shadowedFixReports.length,
       totalActiveFR,
       totalConflicts,
       executionTimeMs: Date.now() - startTime,
@@ -740,6 +918,9 @@ export function syncMergeEngine(options = {}) {
 
   if (dryRun) {
     output.dryRun = true;
+  }
+  if (lint) {
+    output.lint = { passed: lintFindings.length === 0, findings: lintFindings };
   }
 
   // ── Phase 7: 写入（非 dry-run）──
@@ -764,9 +945,20 @@ export function syncMergeEngine(options = {}) {
     if (semanticNew !== semanticOld) {
       try {
         fs.mkdirSync(path.dirname(mappingPath), { recursive: true });
-        const eol = /\r\n/.test(oldText) ? '\r\n' : '\n';
-        const body = (newMappingYaml.endsWith('\n') ? newMappingYaml : `${newMappingYaml}\n`).replace(/\r?\n/g, eol);
-        fs.writeFileSync(mappingPath, `${leadingComments}${body}`, 'utf-8');
+        // M11 簇④ 第 13 项：语义变化只来自产品名修正，优先做 in-place 补丁（只改 key 行，其余原文全保留）；
+        // 目标 key 已存在需合并条目时才退化为整体序列化（会丢 name / owner / 行内注释 / 顶层键，如实告警）
+        const renames = Object.entries(NAME_CORRECTION_RULES)
+          .filter(([from]) => Object.hasOwn(rawMapping.products || {}, from))
+          .map(([from, to]) => ({ from, to }));
+        const patch = oldText ? patchProductMappingText(oldText, renames) : { applied: false, text: oldText, reason: '原文件不存在' };
+        if (patch.applied) {
+          fs.writeFileSync(mappingPath, patch.text, 'utf-8');
+        } else {
+          warnings.push(`product-mapping.yaml 写回退化为整体序列化（${patch.reason}），注释头之外的 name / owner / 行内注释 / 顶层键会丢失`);
+          const eol = /\r\n/.test(oldText) ? '\r\n' : '\n';
+          const body = (newMappingYaml.endsWith('\n') ? newMappingYaml : `${newMappingYaml}\n`).replace(/\r?\n/g, eol);
+          fs.writeFileSync(mappingPath, `${leadingComments}${body}`, 'utf-8');
+        }
       } catch (err) {
         warnings.push(`写入 product-mapping.yaml 失败: ${err.message}`);
       }
@@ -792,9 +984,17 @@ function printResult(result, args) {
     process.exit(1);
   }
 
-  // --json 模式或 --dry-run + --json 组合
-  if (args.json) {
+  // --json 模式或 --dry-run + --json 组合；--preflight 恒 JSON；--lint 未通过 exit 1
+  // 退出码用 exitCode 而不是 process.exit()：后者会截断管道里尚未刷完的大 JSON（本仓 --lint --json 实测 50KB 处被切断）
+  if (args.json || args.preflight) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (args.lint && result.lint && !result.lint.passed) process.exitCode = 1;
+    return;
+  }
+  if (args.lint) {
+    const findings = result.lint?.findings ?? [];
+    process.stdout.write(`${findings.length === 0 ? 'LINT PASS：spec 写法零告警' : `LINT FAIL：${findings.length} 条\n${findings.map((f) => `  [${f.productId}] ${f.specId} ${f.kind}: ${f.detail}`).join('\n')}`}\n`);
+    process.exitCode = findings.length === 0 ? 0 : 1;
     return;
   }
 

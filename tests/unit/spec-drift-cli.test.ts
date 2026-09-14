@@ -9,7 +9,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { main } from '../../scripts/spec-drift-cli.mjs';
 
 let root: string;

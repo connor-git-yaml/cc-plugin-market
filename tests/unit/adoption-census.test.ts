@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { runCensus } from '../../scripts/adoption-census.mjs';
 
 // 全部用临时目录 fixture，绝不读真实 ~/.claude 或 ~/.codex，也不写任何仓内路径。

@@ -1,13 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseYamlDocument } from './simple-yaml.mjs';
-
-export function parseProductMapping(content) {
-  const document = parseYamlDocument(content);
-  const products = isObject(document.products) ? document.products : {};
-  return { products };
-}
-
 export function slugToTitle(value) {
   return String(value)
     .split('-')

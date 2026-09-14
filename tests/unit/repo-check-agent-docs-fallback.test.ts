@@ -30,7 +30,6 @@ vi.mock('../../scripts/sync-agent-docs.mjs', async (importOriginal) => {
   };
 });
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { validateRepository } from '../../scripts/lib/repo-maintenance-core.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

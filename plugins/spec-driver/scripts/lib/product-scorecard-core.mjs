@@ -19,10 +19,11 @@ import {
 import { patchProductCatalogIndex, patchYamlArtifact } from './product-artifact-patchers.mjs';
 import {
   isObject,
-  parseProductMapping,
   slugToTitle,
   toPosix,
 } from './product-governance-helpers.mjs';
+import { parseProductMapping } from './sync-product-mapping.mjs';
+import { indexSpecDirectories, resolveSpecDirName } from './spec-directory-index.mjs';
 import { appendWarningsSection, dedupeStringValues, escapeMarkdownTableCell } from './script-diagnostics.mjs';
 import { readJsonArtifact, writeJsonArtifact, writeMarkdownArtifact, writeYamlArtifact } from './script-report-io.mjs';
 import { parseYamlDocument } from './simple-yaml.mjs';
@@ -576,6 +577,9 @@ function patchEntityScorecard(entityPath, report, projectRoot, productId) {
   });
 }
 
+/** 本 pass 回填进 catalog-index.yaml 每个产品条目的字段（catalog generator 据此区分「后续 pass 回填」与「字段脱落」）。 */
+export const SCORECARD_CATALOG_INDEX_FIELDS = Object.freeze(['scorecardStatus', 'scorecardScore']);
+
 function patchCatalogIndex(projectRoot, productSummaries) {
   const scorecardById = new Map(productSummaries.map((product) => [product.id, product]));
   patchProductCatalogIndex(projectRoot, (product) => {
@@ -628,9 +632,16 @@ function readQualityReport(projectRoot, productId, entity) {
 }
 
 export function collectFeatureInputs(projectRoot, specs) {
+  const specsDir = path.join(projectRoot, 'specs');
+  // mapping 条目是短编号（`"001"`）或完整目录名，统一经 spec-directory-index 解析到磁盘目录；
+  // 此前把条目原样拼路径，真实 mapping 的短编号一律判 missing（M11 簇④ 第 12 项）
+  const dirIndex = indexSpecDirectories(specsDir);
   return specs.map((entry) => {
     const id = typeof entry === 'string' ? entry : entry.id;
-    const featureDir = path.join(projectRoot, 'specs', id);
+    const { dirName } = resolveSpecDirName(specsDir, id, dirIndex);
+    const featureDir = path.join(specsDir, dirName ?? id);
+    // 报告里的 id 用磁盘目录名（能定位到目录才有行动价值）；解析不到目录时保留 mapping 原条目（missing 形态如实）
+    const reportId = dirName ?? id;
     const specPath = path.join(featureDir, 'spec.md');
     const blueprintPath = path.join(featureDir, 'blueprint.md');
     const artifactPath = fs.existsSync(specPath)
@@ -644,7 +655,7 @@ export function collectFeatureInputs(projectRoot, specs) {
     const status = parseFeatureArtifactStatus(artifactContent);
     const governed = artifactType === 'feature' && /implemented/i.test(status ?? '');
     return {
-      id,
+      id: reportId,
       featureDir,
       specPath,
       specStat: safeStat(specPath),

@@ -113,7 +113,7 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     //
     // F277（K14）：清单由 8 项更新为**当次提交已落地的集合**。当前 = **15** 项，
     // 换算式：既有 8 + Phase A 已落地 3 + Phase C 已落地 2 + Phase D 已落地 1
-    // + Phase B/D 对抗修订 1 = 15，单位：check id；
+    // + Phase B/D 对抗修订 1 + M11 卡 C 块 6 = 16，单位：check id；
     // Phase A 的 3 = `agent-docs:shared-section:orchestrator-gate-mounting-guard` 1
     // + `agent-tools:required` 1 + `gate-mounting:effective-config` 1；
     // Phase C 的 2 = `agent-docs:shared-section:agent-output-discipline`（块 1） 1
@@ -134,7 +134,7 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     //   Phase A 段 A3 收口（块 2 的 entry 落地） → 8 + 3 = 11
     //   Phase C 收口（块 1 / 块 3 两个 entry）   → 8 + 5 = 13
     //   Phase D 收口（块 4 entry，裁定 D-③）    → 8 + 6 = 14
-    //   Phase B/D 对抗修订（块 5 entry，ε-C1 / γ-C1） → 8 + 7 = 15 ← **当前值 = 终值**
+    //   Phase B/D 对抗修订（块 5 entry，ε-C1 / γ-C1） → 8 + 7 = 15；M11 卡 C 簇④ 第 5 项（块 6 entry） → 9 + 7 = 16 ← **当前值 = 终值**
     //
     // ⚠️ **族内排序契约**：`agent-docs` 族的各 id 顺序 == `sync-agent-docs.mjs` 的
     // `sectionConfigs` **数组追加顺序**。下方顺序按各块的落地 Phase 钉死，故后续 Phase
@@ -153,6 +153,7 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
       'agent-docs:shared-section:gate-tasks-scope-cut-acceptance', // 块 3 · Phase C（T069）
       'agent-docs:shared-section:gate-design-convergence-loop', // 块 4 · Phase D（T081~T084，裁定 D-③）
       'agent-docs:shared-section:gate-verify-matrix-recompute', // 块 5 · Phase B/D 对抗修订（ε-C1 / γ-C1）
+      'agent-docs:shared-section:gate-class-mandatory-upgrade', // 块 6 · M11 卡 C 簇④ 第 5 项（(ii) 门禁类升格条款）
       // F264：`spec-driver-wrappers` 族内新增的窄门禁——扫 Codex wrapper 是否残留 Claude 专属
       // MCP 命名空间（Codex 下该前缀恒不存在，照抄等于让它去调一个不存在的工具名）。它落在
       // 第 4 族内，故按族追加顺序排在图质量族之前。

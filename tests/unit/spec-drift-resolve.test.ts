@@ -17,7 +17,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import {
   SUPPORTED_EXTENSIONS,
   parseManifest,

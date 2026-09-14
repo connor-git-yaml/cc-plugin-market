@@ -13,7 +13,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明，运行时 ESM 导入
 import { loadDistModule } from '../../scripts/lib/spec-drift-dist-loader.mjs';
 
 let tmpRoot: string;

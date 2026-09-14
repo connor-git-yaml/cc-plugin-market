@@ -15,7 +15,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { validateGraphQuality } from '../../scripts/lib/graph-quality-core.mjs';
 
 vi.mock('node:child_process', async (importOriginal) => {

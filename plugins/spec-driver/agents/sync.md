@@ -32,6 +32,8 @@ effort: medium
 node "$PLUGIN_DIR/scripts/sync-merge-engine.mjs" --project-root "$PROJECT_ROOT" --json
 ```
 
+编排器已在派发前跑过 `--preflight`（注入块 `**引擎预检**`）：你回报的聚合数必须与之逐项对得上。JSON 里每个产品的 `fixReports[]` 是 fix 卡（只有 fix-report.md、或 spec.md 仍为模板占位的目录）的行为变化摘要，`timeline.entries[].artifact` 标 `fix-report`；这些条目不进 FR 账（`requirements` 恒空），`stats.totalFixReports` / `placeholderOnlySpecs` 给出分母。
+
 解析 stdout JSON，检查 schemaVersion（期望 1.x.x）：
 - major 版本不匹配 -> 降级路径
 - 缺少 schemaVersion -> 降级路径
@@ -51,6 +53,8 @@ node "$PLUGIN_DIR/scripts/sync-merge-engine.mjs" --project-root "$PROJECT_ROOT" 
 ### Step 3: 语义融合生成 current-spec.md
 
 基于 JSON 中每个产品的 mergeSkeleton（14 章骨架），按模板 `$PLUGIN_DIR/templates/product-spec-template.md` 的章节结构逐章语义填充。推断规则：Success Criteria→KPI、userStories→角色场景、Constraints→范围边界、Edge Cases→NFR、plan.md→架构决策、Dependencies→假设风险、高频术语→术语表。推断内容标 [推断]，无法推断标 [待补充]。另附对外文档摘要区块。
+
+**fix-report 通道（M11 簇④ 第 9 项）**：`fixReports[]` 每条按「`编号` · 标题 · 修复策略一句话」写进第 12 章变更历史（按编号排序，与 spec 条目同列），`specImpact` 里声明的行为变化 / 限制写进第 9 章已知限制与技术债（引用编号），`rootCause` 可作第 8 章设计决策的反面案例；不得为 fix 卡编造 FR 编号，也不得把它们计入第 5 章功能全集。
 
 ### Step 4: 验证与输出
 

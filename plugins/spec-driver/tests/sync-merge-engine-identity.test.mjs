@@ -372,7 +372,7 @@ test('W-5 / W-6 映射到产品却抽不出任何 FR 的 spec 有提示；mappin
   const r = run(root);
   assert.match(r.warnings.find((x) => x.includes('spec 002')) ?? '', /未抽出任何 FR/);
   assert.match(r.warnings.find((x) => x.includes('094-05')) ?? '', /映射条目 094-05 在 specs\/ 下没有对应目录/);
-  assert.match(r.warnings.find((x) => x.includes('030')) ?? '', /映射条目 030 的目录 030-empty-dir 既无 spec\.md 也无 blueprint\.md/);
+  assert.match(r.warnings.find((x) => x.includes('030')) ?? '', /映射条目 030 的目录 030-empty-dir 既无实质 spec\.md 也无 blueprint\.md/);
   assert.equal(r.warnings.filter((x) => x.includes('024')).length, 0, `blueprint 条目不得报悬空: ${JSON.stringify(r.warnings)}`);
   assert.equal(r.warnings.filter((x) => x.includes('spec 001')).length, 0);
 });
@@ -445,5 +445,5 @@ test('W-B5 写回：BOM 与 YAML 文档分隔符 `---` 之后的注释头保留�
 
 test('W-B8 同一编号多个含 spec.md 的目录：warning 指名目录（parsedSpecs 按编号索引会互相覆盖）', () => {
   const r = run(makeProject([{ dir: '001-core', body: specDoc('- **FR-001**: 基线') }, { dir: '112-a', body: specDoc('- **FR-001**: A') }, { dir: '112-b', body: specDoc('- **FR-001**: B') }], mapping(['001', '112'])));
-  assert.match(r.warnings.find((w) => w.includes('编号 112')) ?? '', /编号 112 有 2 个含 spec\.md 的目录（112-a, 112-b）/);
+  assert.match(r.warnings.find((w) => w.includes('编号 112')) ?? '', /编号 112 有 2 个含实质 spec\.md 的目录（112-a, 112-b）/);
 });

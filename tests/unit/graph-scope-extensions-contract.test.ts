@@ -25,9 +25,7 @@ import {
 } from '../../src/collector-surface.js';
 import { computeCollectorFingerprint } from '../../src/panoramic/graph/collector-fingerprint.js';
 
-// @ts-expect-error — .mjs 无类型声明，运行时可解析（同 graph-bootstrap-status.test.ts 先例）
 import * as decisionModule from '../../plugins/spec-driver/scripts/lib/graph-consumption-decision.mjs';
-// @ts-expect-error — 同上；CLI 侧只取合同测试锚点常量，模块的自调用守卫在被 import 时不会触发
 import * as cliModule from '../../plugins/spec-driver/scripts/graph-consumption-cli.mjs';
 
 interface MjsScopeSurface {

@@ -240,6 +240,10 @@ verify 的 `tools` 无 `Write` / `Edit`，但它**持有 `Bash`**——而 `Bash
    - 对每条宪法原则评估技术计划的兼容性
    - 生成评估表：原则 | 适用性 | 评估 | 说明
    - 如有 VIOLATION，必须调整计划或提供豁免论证
+   - **机械核对（M11 簇④ 第 3 项）**：本节引用的每个 FR 编号必须 ∈ `## FR → Phase 覆盖矩阵` 已认领集合。矩阵写完后跑
+     `node "$PLUGIN_DIR/scripts/check-fr-matrix.mjs" constitution {feature_dir}/plan.md --json`，**`passed === false`（退出码 1）即按 VIOLATION 处理**——
+     包括 `sectionMissing` 非 null 的「判不出」分支（该分支 `unclaimed` 恒空，只看 `unclaimed` 会把判定器自己的 fail-closed 读成无违规）；
+     有未认领引用时要么把该 FR 补进矩阵登记，要么改掉引用。命令原文与原始输出留痕在本节末尾（fenced code 内，判定器不把命令原文里的编号当引用），不留痕视为未核对
 
 6. **Phase 0: 研究决策**
    - 对所有 `NEEDS CLARIFICATION` 项进行研究
@@ -332,9 +336,15 @@ verify 的 `tools` 无 `Write` / `Edit`，但它**持有 `Bash`**——而 `Bash
 
 **仅有声明而无依据的关闭，视为未做判定**——「没查」与「查了且确实没有」在产物上完全同形。表中命令**仅为形态示例**，实际写入的必须是**本次真正跑过的那一条**及其**真实输出**，不得抄本表。
 
-**(ii) 门禁 / 判定器 / 安全类改动一律升格为强制，与 mode 解耦。** 本次改动按**白名单式命中面判据**（路径条 **13**：`plugins/spec-driver/scripts/**`、`plugins/spec-driver/hooks/**`、`plugins/spec-driver/contracts/**`、`.specify/orchestration-overrides.yaml`、`plugins/spec-driver/agents/**`、`plugins/spec-driver/skills/**`、`plugins/spec-driver/templates/**`、`plugins/spec-driver/lib/**`、`plugins/spec-driver/config/orchestration.yaml`、仓根 `scripts/**`、`.specify/templates/**`、`plugins/spec-driver/skills-codex/**`、`.codex/skills/**`；语义条 **1**：任何「失效即静默放行」的判定器 / 守护 / 安全检查**逻辑，不论其载体是代码还是 prompt / 模板散文**——命中其一即判为门禁类。换算式：命中面 **14** 条 = 路径条 13 + 语义条 1，单位：命中条。**与共享块 `templates/gate-design-convergence-loop.md` 的分类表路径集合与换算式同源（本句是手写副本、非注入块，文本形式与块内表格不同；两处不得各列一套路径，改一处必同批改另一处并以 sha 抽检）**）被判为门禁 / 判定器 / 安全类时，**mode 分层矩阵第 1 项（FR 覆盖矩阵与裁剪登记）与第 4 项（关键量反向普查）在全部 mode 下升格为强制**，**不接受内容触发式关闭**。即触发条件与「本次是否属门禁 / 判定器 / 安全类改动」**解耦**：门禁类改动**不因 mode 名、也不因本子代理自述而降级**。
->
-> 换算式：受本项升格影响的检查项 = 第 1 项 + 第 4 项 = **2 项**（单位：矩阵行）；升格的射程 mode = 全部 **8** 个（单位：mode）。两个计数单位**分列、不得相加**。
+以下区块由 `npm run docs:sync:agents` 从 `plugins/spec-driver/templates/gate-class-mandatory-upgrade.md` 注入，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: gate-class-mandatory-upgrade -->
+**门禁类改动的强制升格条款（由 `templates/gate-class-mandatory-upgrade.md` 单一事实源经 `npm run docs:sync:agents` 注入，请勿手改本块；M11 簇④ 第 5 项：此前 5 份文件各手写一遍，与 F277 FR-036「跨 SKILL 共享内容走 templates/ 单一事实源」冲突且漂移无守护）**
+
+**(ii) 门禁 / 判定器 / 安全类改动一律升格为强制，与 mode 解耦。** 本次改动按**白名单式命中面判据**（路径条 **13**：`plugins/spec-driver/scripts/**`、`plugins/spec-driver/hooks/**`、`plugins/spec-driver/contracts/**`、`.specify/orchestration-overrides.yaml`、`plugins/spec-driver/agents/**`、`plugins/spec-driver/skills/**`、`plugins/spec-driver/templates/**`、`plugins/spec-driver/lib/**`、`plugins/spec-driver/config/orchestration.yaml`、仓根 `scripts/**`、`.specify/templates/**`、`plugins/spec-driver/skills-codex/**`、`.codex/skills/**`；语义条 **1**：任何「失效即静默放行」的判定器 / 守护 / 安全检查**逻辑，不论其载体是代码还是 prompt / 模板散文**——命中其一即判为门禁类。换算式：命中面 **14** 条 = 路径条 13 + 语义条 1，单位：命中条。**与共享块 `templates/gate-design-convergence-loop.md` 的分类表路径集合与换算式同源（本块由 `templates/gate-class-mandatory-upgrade.md` 单一事实源经 `npm run docs:sync:agents` 注入，文本形式与块内表格不同；两处路径集合由 `tests/unit/gate-class-path-list-parity.test.ts` 机械对拍，改一处必同批改另一处）**）被判为门禁 / 判定器 / 安全类时，**mode 分层矩阵第 1 项（FR 覆盖矩阵与裁剪登记）与第 4 项（关键量反向普查）在全部 mode 下升格为强制**，**不接受内容触发式关闭**。即触发条件与「本次是否属门禁 / 判定器 / 安全类改动」**解耦**：门禁类改动**不因 mode 名、也不因执行者自述而降级**。
+
+换算式：受本项升格影响的检查项 = 第 1 项 + 第 4 项 = **2 项**（单位：矩阵行）；升格的射程 mode = 全部 **8** 个（单位：mode）。两个计数单位**分列、不得相加**。（本句随块注入；此前 5 份目标各留一份手写副本在块外，`validateSharedAgentDocs` 看不见——对抗审查 W-10）
+<!-- END SHARED SECTION: gate-class-mandatory-upgrade -->
 
 **(iii) 触发条件判不出时按「成立」处理**，即按「该项被要求」处理（走强制侧），与门禁类分类判据的「判不出 ⇒ 从严」同向。**不得**因为「拿不准本次算不算有 FR 列表 / 有关键量 / 有代码改动」而落到关闭侧——拿不准本身就是依据不足，依据不足只能从严。
 

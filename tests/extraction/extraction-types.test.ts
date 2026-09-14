@@ -165,7 +165,6 @@ describe('EMPTY_EXTRACTION_RESULT', () => {
 
   it('尝试修改冻结对象会失败（严格模式）', () => {
     expect(() => {
-      // @ts-expect-error 故意违反类型约束测试冻结行为
       (EMPTY_EXTRACTION_RESULT as Record<string, unknown>).nodes = ['should-fail'];
     }).toThrow();
   });

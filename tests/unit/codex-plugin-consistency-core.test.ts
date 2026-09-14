@@ -9,7 +9,6 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-// @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { validateCodexPluginConsistency } from '../../scripts/lib/codex-plugin-consistency-core.mjs';
 
 const REPO_ROOT = resolve('.');
@@ -409,7 +408,6 @@ describe('validateCodexPluginConsistency', () => {
     synthesizeGap(root, 'spec-driver-doc', [
       { id: 'synthetic-gap-waiver', scope: 'spec-driver', missingSkillIds: ['spec-driver-doc'] },
     ]);
-    // @ts-expect-error — .mjs 无类型声明
     const { parseYamlDocument } = await import('../../plugins/spec-driver/scripts/lib/simple-yaml.mjs');
     const doc = parseYamlDocument(readFileSync(join(root, 'contracts/codex-plugin-consistency.yaml'), 'utf-8'));
     const arr = doc.waivers[0].missingSkillIds;
@@ -419,7 +417,6 @@ describe('validateCodexPluginConsistency', () => {
 
   // ---- Feature 238（plan §3.1 步骤5）：生产合同 waivers 为空断言 ----
   it('生产合同 contracts/codex-plugin-consistency.yaml 的 waivers 为空数组或字段不存在', async () => {
-    // @ts-expect-error — .mjs 无类型声明
     const { parseYamlDocument } = await import('../../plugins/spec-driver/scripts/lib/simple-yaml.mjs');
     const doc = parseYamlDocument(readFileSync(join(REPO_ROOT, 'contracts/codex-plugin-consistency.yaml'), 'utf-8'));
     const waivers = (doc as { waivers?: unknown[] }).waivers;

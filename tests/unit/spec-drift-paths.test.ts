@@ -9,7 +9,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { resolveWithinProject } from '../../scripts/lib/spec-drift-paths.mjs';
 
 type Resolved = { ok: boolean; absPath?: string; reason?: string };

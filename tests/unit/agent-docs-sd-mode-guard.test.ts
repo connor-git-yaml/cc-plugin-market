@@ -20,7 +20,6 @@ import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// @ts-expect-error —— .mjs 治理脚本无类型声明
 import { checkSdModeDeclaration, sectionConfigs, validateSharedAgentDocs } from '../../scripts/sync-agent-docs.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -89,7 +88,7 @@ describe('块 2 的 SD_MODE per-file 参数守卫（β-W2）', () => {
     expect(guard('# 没有 marker 的文件\nSD_MODE=feature\n', STORY_PATH, KEY)).toBeNull();
   });
 
-  it('接线证据 · 块 2 的 entry 确实挂了 preludeGuard，且只有它挂（其余 12 个 entry 无 per-file 参数）', () => {
+  it('接线证据 · 块 2 的 entry 确实挂了 preludeGuard，且只有它挂（其余 15 个 entry 无 per-file 参数）', () => {
     const configs = sectionConfigs as Array<{ key: string; preludeGuard?: unknown }>;
     expect(configs.filter((c) => typeof c.preludeGuard === 'function').map((c) => c.key)).toEqual([KEY]);
   });

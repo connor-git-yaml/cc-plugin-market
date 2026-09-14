@@ -231,6 +231,25 @@ export const sectionConfigs = [
       'plugins/spec-driver/skills/spec-driver-refactor/SKILL.md',
     ],
   },
+  // M11 簇④ 第 5 项（块 6）：mode 条件格三项约束之 (ii)「门禁 / 判定器 / 安全类改动一律升格为强制」。
+  //
+  // 此前 `agents/plan.md` + 4 份 SKILL（sync / refactor / fix / doc，即带「mode 条件格触发条件的三项约束」
+  // 段的那 4 个 mode）各手写一遍同一段 13 条路径 + 1 条语义条，与 F277 FR-036 正面冲突，且 plan.md 一份已经
+  // 悄悄漂成「本子代理自述」（其余 4 份是「执行者自述」）。`targets` 只列源文件：`skills-codex/**` 由
+  // `spec-driver-codex-wrappers` 步从 `skills/**` 逐行再生，不单独注入。
+  //
+  // ⚠️ 本 entry 按上方排序契约（K14）append 到数组末尾，不得插到已落地 entry 之前。
+  {
+    key: 'gate-class-mandatory-upgrade',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/gate-class-mandatory-upgrade.md'),
+    targets: [
+      'plugins/spec-driver/agents/plan.md',
+      'plugins/spec-driver/skills/spec-driver-sync/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-refactor/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-fix/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-doc/SKILL.md',
+    ],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {

@@ -137,7 +137,6 @@ describe('swe-bench-verified-paths', () => {
   });
 
   it('缺 taskId / cohort 抛错', () => {
-    // @ts-expect-error 故意缺参
     expect(() => runFixturePath(undefined, 'c', 1)).toThrow();
   });
 
