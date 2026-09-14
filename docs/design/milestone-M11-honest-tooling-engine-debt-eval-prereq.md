@@ -81,7 +81,7 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 
 | 项 | 承接 |
 |---|---|
-| 性能基线两个版本未跑 | 09-14 安静窗口已重跑三目标（4.3.0 旧 fixture → 4.6.0）：`baseline:diff` **三档全 red**——同模块数、同 4 次 LLM 调用下每次调用输入 token ×2.3、输出 ×2.4，墙钟 +20% / +121% / +89%；新 fixture 未入库，**待用户拍板**（接受为新基线 / 先按 minor 二分追因，见账本「4.6.0 perf 基线重跑」）；追因若立卡进第一批 |
+| 性能基线两个版本未跑 | 09-14 安静窗口已重跑三目标（4.3.0 → 4.6.0）：`baseline:diff` 三档 red，但归因为 **Claude Code 无头调用的 harness 开销**（一次单词回复 ≈ 67k input 侧 token，llm-client 把 cache_creation / cache_read 计入 input），非 spectra prompt 变化；新 fixture 已接受入库。改进候选进第一批：collector 拆 cache 字段并按单价估成本；`cli-proxy` spec 调用禁工具 / MCP、`--max-turns 1`（见账本「4.6.0 perf 基线重跑」） |
 | F170c SC-002/SC-004、F170d SC-004 只在 `it.skip` | 并入 P1-H |
 | 真实 LLM e2e 靠 `HAS_LLM_E2E=1` | 09-14 首次真跑：T-010-2 通过（128s）；T-010-1 需 300s 预算；T-010-4/5「两次 LLM full batch 逐字节相同」前提不成立（第二次输入含第一次写出的 specs + LLM 重生文本改 INFERRED 边），已改为断言代码派生子图稳定并钉住差异边界；改后复跑结果见账本；产品侧观察「图是否含 spec 派生边取决于 specs 是否预存」→ 簇④/⑦候选 |
 | typecheck:tests:full 1042 错 | 簇④ 附带燃尽任务，目标 ≤ 300 |

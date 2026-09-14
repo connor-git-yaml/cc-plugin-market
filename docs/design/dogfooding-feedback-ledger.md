@@ -653,11 +653,11 @@
   ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录（方法论进 memory）。
 
 ### 4.6.0 perf 基线重跑（3 target，安静窗口）· 2026-09-14
-状态：待处理（1 条，须用户拍板：接受为新基线 / 立卡追因）
+状态：已处理（1 条：接受为新基线并归因；2 项改进候选 → M11）
 来源：M10 §13.2 收官挂起项「4.6.0 发布后重跑基线」；`npm run baseline:collect -- --targets karpathy/micrograd,karpathy/nanoGPT,self-dogfood --mode full`，无并发负载；旧 fixture 为 4.3.0（2026-07-20，`709777d2`）
 
 - [结果准确性][spectra batch · 同模块数下 LLM 用量翻倍] `baseline:diff` 三档全 red：micrograd 墙钟 +20%（145.7s→175.3s）、输入+输出 token +128%（168k→385k）、估算成本 +130%；nanoGPT 墙钟 +121%（14.4→31.9 min）、token +154%、成本 +142%；self-dogfood 墙钟 +89%（29.9→56.7 min）、token +109%、节点 +38%（5748→7928，仓库自身变大，不可比）。**关键归因事实**（micrograd，同 5 个文件 / 37 节点 / 4 次 LLM 调用两版完全相同）：每次调用输入 token 157k→358k（×2.3）、输出 11k→27k（×2.4）、单次调用 p50 79s→138s、平均 spec 行数 182→270——不是多打了 LLM，是**每次调用的 prompt 与产出都长了一倍多**（4.3.0→4.6.0 之间的 callSites / 方法调用边 / lineRange 等上下文扩张与 spec 模板增长是候选，未定位到具体 commit）。`tokensCacheRead` 仍为 null，无法区分缓存命中。
-  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：新 fixture 已生成但**未入库**（旧 fixture 备份在 scratchpad），按 CLAUDE.local.md 升版流程第 5 步交用户决定：A) 接受为 4.6.0 基线并把「每模块 token ×2」写进 CHANGELOG 已知变化；B) 先立卡追因（对 4.3.0→4.6.0 逐 minor 二分跑 micrograd，单次 ~3 min）。推荐 B 再 A：micrograd 三分钟一次，二分三轮即可定位到 minor 版本。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：**归因已定，接受为 4.6.0 基线入库**。归因实验：一次只回「ok」的 `claude --print --output-format stream-json` 今天的 usage = input 3 + cache_creation 40,747 + cache_read 26,085 ≈ **67k / 次**（Claude Code 2.1.270 的系统提示 + 内建工具 schema + 用户级 MCP），而 `src/core/llm-client.ts`（Fix 134）把三项相加记作 input——4.6.0 micrograd 各模块 input 为 setup.py 70.3k / __init__ 70.4k / nn 71.9k / engine 145.8k，即 **每次调用 ≈ 67k 固定开销 + 3~5k 自身 prompt，engine 那次带了一轮工具迭代（cache_read 计两次）**。翻倍来自 Claude Code 无头调用的 harness 开销自 7 月以来增长，与 spectra 自身 prompt 无关（4.3.0 tarball 对照因 `web-tree-sitter/tree-sitter.wasm` 打包缺失无法运行，未能二分，但上述测量已足够）。墙钟增长（单次调用 p50 79s→138s）与之同源。改进候选 → M11：(a) collector 与 batch-summary 把 cache_creation / cache_read 单列并按各自单价估算成本（现在把缓存读当作全价输入，成本估算虚高约 5×）；(b) `cli-proxy` 的 spec 生成调用不需要工具与 MCP，加 `--max-turns 1` / 禁工具 / `--strict-mcp-config` 可砍掉约 60k/次的固定开销与一轮迭代。
 
 ### feature-180 LLM e2e 首次真跑 · 2026-09-14
 状态：已处理（2 条：2 已修复，产品侧观察已分流）

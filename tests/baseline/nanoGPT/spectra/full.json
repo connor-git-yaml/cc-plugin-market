@@ -2,7 +2,7 @@
   "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
-    "spectraVersion": "4.3.0",
+    "spectraVersion": "4.6.0",
     "collectorVersion": "0.3.0",
     "targetProject": "karpathy/nanoGPT",
     "targetCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
@@ -17,16 +17,17 @@
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-07-20T10:34:10.231Z",
+    "runTimestampUtc": "2026-09-14T09:33:17.706Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
       "-l",
       "node",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/graph-topology-canonical-id-1de3ab/dist/cli/index.js",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/dist/cli/index.js",
       "batch",
       "/Users/connorlu/.spectra-baselines/nanoGPT",
       "--full",
+      "--require-llm",
       "--mode",
       "full",
       "--output-dir",
@@ -39,37 +40,37 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-07-20T10:34:10.231Z",
-    "staleAfterDate": "2027-01-16",
-    "upstreamVersion": "4.3.0",
+    "pinnedAt": "2026-09-14T09:33:17.706Z",
+    "staleAfterDate": "2027-03-13",
+    "upstreamVersion": "4.6.0",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 50348,
-    "actualTokens": 386110,
-    "biasRatio": 7.67
+    "actualTokens": 981111,
+    "biasRatio": 19.49
   },
   "perf": {
-    "totalWallMs": 866646,
+    "totalWallMs": 1913666,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 71100,
-      "p95": 147500,
-      "min": 70900,
-      "max": 147500,
+      "p50": 119300,
+      "p95": 195000,
+      "min": 94300,
+      "max": 195000,
       "samplesCount": 4
     },
-    "tokensInput": 349909,
-    "tokensOutput": 36201,
+    "tokensInput": 906725,
+    "tokensOutput": 74386,
     "tokensCacheRead": null,
-    "estimatedCostUsd": 1.59,
-    "memoryPeakKb": 544608
+    "estimatedCostUsd": 3.84,
+    "memoryPeakKb": 549760
   },
   "output": {
     "graphNodeCount": 76,
-    "graphEdgeCount": 91,
+    "graphEdgeCount": 101,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 42100,
+    "graphSizeBytes": 49464,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -91,23 +92,22 @@
       "modulesWithDataModel": 6,
       "modulesWithAllFour": 6,
       "modulesWithInputsOutputs": 6,
-      "averageSpecLines": 234,
-      "shorterThan100Lines": 3,
+      "averageSpecLines": 325,
+      "shorterThan100Lines": 2,
       "longerThan1000Lines": 0,
       "outlierFiles": [
         "_index.spec.md (63 lines, too short)",
-        "prepare.spec.md (91 lines, too short)",
         "sample.spec.md (94 lines, too short)"
       ],
       "moduleCount": 7
     },
     "graphSanity": {
-      "isolatedNodes": 11,
+      "isolatedNodes": 12,
       "selfLoops": 0,
-      "edgesWithMissingTarget": 3,
-      "averageDegree": 2.4,
-      "maxDegree": 13,
-      "edgesWithoutType": 91
+      "edgesWithMissingTarget": 1,
+      "averageDegree": 2.7,
+      "maxDegree": 16,
+      "edgesWithoutType": 101
     },
     "crossLinks": {
       "totalLinks": 12,

@@ -16,6 +16,7 @@
 
 ### 测试
 
+- **perf 基线 fixture 更新到 4.6.0**（micrograd / nanoGPT / self-dogfood，`--mode full`）。与 4.3.0 fixture 相比 token 与墙钟约翻倍，归因为 Claude Code 无头调用的固定 harness 开销（约 67k input 侧 token / 次，含缓存创建与读取）而非 spectra prompt；`estimatedCostUsd` 因把缓存读取按全价计而虚高，随 M11 collector 改进修正。
 - `feature-180-batch-repro` 的 4 个 `HAS_LLM_E2E` batch 用例改为显式传 MCP SDK 请求超时（单次 300s），此前受 SDK 默认 60s 限制结构性不可能通过；T-010-4/5 的「两次 LLM full batch 逐字节相同」断言前提不成立（第二次运行的输入含第一次写出的 specs，且 LLM 重生文本改变 INFERRED 边），改为断言代码派生子图跨运行稳定并钉住差异边界。
 
 ## [4.6.0] — 2026-09-13
