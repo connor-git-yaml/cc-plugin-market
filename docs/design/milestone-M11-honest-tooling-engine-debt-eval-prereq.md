@@ -1,6 +1,6 @@
 ---
 title: Milestone M11 — 诚实工具面、引擎还债与评测前置
-status: draft-pending-user
+status: active（2026-09-14 用户逐条拍板 §8 五点 + 三项追加决策，见 decisions）
 created: 2026-09-14
 parent_milestone: milestone-M10-ship-honest-graph-evidence-gate.md（2026-09-14 代码面收官；§13 收官账 + M11 种子）
 stepback_revision_of: milestone-M10-ship-honest-graph-evidence-gate.md §13.3「M11 候选清单（种子）」（本文件把种子立成可派发的批次，取代该节的排期；候选池保留）
@@ -12,7 +12,13 @@ sources:
   - 2026-09-14 全项目未做/未验证盘点（本文 §6 逐条承接）
   - specs/277-spec-driver-engine-hardening/verification-report.md（后续卡候选 6 项）、specs/276-*/handoff/
 decisions:
-  - "【待拍板】本文所有排期均为主线程代拟；正式启动前须用户逐条确认 §8 决策点（默认推荐项已标注）"
+  - "2026-09-14 用户拍板：第一批四卡并行（各开 worktree，先 ship 先 push）"
+  - "2026-09-14 用户拍板：P1-I 走 feature 全流程（调研 + 外部语料 A/B）"
+  - "2026-09-14 用户拍板：typecheck:tests:full 燃尽目标 ≤ 100（M11 内基本清零），高于主线程推荐的 ≤ 300"
+  - "2026-09-14 用户拍板：交界调研只跑聚焦增量版（工具面诚实化的外部范式），挂在 P1-I 立卡前"
+  - "2026-09-14 用户拍板：P1-H 评测前置（含 F170c/F170d SC 复测）在第一批四卡 ship 后再跑，避免与对抗审查子代理争 Claude Max 配额"
+  - "2026-09-14 用户拍板：perf 归因两项改进（collector 拆 cache 字段按单价估成本；cli-proxy spec 调用禁工具 / MCP + --max-turns 1）并入第一批，开一张 small fix 卡"
+  - "2026-09-14 用户拍板：本机卫生由主线程直接清理，保留三个基线目标与 F150 的 HikariCP / GORM / hono"
 ---
 
 # Milestone M11 — 诚实工具面、引擎还债与评测前置
@@ -50,6 +56,7 @@ decisions:
 | **F291a per-target 阻断预算** | fix · medium · **门禁类·异构对抗常设** | 按设计稿「下一轮执行要点」：先把 `T1-E4` / `T2-E6` 改为按 `stateKeyFor` 推导路径并断言「预置的是当前键的锁」，再上复合键 | 两条前置（publish 活体验证 + 新 harness F245 基线）09-14 均已满足 |
 | **簇④ 引擎 / CLI 小补合集** | story · small~medium | `get-phases` 补门挂载字段；scope 候选集现取；Constitution Check FR 归属机械检测；补登矩阵差集化；plan.md (ii) 共享块；`generate-template` phase id 字符串化；verify.md 分层；共享制品类别规则；**sync fix-report 消费通道**（FR 按 sourceSpec 分桶已落地）；sync 派发前 mapping / digest 机械对拍；`fr-count` 绝对下界；spec 写法 lint | P1-K 第二卡 |
 | **簇⑦ 图新鲜度自动化** | fix · small | `repo:sync` 顺带 `graph-only`（或 pre-push） | 三次再现 |
+| **CLI-proxy 无头调用瘦身 + collector 成本口径** | fix · small | `src/auth/cli-proxy.ts` 的 spec 生成调用禁工具 / MCP（`--strict-mcp-config` + 空 `--mcp-config` 或等价）并 `--max-turns 1`；`scripts/baseline-collect.mjs` 与 batch-summary 把 cache_creation / cache_read 单列并按各自单价估算 `estimatedCostUsd` | 09-14 归因：一次单词回复 ≈ 67k input 侧 token，全是 harness 开销；验收 = micrograd 单次 batch 每模块 input 从 ~70k 降到 ~10k 量级，且 spec 产物结构不变 |
 
 ### 第二批
 
@@ -74,7 +81,7 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 | 主题 | 判定 |
 |---|---|
 | 诚实工具面 | P1-I 五项交付且外部语料 A/B 零假边回归；`tools/list` 确定性回归进 CI |
-| 引擎还债 | 簇④⑤⑥⑦ 交付；typecheck:tests:full 错误 **1042 → ≤ 300**（09-14 实测：160 文件，TS2532 272 / TS2339 250 / TS18048 116 为主）；F291a 交付且 F240 基线套件不改语义 |
+| 引擎还债 | 簇④⑤⑥⑦ 交付；typecheck:tests:full 错误 **1042 → ≤ 100**（用户 09-14 拍板，高于主线程推荐的 ≤ 300；09-14 实测：160 文件，TS2532 272 / TS2339 250 / TS18048 116 为主）；F291a 交付且 F240 基线套件不改语义 |
 | 评测前置 | P1-H 坏题审计 + GStack 重锚完成；F170c/F170d SC-004 有 CI 外可复跑的一次实测 |
 
 ## 6. 已知未做 / 未验证承接（2026-09-14 盘点）
@@ -84,7 +91,7 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 | 性能基线两个版本未跑 | 09-14 安静窗口已重跑三目标（4.3.0 → 4.6.0）：`baseline:diff` 三档 red，但归因为 **Claude Code 无头调用的 harness 开销**（一次单词回复 ≈ 67k input 侧 token，llm-client 把 cache_creation / cache_read 计入 input），非 spectra prompt 变化；新 fixture 已接受入库。改进候选进第一批：collector 拆 cache 字段并按单价估成本；`cli-proxy` spec 调用禁工具 / MCP、`--max-turns 1`（见账本「4.6.0 perf 基线重跑」） |
 | F170c SC-002/SC-004、F170d SC-004 只在 `it.skip` | 并入 P1-H |
 | 真实 LLM e2e 靠 `HAS_LLM_E2E=1` | 09-14 首次真跑：T-010-2 通过（128s）；T-010-1 需 300s 预算；T-010-4/5「两次 LLM full batch 逐字节相同」前提不成立（第二次输入含第一次写出的 specs + LLM 重生文本改 INFERRED 边），已改为断言代码派生子图稳定并钉住差异边界；改后复跑结果见账本；产品侧观察「图是否含 spec 派生边取决于 specs 是否预存」→ 簇④/⑦候选 |
-| typecheck:tests:full 1042 错 | 簇④ 附带燃尽任务，目标 ≤ 300 |
+| typecheck:tests:full 1042 错 | 簇④ 附带燃尽任务，目标 ≤ 100（用户拍板） |
 | SDK 模式 Stop payload 未实录 | F291b 重开条件之一，随 P1-N 顺带 |
 | adoption census 复测 | ≈ 2026-09-21，M11 首轮 milestone-next 输入 |
 | F277 FR-018 独立观察 0/3 | 观察窗口保持开启，随 P1-K 第二卡结算 |
@@ -100,8 +107,12 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 
 ## 8. 待拍板决策点
 
-1. **第一批是否四卡并行**（推荐：是；F291a 与簇④ 同目录不同文件，先 ship 先 push）。
-2. **P1-I 是否升为 feature 全流程**（推荐：是，图解析类须调研 + 外部语料 A/B）。
-3. **typecheck 燃尽目标**：≤ 300 是否合适，或改为「只报不阻断」永久化（推荐：≤ 300，且 TS2578 类零风险项先清）。
-4. **评测前置的凭据与配额**：P1-H 与 F170c/d 复测走订阅优先；预计 Claude Max 配额消耗需你确认时段。
-5. **交界全量调研 workflow**：是否在 M11 正式启动前跑一轮（约 14 agent / 1.1M token）；推荐：P1-I 立卡前跑聚焦增量版（只调研工具面诚实化的外部范式）。
+全部已于 2026-09-14 由用户拍板（结论见 frontmatter `decisions`）：
+
+1. 第一批四卡并行 → **是**。
+2. P1-I 升 feature 全流程 → **是**。
+3. typecheck 燃尽目标 → **≤ 100**（高于推荐的 ≤ 300；TS2578 类零风险项先清，其余按文件分配到各卡顺带修）。
+4. 评测前置时段 → **第一批四卡 ship 后**。
+5. 交界调研 → **聚焦增量版，挂 P1-I 立卡前**。
+6. （追加）perf 归因两项改进 → **并入第一批，开一张 small fix 卡**（§3 第五行）。
+7. （追加）本机卫生 → 主线程直接清理，保留三个基线目标与 F150 的 HikariCP / GORM / hono。
