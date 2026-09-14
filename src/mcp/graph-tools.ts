@@ -16,7 +16,7 @@ import {
   type LoadedGraphEvidence,
 } from '../panoramic/graph/engine-cache.js';
 import { resolveGraphJsonPath } from '../panoramic/graph/graph-paths.js';
-import { buildErrorResponse, type ToolResult } from './lib/tool-response.js';
+import { buildErrorResponse, buildSuccessResponse, type ToolResult } from './lib/tool-response.js';
 import { withTelemetry } from './lib/telemetry.js';
 
 // ──────────────────────────────────────────────────────────
@@ -213,9 +213,9 @@ Typical chained usage:
         depth?: number;
         projectRoot?: string;
       };
-      return runGraphTool(projectRoot, (engine) => ({
-        content: [{ type: 'text' as const, text: JSON.stringify(engine.query(question, { budget, mode, depth })) }],
-      }));
+      return runGraphTool(projectRoot, (engine) =>
+        buildSuccessResponse(engine.query(question, { budget, mode, depth }) as unknown as Record<string, unknown>),
+      );
     }),
   );
 
@@ -259,9 +259,7 @@ Typical chained usage:
         const result = engine.getNode({ id, keyword, budget });
         // 追加语义边列表（schema v2.0 新字段，向后兼容现有字段）
         const semanticEdges = engine.getSemanticEdges(result.node?.id);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ ...result, semanticEdges }) }],
-        };
+        return buildSuccessResponse({ ...result, semanticEdges } as unknown as Record<string, unknown>);
       });
     }),
   );
@@ -291,9 +289,9 @@ Typical chained usage:
         target: string;
         projectRoot?: string;
       };
-      return runGraphTool(projectRoot, (engine) => ({
-        content: [{ type: 'text' as const, text: JSON.stringify(engine.findPath(source, target)) }],
-      }));
+      return runGraphTool(projectRoot, (engine) =>
+        buildSuccessResponse(engine.findPath(source, target) as unknown as Record<string, unknown>),
+      );
     }),
   );
 
@@ -325,9 +323,9 @@ Typical chained usage:
         budget?: number;
         projectRoot?: string;
       };
-      return runGraphTool(projectRoot, (engine) => ({
-        content: [{ type: 'text' as const, text: JSON.stringify(engine.getCommunity(communityId, budget)) }],
-      }));
+      return runGraphTool(projectRoot, (engine) =>
+        buildSuccessResponse(engine.getCommunity(communityId, budget) as unknown as Record<string, unknown>),
+      );
     }),
   );
 
@@ -378,25 +376,14 @@ Typical chained usage:
       return runGraphTool(projectRoot, (engine) => {
         const hyperedges = engine.getHyperedges({ label, nodeId: node_id, limit });
         const filtered = (label !== undefined && label.length > 0) || (node_id !== undefined && node_id.length > 0);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                {
-                  hyperedges,
-                  total: hyperedges.length,
-                  filtered,
-                  // F271 FR-011：空结果附诚实说明。空数组极易被误读为"本项目无跨模块协作"，
-                  // 但真实成因通常是三重前置条件未满足（返回结构不变，只多一个 message 字段）。
-                  ...(hyperedges.length === 0 ? { message: describeEmptyHyperedges(filtered) } : {}),
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
+        return buildSuccessResponse({
+          hyperedges,
+          total: hyperedges.length,
+          filtered,
+          // F271 FR-011：空结果附诚实说明。空数组极易被误读为"本项目无跨模块协作"，
+          // 但真实成因通常是三重前置条件未满足（返回结构不变，只多一个 message 字段）。
+          ...(hyperedges.length === 0 ? { message: describeEmptyHyperedges(filtered) } : {}),
+        } as Record<string, unknown>);
       });
     }),
   );
@@ -424,9 +411,9 @@ Typical chained usage:
     },
     withTelemetry('graph_god_nodes', (args) => {
       const { limit, projectRoot } = args as { limit?: number; projectRoot?: string };
-      return runGraphTool(projectRoot, (engine) => ({
-        content: [{ type: 'text' as const, text: JSON.stringify(engine.getGodNodes(limit)) }],
-      }));
+      return runGraphTool(projectRoot, (engine) =>
+        buildSuccessResponse(engine.getGodNodes(limit) as unknown as Record<string, unknown>),
+      );
     }),
   );
 }

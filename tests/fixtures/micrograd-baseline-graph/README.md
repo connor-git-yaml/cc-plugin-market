@@ -34,7 +34,18 @@ node dist/cli/index.js batch "$TMPCOPY" --mode graph-only --output-dir "$TMPOUT"
 cp "$TMPOUT/_meta/graph.json" tests/fixtures/micrograd-baseline-graph/graph.json
 ```
 
-## 实证数据（F272 ⑦ 重建后 — 当前版本）
+## 实证数据（M11 卡 A 重建后 — 当前版本）
+
+- producer：`1d7c8b01` + 工作树（M11 卡 A / 卡 D 实现态）+ `npm run build`；micrograd 源 clone commit 校验通过
+  （`c911406e5ace8742e5841a7e0df113ecb5d54685`，未漂移）
+- **33 节点 / 38 边，逐节点 id 逐边三元组与 F272 版完全相同**；本次重建只新增两个字段面：
+  ① 卡 D `graph.sourceTreeDirty`（临时拷贝非 git 仓 ⇒ `null`）；② 卡 A calls 边（8 条）全部带
+  `resolution`（export-table 4 / import-table 3 / class-member 1）与 `callSites` / `callSiteCount`
+- 审计方式：`scratchpad/cardA-fixtures/regen-and-audit.mjs`（一次性重算器，不入库）——剥掉
+  `graph.builder` / `graph.sourceTreeDirty` / 边 `resolution` / `callSites` / `callSiteCount` 后与上一版 pinned
+  全字段深等（0 差异）；禁用「diff 过滤后为空集」判据，比较的是剥字段后的整棵 JSON 树
+
+## 实证数据（F272 ⑦ 重建后 — 历史版本）
 
 - **异构对抗审查实证**：pinned 陈旧检测守卫（`tests/integration/graph-quality-pinned-staleness.test.ts`）
   此前复用的 `compareGraphOnlyStructure` 只比对节点/边 multiset，`graph.fingerprint`（F249 采集面指纹）

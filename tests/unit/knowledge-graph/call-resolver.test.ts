@@ -51,6 +51,11 @@ function mkSkeleton(opts: {
   };
 }
 
+// M11 卡 A：resolveCalls 的边现在带 metadata.resolution / metadata.callSite（专项用例见
+// call-resolver-resolution-labels.test.ts）；本文件的逐字节边集断言只看五个身份字段，剥掉 metadata 再比。
+function stripMeta<T extends { metadata?: unknown }>(edges: T[]): Array<Omit<T, 'metadata'>> {
+  return edges.map(({ metadata: _metadata, ...rest }) => rest);
+}
 function mkSkeletonsMap(skeletons: CodeSkeleton[]): Map<string, CodeSkeleton> {
   const m = new Map<string, CodeSkeleton>();
   for (const sk of skeletons) m.set(sk.filePath, sk);
@@ -575,7 +580,6 @@ describe('call-resolver edge cases', () => {
     // 模拟 mapper 抽出来的不识别 calleeKind（如 manually corrupt 数据）— resolver 应 skip
     const edges = resolveCalls(
       [
-        // @ts-expect-error 故意构造异常 calleeKind 验证 skip 行为
         { calleeName: 'dynamicCall', calleeKind: 'unknown_kind' as 'free', line: 1, callerFile: 'a.py' },
       ],
       skeletons,
@@ -2042,7 +2046,7 @@ describe('F260 R1/R2 — H1 别名键收口（D1：重命名 import 一律弃权
     ];
     const edges = resolveCalls(callSites, skeletons);
     expect(edges.some((e) => e.target === 'a.ts::Foo.run')).toBe(false);
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'b.ts::use', target: '?::run', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2078,7 +2082,7 @@ describe('F260 R1/R2 — H1 别名键收口（D1：重命名 import 一律弃权
       [{ callerFile: 'b.ts', calleeName: 'run', calleeKind: 'member', calleeQualifier: 'ExternalFoo', callerContext: 'use', line: 3 }],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'b.ts::use', target: '?::run', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2153,7 +2157,7 @@ describe('F260 R1/R2 — H1 别名键收口（D1：重命名 import 一律弃权
       [{ callerFile: 'b.py', calleeName: 'run', calleeKind: 'member', calleeQualifier: 'Foo', callerContext: 'use', line: 3 }],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'b.py::use', target: 'a.py::Foo.run', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2286,7 +2290,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       ],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       {
         source: 'caller.ts::runBatch',
         target: 'adapter.ts::PythonLanguageAdapter.extractSymbolNodes',
@@ -2319,7 +2323,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       ],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       {
         source: 'caller.ts::buildAstGraphOnly',
         target: 'adapter.ts::PythonLanguageAdapter.extractSymbolNodes',
@@ -2349,7 +2353,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
     );
     // import 表里确实有这个键（对照组：证明拦住它的是 A1 判据而不是「查不到」）
     expect(buildImportIndex(skeletons).get('caller.ts')?.aliasToTarget.get('PythonLanguageAdapter')).toBe('adapter.ts');
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R6b — 条件 ③ 的 renamedImportAliases 子句守卫（裁决 P3-2 补强用例）：跨作用域 dynamic 绑定截胡重命名别名 ⇒ 不出边', () => {
@@ -2409,7 +2413,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       skeletons,
     );
     expect(edges.some((e) => e.target === 'c.ts::X.m')).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R7 — fail-closed：receiverType 存在但 receiverTypeSoleImportBinding 缺席（旧 baseline / 非 TS mapper）⇒ 不出边', () => {
@@ -2429,7 +2433,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       ],
       skeletons,
     );
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R8 — H5 守卫：名字被 suppressedDynamicAliases 抑制且 caller 模块有同名本地导出类 ⇒ 不出边（拦截前置于本模块导出查找）', () => {
@@ -2474,7 +2478,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       skeletons,
     );
     expect(edges.some((e) => e.target === 'caller.ts::Alpha.m')).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R9 — type-only import 指向 interface：不出边（由条件 ④ 保证，不是 A8）', () => {
@@ -2519,7 +2523,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       skeletons,
     );
     expect(edges.some((e) => e.target === 'r.ts::Runner.run')).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R9b — A8 撤回的回归钉：`import type { Foo }` 指向 **class** ⇒ 照常出边（类型名怎么导入不改变调用事实）', () => {
@@ -2559,7 +2563,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       ],
       mkSkeletonsMap([aTs, callerTs]),
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'caller.ts::use', target: 'a.ts::Foo.m', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2597,7 +2601,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       mkSkeletonsMap([callerTs]),
     );
     expect(edges.some((e) => e.target === 'caller.ts::Local.m')).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R10b — A6 声明合并：④ 与 ⑤ 必须绑定到**同一个** export 条目，且选条目走 first-write-wins（与 deriveNodesFromSkeletons 同序）', () => {
@@ -2644,14 +2648,14 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
     });
 
     // class 条目自己的成员 ⇒ 出边
-    expect(resolveCalls([mkCs('onClass')], mkSkeletonsMap([classFirst, callerTs]))).toEqual([
+    expect(stripMeta(resolveCalls([mkCs('onClass')], mkSkeletonsMap([classFirst, callerTs])))).toEqual([
       { source: 'caller.ts::use', target: 'a.ts::Foo.onClass', relation: 'calls', confidence: 'medium', directional: true },
     ]);
     // 方法只存在于 interface 条目 ⇒ 不出边（⑤ 只认 ④ 那一条的 members）
     // 反面对照：classMemberIndex 是 last-write-wins ⇒ 它认为 a.ts::Foo 的成员集是 interface 那条，
     // 「④ 查一个索引、⑤ 查 classMemberIndex」的实现会在这里放行 onInterface（A6 要封死的正是它）
     expect(buildClassMemberIndex(mkSkeletonsMap([classFirst, callerTs])).get('a.ts::Foo')).toEqual(new Set(['onInterface']));
-    expect(resolveCalls([mkCs('onInterface')], mkSkeletonsMap([classFirst, callerTs]))).toEqual([]);
+    expect(stripMeta(resolveCalls([mkCs('onInterface')], mkSkeletonsMap([classFirst, callerTs])))).toEqual([]);
 
     // interface 在前：deriveNodesFromSkeletons 是 first-write-wins ⇒ 图上 a.ts::Foo 的
     // metadata.exportKind 就是 'interface'。选条目若不与它同序，出的边会挂在 interface 符号节点上，
@@ -2661,7 +2665,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       language: 'typescript',
       exports: [classFirst.exports[1]!, classFirst.exports[0]!],
     });
-    expect(resolveCalls([mkCs('onClass')], mkSkeletonsMap([interfaceFirst, callerTs]))).toEqual([]);
+    expect(stripMeta(resolveCalls([mkCs('onClass')], mkSkeletonsMap([interfaceFirst, callerTs])))).toEqual([]);
   });
 
   it('R10c — A2 default import 守卫：`import Foo from "./a.js"` 且 a.ts 另有具名 `export class Foo` ⇒ 不出边', () => {
@@ -2706,7 +2710,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       skeletons,
     );
     expect(edges.some((e) => e.target === 'a.ts::Foo.m')).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R11 — 成员验证失败：目标类存在但成员集无该方法 ⇒ 不出边，且**不产 medium 占位**（占位是悬空边，只抬高 dangling）', () => {
@@ -2747,7 +2751,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       mkSkeletonsMap([aTs, callerTs]),
     );
     expect(edges.some((e) => e.target.startsWith('a.ts::Foo.'))).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R12 — 不夺路：receiverType 缺席的既有形态边集逐字不变；条件 ②–⑤ 弃权时 fallthrough 回同一条既有路径', () => {
@@ -2795,7 +2799,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       { source: 'caller.ts::run', target: '?::ghost', relation: 'calls', confidence: 'low', directional: true },
       { source: 'caller.ts::run', target: '?::nope', relation: 'calls', confidence: 'medium', directional: true },
     ];
-    expect(resolveCalls(legacy, skeletons)).toEqual(expected);
+    expect(stripMeta(resolveCalls(legacy, skeletons))).toEqual(expected);
 
     // fallthrough 语义：给同一批调用点补上**过不了闸**的 receiverType（'Unknown' 在两侧
     // 都没有 export 条目 ⇒ 条件 ④ 弃权），边集必须**逐字不变** —— 弃权是 fallthrough，
@@ -2805,7 +2809,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       receiverType: 'Unknown',
       receiverTypeSoleImportBinding: true,
     }));
-    expect(resolveCalls(withDeclinedReceiver, skeletons)).toEqual(expected);
+    expect(stripMeta(resolveCalls(withDeclinedReceiver, skeletons))).toEqual(expected);
   });
 
   it('R16 — dynamic 解构形态必须出边（验收断言 1 的单测镜像）：别名不在抑制集 ⇒ medium 边', () => {
@@ -2850,7 +2854,7 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
       ],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'caller.ts::use', target: 'a.ts::Foo.m', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2903,7 +2907,7 @@ describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md �
       skeletons,
     );
     expect(edges.some((e) => e.target.startsWith('caller.ts::Task.'))).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R33（plan R14）— 泛型形参遮蔽同名导出类：resolver 层同构断言（receiverTypeSoleBinding=false ⇒ 不出边）', () => {
@@ -2926,7 +2930,7 @@ describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md �
       skeletons,
     );
     expect(edges.some((e) => e.target.startsWith('caller.ts::Task.'))).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R34（plan R15）— 对照真边：本模块导出命中且无遮蔽（receiverTypeSoleBinding=true）⇒ 照常出边', () => {
@@ -2946,7 +2950,7 @@ describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md �
       ],
       skeletons,
     );
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       { source: 'caller.ts::schedule', target: 'caller.ts::Task.run', relation: 'calls', confidence: 'medium', directional: true },
     ]);
   });
@@ -2968,7 +2972,7 @@ describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md �
       ],
       skeletons,
     );
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 
   it('R36（plan R17）— 禁止 fallthrough 回归钉：遮蔽 + 恰好同名 import 目标存在时，不得连到 import 目标', () => {
@@ -3030,7 +3034,7 @@ describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md �
       skeletons,
     );
     expect(edges.some((e) => e.target.startsWith('x.ts::Task.'))).toBe(false);
-    expect(edges).toEqual([]);
+    expect(stripMeta(edges)).toEqual([]);
   });
 });
 
@@ -3177,7 +3181,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
       }),
     ]);
     expect(buildClassMroIndex(skeletons).get('sub.ts::Sub')).toEqual(['Base']);
-    expect(resolveCalls([thisCall('sub.ts', 'Sub', 'm')], skeletons)).toEqual([
+    expect(stripMeta(resolveCalls([thisCall('sub.ts', 'Sub', 'm')], skeletons))).toEqual([
       {
         source: 'sub.ts::Sub.run',
         target: 'base.ts::Base.m',
@@ -3248,7 +3252,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
       }
       const edges = resolveCalls(callSites, skeletons);
       // Stage 2 member 路径（this.m()）
-      expect(edges).toContainEqual({
+      expect(stripMeta(edges)).toContainEqual({
         source: `${subPath}::Sub.run`,
         target: `${basePath}::Base.m`,
         relation: 'calls',
@@ -3256,7 +3260,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
         directional: true,
       });
       // Stage 4 super 路径（super.m()）
-      expect(edges).toContainEqual({
+      expect(stripMeta(edges)).toContainEqual({
         source: `${subPath}::Sub.viaSuper`,
         target: `${basePath}::Base.m`,
         relation: 'calls',
@@ -3286,7 +3290,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     const edges = resolveCalls([thisCall('foo.ts', 'Foo', 'm')], skeletons);
     expect(edges.map((e) => e.target)).not.toContain('foo.ts::Baz.m');
     // MRO 落空 ⇒ 回落既有 medium 占位（Stage 2 原有行为，不产 interface-target 边）
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       {
         source: 'foo.ts::Foo.run',
         target: 'foo.ts::Foo.m',
@@ -3328,7 +3332,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     ]);
     // 与修改前逐字一致：Java signature 无圆括号 ⇒ Python 正则不命中 ⇒ 无条目
     expect(buildClassMroIndex(skeletons).has('Foo.java::Foo')).toBe(false);
-    expect(resolveCalls([thisCall('Foo.java', 'Foo', 'm')], skeletons)).toEqual([
+    expect(stripMeta(resolveCalls([thisCall('Foo.java', 'Foo', 'm')], skeletons))).toEqual([
       {
         source: 'Foo.java::Foo.run',
         target: 'Foo.java::Foo.m',
@@ -3470,7 +3474,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     expect(info?.renamedImportAliases.has('Alias')).toBe(true);
     expect(buildClassMroIndex(skeletons).get('sub.ts::Sub')).toEqual(['Alias']);
     // 父类定位落空 ⇒ 回落 Stage 2 既有 medium 占位，不产出 `base.ts::Base.m`
-    expect(resolveCalls([thisCall('sub.ts', 'Sub', 'm')], skeletons)).toEqual([
+    expect(stripMeta(resolveCalls([thisCall('sub.ts', 'Sub', 'm')], skeletons))).toEqual([
       {
         source: 'sub.ts::Sub.run',
         target: 'sub.ts::Sub.m',
@@ -3529,7 +3533,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     expect(info?.renamedImportAliases.has('Alias')).toBe(true);
     const edges = resolveCalls([thisCall('sub.ts', 'Sub', 'm')], skeletons);
     expect(edges.map((e) => e.target)).not.toContain('other.ts::Alias.m');
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       {
         source: 'sub.ts::Sub.run',
         target: 'sub.ts::Sub.m',
@@ -3669,7 +3673,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     expect(buildClassMroIndex(skeletons).get('deep.ts::C7')).toEqual(['C8']);
     const edges = resolveCalls([thisCall('deep.ts', 'C0', 'm')], skeletons);
     expect(edges.map((e) => e.target)).not.toContain('deep.ts::C9.m');
-    expect(edges).toEqual([
+    expect(stripMeta(edges)).toEqual([
       {
         source: 'deep.ts::C0.run',
         target: 'deep.ts::C0.m',
@@ -3732,7 +3736,7 @@ describe('F260 R13–R15 — TS/JS extends MRO（A7 收窄 + implements 截断 +
     for (const host of ['A', 'B', 'C']) {
       const edges = resolveCalls([thisCall('m.ts', host, 'm')], skeletons);
       // 一律落既有 medium 占位，绝不指向 `m.ts::Base.m`
-      expect(edges).toEqual([
+      expect(stripMeta(edges)).toEqual([
         {
           source: `m.ts::${host}.run`,
           target: `m.ts::${host}.m`,

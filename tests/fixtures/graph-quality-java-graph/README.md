@@ -40,6 +40,7 @@ resolution，故无 `depends-on`/`calls` 边）
 - 每个 symbol 节点均有且仅有 1 条 contains 入边（module→顶层类型，或 class/interface→成员）
 
 ## 重建历史
+| M11 卡 A 重建 | `1d7c8b01`+工作树（卡 A / 卡 D 实现态）+ `npm run build` | 18 / 13（不变） | 两个新增字段面：① 卡 D `graph.sourceTreeDirty`（非 git 临时目录 ⇒ `null`）；② 卡 A calls 边 `resolution`（stage / strategy / basis）+ `callSites` / `callSiteCount`。审计（`scratchpad/cardA-fixtures/regen-and-audit.mjs` 一次性重算器）：剥掉 `graph.builder` / `graph.sourceTreeDirty` / 边 `resolution` / `callSites` / `callSiteCount` 后与上一版 pinned **全字段深等（0 差异）**，节点 / 边多重集逐字未变 |
 
 | 日期 | producer commit | 节点/边总数 | 变化原因 |
 |---|---|---|---|

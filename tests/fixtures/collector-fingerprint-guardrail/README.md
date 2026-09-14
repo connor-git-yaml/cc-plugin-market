@@ -186,3 +186,15 @@ bump，等于按权威清单判定为**错**的版本跳变。
    断言"变成"可自检的锚"。
 
    该文件不参与 `fixtureInputHash`（只扫 `src/`），也不参与任何放行 / 拒绝判定。
+
+### 再生记录 · 2026-09-15（M11 卡 A / 卡 D 新字段，**不 bump** `BEHAVIOR_VERSION`）
+
+M11 卡 A 给 calls 边新增 `resolution`（stage / strategy / basis）与 `callSites` / `callSiteCount`，卡 D 给 `graph.graph` 新增
+`sourceTreeDirty`（临时目录非 git 仓 ⇒ `null`）。F284 之后护栏比较器是逐字段完整行，`expected-graph-only-graph.json` 因此报
+`graph.graph.sourceTreeDirty` 与一条 calls 边的三个新属性不一致；两份 pinned 资产按本 README 上方 SOP 删除后经
+`npm run fixtures:regen:collector-fingerprint -- --init` 冷启动再生（`regen-audit.jsonl` 追加一行）。
+
+**`BEHAVIOR_VERSION` 保持 3**：边上多字段、图元数据多一键，都不改变「哪些文件被计入采集面」，六类 bump responsibility 均不适用，
+`extensionSurface` 未变，fixture 输入样本一字未改（`fixtureInputHash` 不变）。审计：把新旧 `expected-graph-only-graph.json` 各自剥掉
+`graph.graph.builder` / `graph.graph.sourceTreeDirty` / `graph.graph.generatedAt` 与边上 `resolution` / `callSites` / `callSiteCount` 后整棵 JSON
+树深等（0 差异，含 `fixtureInputHash` 包装层）；`expected-module-graph.json` 与再生前逐字节相同。

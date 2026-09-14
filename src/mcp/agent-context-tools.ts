@@ -29,6 +29,7 @@ import {
   bfsTraverse,
   canonicalizeSymbolId,
   computeRiskTier,
+  edgeProvenance,
   resolveSymbolFuzzy,
   findNode,
   moduleFileFromId,
@@ -242,12 +243,12 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     }
     // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
     let startId: string;
-    let fuzzyResolved: { from: string; to: string; confidence: number } | null = null;
+    let fuzzyResolved: { from: string; to: string; matchScore: number } | null = null;
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
       const fuzzy = resolveSymbolFuzzy(graphData, args.target, { projectRoot });
       if (fuzzy.autoResolved && fuzzy.candidates[0] !== undefined) {
         startId = fuzzy.candidates[0].id;
-        fuzzyResolved = { from: args.target, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
+        fuzzyResolved = { from: args.target, to: fuzzy.candidates[0].id, matchScore: fuzzy.candidates[0].matchScore };
         warnings.push('fuzzy-resolved');
       } else {
         return { result: buildErrorResponse(
@@ -296,7 +297,7 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     if (fuzzyResolved !== null) {
       data['resolvedFrom'] = fuzzyResolved.from;
       data['resolvedTo'] = fuzzyResolved.to;
-      data['resolvedConfidence'] = fuzzyResolved.confidence;
+      data['resolvedMatchScore'] = fuzzyResolved.matchScore;
     }
 
     // F266：诚实标注（判定全在 graph-honesty.ts；本处只装配，不得堆逻辑）
@@ -393,12 +394,12 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     }
     // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
     let resolvedId: string;
-    let fuzzyResolved: { from: string; to: string; confidence: number } | null = null;
+    let fuzzyResolved: { from: string; to: string; matchScore: number } | null = null;
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
       const fuzzy = resolveSymbolFuzzy(graphData, args.symbolId, { projectRoot });
       if (fuzzy.autoResolved && fuzzy.candidates[0] !== undefined) {
         resolvedId = fuzzy.candidates[0].id;
-        fuzzyResolved = { from: args.symbolId, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
+        fuzzyResolved = { from: args.symbolId, to: fuzzy.candidates[0].id, matchScore: fuzzy.candidates[0].matchScore };
         warnings.push('fuzzy-resolved');
       } else {
         return { result: buildErrorResponse(
@@ -446,7 +447,7 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     if (fuzzyResolved !== null) {
       data['resolvedFrom'] = fuzzyResolved.from;
       data['resolvedTo'] = fuzzyResolved.to;
-      data['resolvedConfidence'] = fuzzyResolved.confidence;
+      data['resolvedMatchScore'] = fuzzyResolved.matchScore;
     }
     if (warnings.length > 0) data['warnings'] = warnings;
 
@@ -507,26 +508,30 @@ function buildDefinition(node: GraphNode): Record<string, unknown> {
     if (typeof lineRange.start === 'number') def['lineStart'] = lineRange.start;
     if (typeof lineRange.end === 'number') def['lineEnd'] = lineRange.end;
   }
+  // M11 卡 A：节点上的置信度是三级标签串，与邻居条目的数值 confidence 分名（合同 vocabulary.confidenceLabel）
   const conf = md['confidence'];
-  if (typeof conf === 'string') def['confidence'] = conf;
+  if (typeof conf === 'string') def['confidenceLabel'] = conf;
   return def;
 }
+
+/** context.callers / callees 条目：数值 confidence + 边 provenance（M11 卡 A，与 BFS affected 同口径） */
+type NeighborEntry = { id: string; confidence: number; relation: string } & ReturnType<typeof edgeProvenance>;
 
 function collectNeighbors(
   graphData: Readonly<GraphJSON>,
   nodeId: string,
   direction: 'inbound' | 'outbound',
   relation: string,
-): Array<{ id: string; confidence: number; relation: string }> {
-  const out: Array<{ id: string; confidence: number; relation: string }> = [];
+): NeighborEntry[] {
+  const out: NeighborEntry[] = [];
   for (const link of graphData.links) {
     if (link.relation !== relation) continue;
     const conf = resolveEdgeConfidence(link);
     if (conf === null) continue;
     if (direction === 'inbound' && link.target === nodeId) {
-      out.push({ id: link.source, confidence: conf, relation: link.relation });
+      out.push({ id: link.source, confidence: conf, relation: link.relation, ...edgeProvenance(link) });
     } else if (direction === 'outbound' && link.source === nodeId) {
-      out.push({ id: link.target, confidence: conf, relation: link.relation });
+      out.push({ id: link.target, confidence: conf, relation: link.relation, ...edgeProvenance(link) });
     }
   }
   return out;
@@ -1027,7 +1032,8 @@ Use this tool when:
 
 Example:
 - Input: { target: "engine.py::Value.add", depth: 2 }
-- Output: { affected, summary, topImpacted: [{ id, score }], nextStepHint }
+- Output: { affected, summary, topImpacted: [{ id, score }], nextStepHint, tokenBudget }
+- affected[] 带 confidence(数值)/confidenceLabel/resolution/callSites（见 contracts/mcp-return-surface-contract.yaml）
 
 Typical chained usage:
 - 修代码前: detect_changes → impact → context`,
@@ -1046,7 +1052,8 @@ Use this tool when:
 
 Example:
 - Input: { symbolId: "engine.py::Value" }
-- Output: { definition, callers, callees, imports, topRelevantCallers, nextStepHint }
+- Output: { definition, callers, callees, imports, topRelevantCallers, nextStepHint, tokenBudget }
+- callers[] 带 confidence(数值)/confidenceLabel/resolution/callSites；fuzzyMatches[].matchScore 是名字相似度
 
 Typical chained usage:
 - impact → context（查 top 受影响节点的上下文）`,
@@ -1065,7 +1072,7 @@ Use this tool when:
 
 Example:
 - Input: { diff: "diff --git a/engine.py..." } 或 { baseRef: "HEAD~3" }
-- Output: { changedSymbols, affectedSymbols, riskSummary, riskTier, topImpacted, nextStepHint }
+- Output: { changedSymbols, affectedSymbols, riskSummary, riskTier, topImpacted, nextStepHint, tokenBudget }
 
 Typical chained usage:
 - detect_changes → impact → context`,

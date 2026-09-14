@@ -103,6 +103,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -140,10 +141,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -324,6 +337,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 66,667 |
@@ -538,6 +553,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -547,10 +563,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "engine.py::Value.double",
         "target": "engine.py::Value",
       },
@@ -587,10 +615,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "engine.py::Value",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 11,
+            "line": 4,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "nn.py::make",
         "target": "engine.py::Value",
       },
@@ -837,6 +877,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 50,000 |
@@ -1051,6 +1093,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -1060,10 +1103,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "py/engine.py::Value.double",
         "target": "py/engine.py::Value",
       },
@@ -1130,10 +1185,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -1426,6 +1493,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 28,571 |
@@ -1651,6 +1720,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -1660,10 +1730,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "py/engine.py::Value.double",
         "target": "py/engine.py::Value",
       },
@@ -1747,10 +1829,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -2038,6 +2132,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 50,000 |
@@ -2269,6 +2365,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
       ],
@@ -2526,6 +2623,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": true,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -2535,10 +2633,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "py/engine.py::Value.double",
         "target": "py/engine.py::Value",
       },
@@ -2605,10 +2715,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -2901,6 +3023,8 @@ graph TD
 |------|------|
 | 总 input tokens | 100 |
 | 总 output tokens | 200 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 300 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 33,333 |
@@ -3127,6 +3251,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -3136,10 +3261,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "py/engine.py::Value.double",
         "target": "py/engine.py::Value",
       },
@@ -3206,10 +3343,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -3502,6 +3651,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 28,571 |
@@ -3770,6 +3921,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -3807,10 +3959,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -3991,6 +4155,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 66,667 |
@@ -4273,6 +4439,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         },
       ],
       "sourceCommit": "<SHA>",
+      "sourceTreeDirty": false,
       "sources": [
         "doc-graph",
         "cross-reference",
@@ -4282,10 +4449,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     },
     "links": [
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 15,
+            "line": 6,
+          },
+        ],
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "local-export",
+          "strategy": "export-table",
+        },
         "source": "py/engine.py::Value.double",
         "target": "py/engine.py::Value",
       },
@@ -4352,10 +4531,22 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "target": "src/a.ts::alpha",
       },
       {
+        "callSiteCount": 1,
+        "callSites": [
+          {
+            "column": 9,
+            "line": 3,
+          },
+        ],
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
         "directional": true,
         "relation": "calls",
+        "resolution": {
+          "basis": "index",
+          "stage": "cross-module",
+          "strategy": "import-table",
+        },
         "source": "src/b.ts::beta",
         "target": "src/a.ts::alpha",
       },
@@ -4648,6 +4839,8 @@ graph TD
 |------|------|
 | 总 input tokens | 200 |
 | 总 output tokens | 400 |
+| 总 cache_creation tokens | 0 |
+| 总 cache_read tokens | 0 |
 | 总 token 数 | 600 |
 | LLM 总耗时 | <SEC> |
 | tokens / kLOC | 28,571 |

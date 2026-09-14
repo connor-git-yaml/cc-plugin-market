@@ -10,6 +10,12 @@
  *   （丢弃属常态而非异常，默认 warn 级别下不输出；`REVERSE_SPEC_LOG_LEVEL=debug` 可见）
  */
 import * as path from 'node:path';
+import {
+  canonicalResolution,
+  finalizeCallSites,
+  isCallSiteRef,
+  type CallSiteRef,
+} from '../../knowledge-graph/call-resolution-labels.js';
 import * as crypto from 'node:crypto';
 import { writeAtomicJson } from '../../utils/atomic-write.js';
 import { createLogger } from '../utils/logger.js';
@@ -365,6 +371,8 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           confidence: 'high' | 'medium' | 'low';
           directional?: boolean;
           evidence?: string;
+          /** M11 卡 A：producer 注入的结构化扩展（calls 边的 resolution / callSite） */
+          metadata?: Record<string, unknown>;
         }>;
       };
 
@@ -448,6 +456,9 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
       // 把 UnifiedGraph.edges 转换为 GraphEdge 注入第五路
       // Codex P2 W-1 修订：directional 缺省按 relation 决定，不再统一 false
       const DIRECTIONAL_RELATIONS = new Set(['calls', 'depends-on', 'cross-module', 'contains']);
+      // M11 卡 A：同 key 的多条调用边在此折叠为一条，调用点先攒着、循环结束后统一排序 / 去重 / 封顶，
+      // 保证 callSites 与输入顺序无关（两次构建逐字节相同）。
+      const callSiteAcc = new Map<string, CallSiteRef[]>();
       for (const ugEdge of unified.edges) {
         const tier = ugEdge.confidence;
         const confidence: ConfidenceLevel =
@@ -459,6 +470,9 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
         // 下方 directional 升级合并语义与前四路 confidence-max-wins 不同，保留内联不走 upsertEdge。
         const key = edgeKey(ugEdge.source, ugEdge.target, ugEdge.relation, isDirectional);
         const existingEdge = edgeMap.get(key);
+        // 只信词表里的 strategy（stage / basis 由词表重算）；callSite 形状不合法即当作缺席
+        const resolution = canonicalResolution(ugEdge.metadata?.['resolution']);
+        const callSite = ugEdge.metadata?.['callSite'];
         if (!existingEdge) {
           edgeMap.set(key, {
             source: ugEdge.source,
@@ -468,11 +482,24 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             confidenceScore,
             directional: isDirectional,
             ...(ugEdge.evidence ? { evidenceText: ugEdge.evidence.slice(0, 200) } : {}),
+            ...(resolution ? { resolution } : {}),
           });
         } else if (isDirectional && existingEdge.directional !== true) {
           // Codex P2 W-2 修订：旧边没设 directional，本次升级为 true
           existingEdge.directional = true;
         }
+        if (isCallSiteRef(callSite)) {
+          const acc = callSiteAcc.get(key);
+          if (acc) acc.push(callSite);
+          else callSiteAcc.set(key, [callSite]);
+        }
+      }
+      for (const [key, sites] of callSiteAcc) {
+        const edge = edgeMap.get(key);
+        if (!edge) continue;
+        const { callSites, callSiteCount } = finalizeCallSites(sites);
+        edge.callSites = callSites;
+        edge.callSiteCount = callSiteCount;
       }
     } catch (err) {
       skippedSources.push({

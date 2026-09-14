@@ -29,6 +29,7 @@
     ],
     "schemaVersion": "2.0",
     "sourceCommit": null,
+    "sourceTreeDirty": null,
     "fingerprint": {
       "formatVersion": 1,
       "extensionSurface": {
@@ -82,10 +83,10 @@
     },
     "builder": {
       "formatVersion": 1,
-      "commit": "68b5929cb16e44db5ed3e10f5a5c12ed9c2c37b8",
-      "dirty": false,
-      "sourceDirty": false,
-      "distSha256": "40ba0fdb25184c7e423f41f82bda3036804a57d3305109a9c782e8d93dc25be4"
+      "commit": "1d7c8b01a70275fcf4adcdbe4e9c84fddf44e730",
+      "dirty": true,
+      "sourceDirty": true,
+      "distSha256": "3d1e84b748653066885b918aa9c18e1ea340ace975d3aca472d766eb544a074e"
     }
   },
   "nodes": [

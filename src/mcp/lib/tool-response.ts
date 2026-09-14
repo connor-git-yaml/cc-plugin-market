@@ -60,6 +60,14 @@ export function buildErrorResponse(
   };
 }
 
+/**
+ * token 估算：与 `core/token-counter.ts` 的 `estimateTokens` 同一公式（spec FR-012 锁定 `Math.ceil(len / 3.5)`）。
+ * 不 import core——`tests/type-tests` 的程序闭包守卫禁止 mcp/lib 拖进 core 值模块；公式一致性由 tool-response-token-budget 测试对拍。
+ */
+function estimateTokenCount(text: string): number {
+  return text ? Math.ceil(text.length / 3.5) : 0;
+}
+
 /** payload 字节上限：超限时截断可截断数组并加 payload-truncated warning */
 export const PAYLOAD_CAP_BYTES = 1_000_000;
 
@@ -78,8 +86,9 @@ export function buildSuccessResponse(
 ): ToolResult {
   let text = JSON.stringify(data);
   let bytes = Buffer.byteLength(text, 'utf-8');
+  let truncated = false;
+  const truncatedKeys: string[] = [];
   if (bytes > PAYLOAD_CAP_BYTES && truncatableArrayKeys.length > 0) {
-    let truncated = false;
     let safety = 0;
     while (bytes > PAYLOAD_CAP_BYTES && safety < 8) {
       safety++;
@@ -94,6 +103,7 @@ export function buildSuccessResponse(
           data[key] = arr.slice(0, newLen);
           truncated = true;
           progressed = true;
+          if (!truncatedKeys.includes(key)) truncatedKeys.push(key);
         }
       }
       if (!progressed) break;
@@ -105,9 +115,21 @@ export function buildSuccessResponse(
       if (!warnings.includes('payload-truncated')) {
         data[warningsKey] = [...warnings, 'payload-truncated'];
         text = JSON.stringify(data);
+        bytes = Buffer.byteLength(text, 'utf-8');
       }
     }
   }
+  // M11 卡 A（P1-I）：tokenBudget 让消费方随时知道拿到了多大的 payload、离上限多远、有没有被收缩。
+  // payloadBytes / estimatedTokens 按附加本字段**之前**的文本计算（否则自指），
+  // 本字段自身约 +100 字节，不计入；超 cap 但无可截断 key 时如实报 payloadBytes > capBytes，不假装收缩。
+  data['tokenBudget'] = {
+    payloadBytes: bytes,
+    capBytes: PAYLOAD_CAP_BYTES,
+    estimatedTokens: estimateTokenCount(text),
+    truncated,
+    ...(truncated ? { truncatedKeys } : {}),
+  };
+  text = JSON.stringify(data);
   return { content: [{ type: 'text', text }] };
 }
 

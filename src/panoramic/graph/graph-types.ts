@@ -45,6 +45,41 @@ export const SEMANTIC_EDGE_RELATIONS = {
 } as const;
 
 // ============================================================
+// M11 卡 A：calls 边解析标签的形状（词表常量在 knowledge-graph/call-resolution-labels.ts，
+// 本文件只放类型——tests/type-tests 的程序闭包守卫禁止本文件拖进 knowledge-graph 值模块）
+// ============================================================
+
+export type CallEdgeStage = 'local-export' | 'receiver-type' | 'member' | 'cross-module' | 'fallback';
+export type CallEdgeBasis = 'index' | 'heuristic';
+export type CallEdgeStrategy =
+  | 'export-table'
+  | 'receiver-type-index'
+  | 'namespace-alias'
+  | 'class-member'
+  | 'class-mro'
+  | 'class-member-placeholder'
+  | 'remote-class-member'
+  | 'remote-class-placeholder'
+  | 'class-unlocated-placeholder'
+  | 'suppressed-dynamic-placeholder'
+  | 'import-table'
+  | 'star-import'
+  | 'super-mro'
+  | 'unresolved-placeholder';
+
+export interface CallEdgeResolution {
+  readonly stage: CallEdgeStage;
+  readonly strategy: CallEdgeStrategy;
+  readonly basis: CallEdgeBasis;
+}
+
+/** 单个调用点引用（来自 CallSite.line / column） */
+export interface CallSiteRef {
+  readonly line: number;
+  readonly column?: number;
+}
+
+// ============================================================
 // 图节点与边类型
 // ============================================================
 
@@ -108,6 +143,17 @@ export interface GraphEdge {
    * 示例："specs/ingestion.md:15-18"
    */
   evidenceSource?: string;
+  /**
+   * M11 卡 A（P1-I）：calls 边的解析标签——call-resolver 命中的阶段 / 策略 / 证据基础
+   * （词表见 `knowledge-graph/call-resolution-labels.ts` 与 `contracts/mcp-return-surface-contract.yaml`）。
+   * 非 calls 边、或由非 call-resolver 路径产出的边诚实缺席；同 (source, target) 多条调用边
+   * 合并时取首条（与置信度 first-wins 同步）。
+   */
+  resolution?: CallEdgeResolution;
+  /** M11 卡 A：合并进本边的调用点（按 line / column 排序去重，最多 CALL_SITES_CAP 条）。 */
+  callSites?: CallSiteRef[];
+  /** M11 卡 A：调用点总数（含超过 cap 未列出的）。 */
+  callSiteCount?: number;
 }
 
 // ============================================================
@@ -191,6 +237,16 @@ export interface GraphJSON {
      * 不 bump schemaVersion（决策 5：纯可选新增字段，向后兼容）。
      */
     sourceCommit?: string | null;
+    /**
+     * M11 卡 D 新增：建图时点工作树是否有未提交的采集面改动（判定面与 freshness 的 dirty 同源）。
+     * `sourceCommit` 只是标签不是内容锚——脏树上建的图含未提交内容却盖着 HEAD 的章；改动丢弃后
+     * 三维 provenance 都看不出图里残留着任何 commit 都不存在的节点。freshness 据此在「树已干净」时判
+     * stale（`source-tree-dirty-at-build`）。
+     * - `true` / `false`：AST 重建链路写入（porcelain 读取失败按 true 保守记录）
+     * - `null`：非 AST 重建的写盘路径（与 `sourceCommit` 同一诚实降级惯例）
+     * - `undefined`：字段缺失（本机制上线前的旧图），不参与判定
+     */
+    sourceTreeDirty?: boolean | null;
     /**
      * F249 新增（FR-006/FR-007）：写盘链路记录的 collector fingerprint——"这张图是由哪一版
      * 采集器行为产出的"，与 `sourceCommit`（"基于哪一版源码"）互补，共同构成图产物 provenance。

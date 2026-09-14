@@ -22,6 +22,7 @@ import type { CodeSkeleton } from '../models/code-skeleton.js';
 import type { UnifiedEdge } from './unified-graph.js';
 // 类型导入在编译期擦除，不构成与 call-resolver 的运行时循环依赖。
 import type { CallSiteWithFile } from './call-resolver.js';
+import { callSiteRefFrom, resolutionFor } from './call-resolution-labels.js';
 
 /** 单个 export 条目的最小视图 —— 条件 ④ 看 `kind`，条件 ⑤ 看**同一条目自己的** `members`。 */
 export interface ReceiverClassEntry {
@@ -151,6 +152,7 @@ export function resolveReceiverTypeCall(
     relation: 'calls',
     confidence: 'medium',
     directional: true,
+    metadata: { resolution: resolutionFor('receiver-type-index'), callSite: callSiteRefFrom(cs) },
   };
 }
 

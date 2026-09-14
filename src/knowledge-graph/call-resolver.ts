@@ -13,6 +13,7 @@
  *   dunder / decorator / 全部 fallthrough → low；dynamic call → 不输出（skip）
  */
 import type { CodeSkeleton } from '../models/code-skeleton.js';
+import { callSiteRefFrom, resolutionFor, type CallEdgeStrategy } from './call-resolution-labels.js';
 import type { CallSite } from '../models/call-site.js';
 import type { ConfidenceTier, UnifiedEdge } from './unified-graph.js';
 import type { ReceiverTypeIndex } from './receiver-type-resolution.js';
@@ -586,7 +587,7 @@ function resolveOne(
       localExports?.has(cs.calleeName) &&
       !isSuppressedDynamicAlias(cs, cs.calleeName, importIndex)
     ) {
-      return mkEdge(source, `${cs.callerFile}::${cs.calleeName}`, 'high');
+      return mkEdge(source, `${cs.callerFile}::${cs.calleeName}`, 'high', 'export-table', cs);
     }
     // 否则 fallthrough 到 Stage 3（可能是 cross-module 但 calleeKind 标错为 free）
     // 不立即返回，让后续 stage 处理
@@ -612,7 +613,7 @@ function resolveOne(
     // 且 high 边能存活下游全部过滤。直接落 `?::` 占位（悬空，下游丢弃）。
     // 注意作用域：仅拦截抑制集命中，普通未知名字沿用既有 medium 占位路径。
     if (cs.calleeQualifier && isSuppressedDynamicAlias(cs, cs.calleeQualifier, importIndex)) {
-      return mkEdge(source, `?::${cs.calleeName}`, 'low');
+      return mkEdge(source, `?::${cs.calleeName}`, 'low', 'suppressed-dynamic-placeholder', cs);
     }
 
     // F242 审查轮 W3：qualifier 是命名空间绑定名时，`M.D()` 是模块成员调用而非类静态方法。
@@ -624,7 +625,7 @@ function resolveOne(
       if (imports?.namespaceAliases.has(cs.calleeQualifier)) {
         const nsTarget = imports.aliasToTarget.get(cs.calleeQualifier);
         if (nsTarget) {
-          return mkEdge(source, `${nsTarget}::${cs.calleeName}`, 'medium');
+          return mkEdge(source, `${nsTarget}::${cs.calleeName}`, 'medium', 'namespace-alias', cs);
         }
       }
     }
@@ -636,7 +637,7 @@ function resolveOne(
       const classKey = `${cs.callerFile}::${className}`;
       // 第一重验证：自身 class.members
       if (classMemberIndex.get(classKey)?.has(cs.calleeName)) {
-        return mkEdge(source, `${classKey}.${cs.calleeName}`, 'high');
+        return mkEdge(source, `${classKey}.${cs.calleeName}`, 'high', 'class-member', cs);
       }
       // 第二重验证：MRO 父类（≤ MAX_MRO_DEPTH 层）
       const mroEdge = lookupInMro(
@@ -647,10 +648,10 @@ function resolveOne(
         importIndex.get(cs.callerFile),
       );
       if (mroEdge) {
-        return mkEdge(source, mroEdge, 'medium');
+        return mkEdge(source, mroEdge, 'medium', 'class-mro', cs);
       }
       // 类存在但方法既不在自身也不在 MRO 父类 — medium 占位
-      return mkEdge(source, `${classKey}.${cs.calleeName}`, 'medium');
+      return mkEdge(source, `${classKey}.${cs.calleeName}`, 'medium', 'class-member-placeholder', cs);
     }
     // className 不在本模块 export 表 — 尝试 importIndex（Class 来自其他模块）
     // F260 消费点 1：重命名 import 的本地绑定名一律弃权（见 ImportInfo.renamedImportAliases）。
@@ -660,14 +661,14 @@ function resolveOne(
       if (classFile) {
         const remoteClassKey = `${classFile}::${className}`;
         if (classMemberIndex.get(remoteClassKey)?.has(cs.calleeName)) {
-          return mkEdge(source, `${remoteClassKey}.${cs.calleeName}`, 'medium');
+          return mkEdge(source, `${remoteClassKey}.${cs.calleeName}`, 'medium', 'remote-class-member', cs);
         }
         // 类来自外部但 members 不可见（可能是非项目模块）— medium 占位
-        return mkEdge(source, `${remoteClassKey}.${cs.calleeName}`, 'medium');
+        return mkEdge(source, `${remoteClassKey}.${cs.calleeName}`, 'medium', 'remote-class-placeholder', cs);
       }
     }
     // 类无法定位 — medium
-    return mkEdge(source, `?::${cs.calleeName}`, 'medium');
+    return mkEdge(source, `?::${cs.calleeName}`, 'medium', 'class-unlocated-placeholder', cs);
   }
 
   // ─── Stage 3: cross-module ───
@@ -688,7 +689,7 @@ function resolveOne(
       if (target) {
         const isStar = imports.starImportTargets.has(target);
         const tier: ConfidenceTier = isStar ? 'low' : 'medium';
-        return mkEdge(source, `${target}::${cs.calleeName}`, tier);
+        return mkEdge(source, `${target}::${cs.calleeName}`, tier, isStar ? 'star-import' : 'import-table', cs);
       }
     }
   }
@@ -706,7 +707,7 @@ function resolveOne(
         importIndex.get(cs.callerFile),
       );
       if (mroTarget) {
-        return mkEdge(source, mroTarget, 'low');
+        return mkEdge(source, mroTarget, 'low', 'super-mro', cs);
       }
     }
   }
@@ -719,7 +720,7 @@ function resolveOne(
     cs.calleeKind === 'free'
   ) {
     // 全部 fallthrough — low confidence 占位
-    return mkEdge(source, `?::${cs.calleeName}`, 'low');
+    return mkEdge(source, `?::${cs.calleeName}`, 'low', 'unresolved-placeholder', cs);
   }
 
   // dynamic call / 未知 calleeKind — skip（不输出，不污染 precision）
@@ -893,12 +894,17 @@ function mkEdge(
   source: string,
   targetId: string,
   tier: ConfidenceTier,
+  strategy: CallEdgeStrategy,
+  cs: CallSiteWithFile,
 ): UnifiedEdge {
+  // M11 卡 A：每条边带上命中的阶段 / 策略 / 证据基础与调用点行号，供 graph-builder 合并与
+  // MCP 返回面透传（消费方据此区分索引直查与占位启发式，并拿到 caller 侧行号）。
   return {
     source,
     target: targetId,
     relation: 'calls',
     confidence: tier,
     directional: true,
+    metadata: { resolution: resolutionFor(strategy), callSite: callSiteRefFrom(cs) },
   };
 }

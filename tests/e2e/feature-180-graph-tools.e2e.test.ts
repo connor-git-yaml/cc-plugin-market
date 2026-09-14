@@ -16,6 +16,12 @@
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+// @ts-expect-error 插件 .mjs 无类型声明（合同解析只用 parseYamlDocument）
+import { parseYamlDocument } from '../../plugins/spec-driver/scripts/lib/simple-yaml.mjs';
+
+const CONTRACT_PATH = resolvePath('contracts/mcp-return-surface-contract.yaml');
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -81,6 +87,59 @@ describe.skipIf(SHOULD_SKIP)(
       // exact sorted names 断言：不只断数量，断每个工具名
       expect(sortedNames).toEqual(EXPECTED_TOOL_NAMES);
     }, 15_000);
+
+    // ── M11 卡 A（P1-I）：确定性回归 + 返回面客户端侧可见性 ──
+    it('T-003-D1: tools/list 两次逐字节相同，且顺序 == 合同 determinism.toolsListOrder', async () => {
+      const a = await handle.client.listTools();
+      const b = await handle.client.listTools();
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+      const contract = parseYamlDocument(readFileSync(CONTRACT_PATH, 'utf-8')) as { determinism: { toolsListOrder: string[] } };
+      expect(a.tools.map((t) => t.name)).toEqual(contract.determinism.toolsListOrder);
+    }, 15_000);
+
+    it('T-003-D2: impact / context / graph_node 同输入两次调用响应文本逐字节相同（top-N 与邻居顺序确定）', async () => {
+      const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [
+        { name: 'impact', arguments: { target: 'micrograd/engine.py::Value', depth: 3, minConfidence: 0, projectRoot: tempRoot } },
+        { name: 'context', arguments: { symbolId: 'micrograd/engine.py::Value', projectRoot: tempRoot } },
+        { name: 'graph_node', arguments: { id: 'micrograd/nn.py::MLP', projectRoot: tempRoot } },
+      ];
+      for (const call of calls) {
+        const first = await handle.client.callTool(call);
+        const second = await handle.client.callTool(call);
+        const t1 = (first.content as Array<{ text: string }>)[0]?.text ?? '';
+        const t2 = (second.content as Array<{ text: string }>)[0]?.text ?? '';
+        expect(first.isError, call.name).not.toBe(true);
+        expect(t1, call.name).toBe(t2);
+      }
+    }, 30_000);
+
+    it('T-003-D3: context.callers 经 stdio 序列化后带 confidence(数值)+confidenceLabel+resolution+callSites；tokenBudget 在场', async () => {
+      const result = await handle.client.callTool({ name: 'context', arguments: { symbolId: 'micrograd/engine.py::Value', projectRoot: tempRoot } });
+      expect(result.isError).not.toBe(true);
+      const data = JSON.parse((result.content as Array<{ text: string }>)[0]?.text ?? '{}') as {
+        definition?: { confidenceLabel?: string; confidence?: unknown };
+        callers?: Array<{ id: string; confidence: number; confidenceLabel?: string; resolution?: { stage: string; strategy: string; basis: string }; callSites?: Array<{ line: number }>; callSiteCount?: number }>;
+        tokenBudget?: { payloadBytes: number; capBytes: number; estimatedTokens: number; truncated: boolean };
+      };
+      expect(Array.isArray(data.callers)).toBe(true);
+      expect(data.callers!.length).toBeGreaterThan(0);
+      const withProvenance = data.callers!.filter((c) => c.resolution !== undefined && Array.isArray(c.callSites));
+      expect(withProvenance.length).toBeGreaterThan(0);
+      for (const c of data.callers!) {
+        expect(typeof c.confidence).toBe('number');
+        expect(['EXTRACTED', 'INFERRED', 'AMBIGUOUS']).toContain(c.confidenceLabel);
+      }
+      for (const c of withProvenance) {
+        expect(['local-export', 'receiver-type', 'member', 'cross-module', 'fallback']).toContain(c.resolution!.stage);
+        expect(['index', 'heuristic']).toContain(c.resolution!.basis);
+        expect(c.callSites!.every((s) => Number.isInteger(s.line) && s.line >= 1)).toBe(true);
+        expect(c.callSiteCount!).toBeGreaterThanOrEqual(c.callSites!.length);
+      }
+      expect('confidence' in (data.definition ?? {})).toBe(false);
+      expect(data.tokenBudget?.capBytes).toBe(1_000_000);
+      expect(data.tokenBudget?.truncated).toBe(false);
+      expect(typeof data.tokenBudget?.estimatedTokens).toBe('number');
+    }, 20_000);
 
     // T-003-2: impact inputSchema 关键字段
     it('T-003-2: impact 工具 inputSchema 含 target(required) + direction enum', async () => {

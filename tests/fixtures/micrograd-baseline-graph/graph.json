@@ -26,6 +26,7 @@
     ],
     "schemaVersion": "2.0",
     "sourceCommit": null,
+    "sourceTreeDirty": null,
     "fingerprint": {
       "formatVersion": 1,
       "extensionSurface": {
@@ -79,10 +80,10 @@
     },
     "builder": {
       "formatVersion": 1,
-      "commit": "68b5929cb16e44db5ed3e10f5a5c12ed9c2c37b8",
-      "dirty": false,
-      "sourceDirty": false,
-      "distSha256": "40ba0fdb25184c7e423f41f82bda3036804a57d3305109a9c782e8d93dc25be4"
+      "commit": "1d7c8b01a70275fcf4adcdbe4e9c84fddf44e730",
+      "dirty": true,
+      "sourceDirty": true,
+      "distSha256": "3d1e84b748653066885b918aa9c18e1ea340ace975d3aca472d766eb544a074e"
     }
   },
   "nodes": [
@@ -513,7 +514,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "local-export",
+        "strategy": "export-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 46,
+          "column": 14
+        }
+      ],
+      "callSiteCount": 1
     },
     {
       "source": "micrograd/engine.py::Value",
@@ -585,7 +598,35 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "local-export",
+        "strategy": "export-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 14,
+          "column": 55
+        },
+        {
+          "line": 15,
+          "column": 14
+        },
+        {
+          "line": 25,
+          "column": 55
+        },
+        {
+          "line": 26,
+          "column": 14
+        },
+        {
+          "line": 37,
+          "column": 14
+        }
+      ],
+      "callSiteCount": 5
     },
     {
       "source": "micrograd/engine.py",
@@ -601,7 +642,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "local-export",
+        "strategy": "export-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 33,
+          "column": 24
+        }
+      ],
+      "callSiteCount": 1
     },
     {
       "source": "micrograd/nn.py::Layer",
@@ -633,7 +686,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "local-export",
+        "strategy": "export-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 49,
+          "column": 23
+        }
+      ],
+      "callSiteCount": 1
     },
     {
       "source": "micrograd/nn.py::MLP",
@@ -665,7 +730,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "member",
+        "strategy": "class-member",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 7,
+          "column": 17
+        }
+      ],
+      "callSiteCount": 1
     },
     {
       "source": "micrograd/nn.py::Module",
@@ -689,7 +766,23 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidenceScore": 0.65,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "cross-module",
+        "strategy": "import-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 16,
+          "column": 18
+        },
+        {
+          "line": 17,
+          "column": 17
+        }
+      ],
+      "callSiteCount": 2
     },
     {
       "source": "micrograd/nn.py::Neuron",
@@ -778,7 +871,23 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidenceScore": 0.65,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "cross-module",
+        "strategy": "import-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 30,
+          "column": 8
+        },
+        {
+          "line": 31,
+          "column": 8
+        }
+      ],
+      "callSiteCount": 2
     },
     {
       "source": "test/test_engine.py::test_sanity_check",
@@ -786,7 +895,19 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidenceScore": 0.65,
-      "directional": true
+      "directional": true,
+      "resolution": {
+        "stage": "cross-module",
+        "strategy": "import-table",
+        "basis": "index"
+      },
+      "callSites": [
+        {
+          "line": 6,
+          "column": 8
+        }
+      ],
+      "callSiteCount": 1
     },
     {
       "source": "test/test_engine.py",

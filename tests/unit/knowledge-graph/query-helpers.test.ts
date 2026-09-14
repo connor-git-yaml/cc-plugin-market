@@ -446,7 +446,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
   it('R-001: 层 (a) exact 命中 → confidence 1.0 + autoResolved', () => {
     const r = resolveSymbolFuzzy(graph, 'micrograd/engine.py::Value');
     expect(r.candidates[0]?.matchKind).toBe('exact');
-    expect(r.candidates[0]?.confidence).toBe(1.0);
+    expect(r.candidates[0]?.matchScore).toBe(1.0);
     expect(r.autoResolved).toBe(true);
   });
 
@@ -454,7 +454,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
   it('R-002: 层 (b) path-suffix 唯一命中 → confidence 0.9 + autoResolved', () => {
     const r = resolveSymbolFuzzy(graph, 'engine.py::Value');
     expect(r.candidates[0]?.matchKind).toBe('path-suffix');
-    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.matchScore).toBe(0.9);
     expect(r.autoResolved).toBe(true);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
   });
@@ -470,7 +470,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
   it('R-004: 层 (c) partial-name qualified 唯一 → 0.95 + autoResolved', () => {
     const r = resolveSymbolFuzzy(graph, 'Value.__add__');
     expect(r.candidates[0]?.matchKind).toBe('partial-name');
-    expect(r.candidates[0]?.confidence).toBe(0.95);
+    expect(r.candidates[0]?.matchScore).toBe(0.95);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.__add__');
     expect(r.autoResolved).toBe(true);
   });
@@ -478,7 +478,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
   it('R-005: 层 (c) partial-name bare 唯一 → 0.90 + autoResolved', () => {
     const r = resolveSymbolFuzzy(graph, 'backward');
     expect(r.candidates[0]?.matchKind).toBe('partial-name');
-    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.matchScore).toBe(0.9);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.backward');
     expect(r.autoResolved).toBe(true);
   });
@@ -487,8 +487,8 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     const r = resolveSymbolFuzzy(graph, 'relu');
     expect(r.autoResolved).toBe(false);
     expect(r.candidates.length).toBeGreaterThanOrEqual(2);
-    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.85);
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.7); // 合同下限
+    expect(r.candidates[0]?.matchScore).toBeLessThanOrEqual(0.85);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.7); // 合同下限
     expect(r.candidates.every((c) => c.matchKind === 'partial-name')).toBe(true);
   });
 
@@ -497,8 +497,8 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     const r = resolveSymbolFuzzy(graph, 'egnine.py::Value');
     expect(r.candidates[0]?.matchKind).toBe('levenshtein');
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
-    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.matchScore).toBeLessThanOrEqual(0.75);
   });
 
   it('R-008: 层 (d) 超编辑距离阈值 → 无候选', () => {
@@ -535,8 +535,8 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     expect(r.autoResolved).toBe(false);
     expect(r.candidates.length).toBeGreaterThanOrEqual(2);
     expect(r.candidates.every((c) => c.matchKind === 'path-suffix')).toBe(true);
-    expect(r.candidates[0]?.confidence).toBe(0.9);
-    expect(r.candidates[1]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.matchScore).toBe(0.9);
+    expect(r.candidates[1]?.matchScore).toBe(0.9);
     expect(r.candidates.map((c) => c.id).sort()).toEqual(['a/util.py::Helper', 'b/util.py::Helper']);
   });
 
@@ -558,8 +558,8 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     expect(r.candidates.length).toBe(1);
     expect(r.candidates[0]?.matchKind).toBe('levenshtein');
     expect(r.candidates[0]?.id).toBe('pkg/engine.py::Value');
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
-    expect(r.candidates[0]?.confidence).toBeLessThan(0.9);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.matchScore).toBeLessThan(0.9);
     // 即使传入阈值 0.5，floor 强制 ≥0.9 → 候选 <0.9 → 不 autoResolve（floor 语义保护）
     expect(r.autoResolved).toBe(false);
   });
@@ -571,7 +571,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     expect(r.candidates.length).toBe(1);
     expect(r.candidates[0]?.matchKind).toBe('path-suffix');
     expect(['a/util.py::Helper', 'b/util.py::Helper']).toContain(r.candidates[0]?.id);
-    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.matchScore).toBe(0.9);
     expect(r.autoResolved).toBe(false);
   });
 
@@ -580,7 +580,7 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     const r = resolveSymbolFuzzy(graph, 'Linear');
     expect(r.candidates[0]?.matchKind).toBe('partial-name');
     expect(r.candidates[0]?.id).toBe('micrograd/nn.py::Linear');
-    expect(r.candidates[0]?.confidence).toBe(0.9); // bare 唯一加权
+    expect(r.candidates[0]?.matchScore).toBe(0.9); // bare 唯一加权
     expect(r.autoResolved).toBe(true);
   });
 
@@ -589,8 +589,8 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     const r = resolveSymbolFuzzy(graph, 'egnine.py::Value');
     expect(r.candidates[0]?.matchKind).toBe('levenshtein');
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
-    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.matchScore).toBeLessThanOrEqual(0.75);
   });
 
   it('R-020: limit=0 被 clamp 到 ≥1（autoResolved 时 candidates 不为空，契约一致）', () => {

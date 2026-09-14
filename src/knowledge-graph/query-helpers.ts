@@ -22,6 +22,7 @@
  */
 
 import path from 'node:path';
+import type { CallEdgeResolution, CallSiteRef } from './call-resolution-labels.js';
 import type {
   GraphJSON,
   GraphEdge,
@@ -64,10 +65,40 @@ export interface BfsTraverseOptions {
 export interface BfsAffected {
   id: string;
   depth: number;
+  /** 所经边的置信度分数（numeric，= confidenceScore 或标签映射值） */
   confidence: number;
+  /** M11 卡 A：所经边的三级置信度标签（边上无合法标签时缺席） */
+  confidenceLabel?: ConfidenceLevel;
   reason: string;
   /** 从 start 到 self 的 ancestor 链（含 self），可选用于自动化测试 */
   path: string[];
+  /** M11 卡 A：所经 calls 边的解析标签（非 calls 边 / 旧图缺席） */
+  resolution?: CallEdgeResolution;
+  /** M11 卡 A：所经边合并的调用点（行号），缺席即图里没记 */
+  callSites?: CallSiteRef[];
+  callSiteCount?: number;
+}
+
+/** 边 provenance 投影（M11 卡 A）：impact / detect_changes 的 BFS 与 context 的邻居收集共用同一口径。 */
+export interface EdgeProvenance {
+  confidenceLabel?: ConfidenceLevel;
+  resolution?: CallEdgeResolution;
+  callSites?: CallSiteRef[];
+  callSiteCount?: number;
+}
+
+/**
+ * 从 GraphEdge 上取 provenance 字段：只透传图里**真有**的字段，缺席的不猜填
+ * （旧 producer 的图没有 resolution / callSites，返回面就该如实缺席，而不是补一个空数组冒充"查过了没有"）。
+ */
+export function edgeProvenance(edge: GraphEdge): EdgeProvenance {
+  const out: EdgeProvenance = {};
+  const label = edge.confidence as ConfidenceLevel | undefined;
+  if (label !== undefined && label in CONFIDENCE_SCORES) out.confidenceLabel = label;
+  if (edge.resolution !== undefined) out.resolution = edge.resolution;
+  if (Array.isArray(edge.callSites)) out.callSites = edge.callSites;
+  if (typeof edge.callSiteCount === 'number') out.callSiteCount = edge.callSiteCount;
+  return out;
 }
 
 /** BFS 输出 */
@@ -224,17 +255,21 @@ export type MatchKind = 'exact' | 'path-suffix' | 'partial-name' | 'levenshtein'
 export interface SymbolCandidate {
   /** canonical symbol id */
   id: string;
-  /** 置信度 0~1（各层规则见 resolveSymbolFuzzy 注释） */
-  confidence: number;
+  /**
+   * 匹配分数 0~1（各层规则见 resolveSymbolFuzzy 注释）。
+   * M11 卡 A 改名：它衡量的是「名字像不像」，不是关系置信度，与边上的 confidence 同名会让
+   * 消费方把 0.6 的拼写相似度当成 0.6 的调用置信度。
+   */
+  matchScore: number;
   /** 命中层次 */
   matchKind: MatchKind;
 }
 
 /** resolveSymbolFuzzy 返回值 */
 export interface FuzzyResolveResult {
-  /** 按 confidence 降序、长度 ≤ limit 的候选；去重后唯一且高分时触发 autoResolved */
+  /** 按 matchScore 降序、长度 ≤ limit 的候选；去重后唯一且高分时触发 autoResolved */
   candidates: SymbolCandidate[];
-  /** 去重后唯一候选且 confidence ≥ autoResolveThreshold(默认 0.9) 时为 true */
+  /** 去重后唯一候选且 matchScore ≥ autoResolveThreshold(默认 0.9) 时为 true */
   autoResolved: boolean;
 }
 
@@ -311,7 +346,7 @@ function layerPathSuffix(graphData: Readonly<GraphJSON>, query: string): SymbolC
   for (const node of graphData.nodes) {
     const lowerId = node.id.toLowerCase();
     if (lowerId === lowerQuery || lowerId.endsWith('/' + lowerQuery)) {
-      results.push({ id: node.id, confidence: PATH_SUFFIX_CONFIDENCE, matchKind: 'path-suffix' });
+      results.push({ id: node.id, matchScore: PATH_SUFFIX_CONFIDENCE, matchKind: 'path-suffix' });
     }
   }
   return results;
@@ -338,13 +373,13 @@ function layerPartialName(graphData: Readonly<GraphJSON>, query: string): Symbol
   const matchCount = matched.length;
   if (matchCount === 0) return [];
   return matched.map((id, rank) => {
-    let confidence: number;
+    let matchScore: number;
     if (matchCount === 1) {
-      confidence = isQualified ? 0.95 : 0.9;
+      matchScore = isQualified ? 0.95 : 0.9;
     } else {
-      confidence = Math.max(0.7, 0.85 - rank * (0.15 / (matchCount - 1)));
+      matchScore = Math.max(0.7, 0.85 - rank * (0.15 / (matchCount - 1)));
     }
-    return { id, confidence, matchKind: 'partial-name' as MatchKind };
+    return { id, matchScore, matchKind: 'partial-name' as MatchKind };
   });
 }
 
@@ -375,32 +410,32 @@ function layerLevenshtein(graphData: Readonly<GraphJSON>, query: string): Symbol
       }
     }
     if (bestRatio !== Infinity) {
-      results.push({ id: node.id, confidence: bestConf, matchKind: 'levenshtein' });
+      results.push({ id: node.id, matchScore: bestConf, matchKind: 'levenshtein' });
     }
   }
   return results;
 }
 
-/** 去重：同 id 保留最高 confidence */
+/** 去重：同 id 保留最高 matchScore */
 function deduplicateCandidates(raw: SymbolCandidate[]): SymbolCandidate[] {
   const best = new Map<string, SymbolCandidate>();
   for (const c of raw) {
     const prev = best.get(c.id);
-    if (prev === undefined || c.confidence > prev.confidence) best.set(c.id, c);
+    if (prev === undefined || c.matchScore > prev.matchScore) best.set(c.id, c);
   }
   return [...best.values()];
 }
 
 /**
- * 去重 → 按 confidence 降序 → 判定 autoResolved → top-N。
+ * 去重 → 按 matchScore 降序 → 判定 autoResolved → top-N。
  *
  * C-3 修复：autoResolved 用**去重后、slice 之前**的 deduped.length 判唯一，
  * 不能用 slice(0,limit) 后的长度，否则 limit=1 会把多候选误判为唯一候选。
  */
 function buildResult(raw: SymbolCandidate[], limit: number, threshold: number): FuzzyResolveResult {
   const deduped = deduplicateCandidates(raw);
-  deduped.sort((a, b) => b.confidence - a.confidence);
-  const autoResolved = deduped.length === 1 && deduped[0]!.confidence >= threshold;
+  deduped.sort((a, b) => b.matchScore - a.matchScore);
+  const autoResolved = deduped.length === 1 && deduped[0]!.matchScore >= threshold;
   return { candidates: deduped.slice(0, limit), autoResolved };
 }
 
@@ -439,7 +474,7 @@ export function resolveSymbolFuzzy(
   const canon = canonicalizeSymbolId(query, graphData, { projectRoot: opts.projectRoot });
   if (canon.reason === 'ok' && canon.canonicalId !== null) {
     return {
-      candidates: [{ id: canon.canonicalId, confidence: 1.0, matchKind: 'exact' }],
+      candidates: [{ id: canon.canonicalId, matchScore: 1.0, matchKind: 'exact' }],
       autoResolved: true, // exact 必然唯一且 1.0 >= threshold
     };
   }
@@ -661,6 +696,7 @@ export function bfsTraverse(
         confidence: conf,
         reason,
         path: nextPath,
+        ...edgeProvenance(ne.edge),
       });
       // 只有还能继续展开（下一深度 < effectiveDepth）才入队
       if (nextDepth < effectiveDepth) {

@@ -84,7 +84,7 @@ describe('US1 — 简短 symbol 唯一命中自动 resolve', () => {
     const r = resolveSymbolFuzzy(GRAPH, 'Value.__add__', { projectRoot: PROJECT_ROOT });
     expect(r.autoResolved).toBe(true);
     expect(r.candidates[0]?.matchKind).toBe('partial-name');
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.9);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.__add__');
   });
 
@@ -94,7 +94,7 @@ describe('US1 — 简短 symbol 唯一命中自动 resolve', () => {
     expect(r.isError).toBeUndefined();
     expect(data['resolvedFrom']).toBe('Value.__add__');
     expect(data['resolvedTo']).toBe('micrograd/engine.py::Value.__add__');
-    expect(typeof data['resolvedConfidence']).toBe('number');
+    expect(typeof data['resolvedMatchScore']).toBe('number');
     expect(data['warnings'] as string[]).toContain('fuzzy-resolved');
   });
 
@@ -113,14 +113,14 @@ describe('US2 — 4 变体批量 resolve', () => {
   it('E-US2-1: path-suffix "engine.py::Value.relu" → confidence 0.9', () => {
     const r = resolveSymbolFuzzy(GRAPH, 'engine.py::Value.relu', { projectRoot: PROJECT_ROOT });
     expect(r.candidates[0]?.matchKind).toBe('path-suffix');
-    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.matchScore).toBe(0.9);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.relu');
   });
 
   it('E-US2-2: 绝对路径 → exact 1.0（projectRoot 透传归一化）', () => {
     const r = resolveSymbolFuzzy(GRAPH, `${PROJECT_ROOT}/micrograd/engine.py::Value`, { projectRoot: PROJECT_ROOT });
     expect(r.candidates[0]?.matchKind).toBe('exact');
-    expect(r.candidates[0]?.confidence).toBe(1.0);
+    expect(r.candidates[0]?.matchScore).toBe(1.0);
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
   });
 
@@ -128,8 +128,8 @@ describe('US2 — 4 变体批量 resolve', () => {
     const r = resolveSymbolFuzzy(GRAPH, 'egnine.py::Value', { projectRoot: PROJECT_ROOT });
     expect(r.candidates[0]?.matchKind).toBe('levenshtein');
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
-    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
-    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
+    expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.matchScore).toBeLessThanOrEqual(0.75);
   });
 
   it('E-US2-4: 15 次混合变体 top-1 命中 ≥12/15', () => {
@@ -215,7 +215,7 @@ describe('US4 — 不存在 symbol 安全降级', () => {
     expect(r.candidates.length).toBeLessThanOrEqual(10);
     for (const c of r.candidates) {
       expect(typeof c.id).toBe('string');
-      expect(typeof c.confidence).toBe('number');
+      expect(typeof c.matchScore).toBe('number');
       expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
     }
   });
@@ -225,12 +225,12 @@ describe('US4 — 不存在 symbol 安全降级', () => {
     expect(r.isError).toBe(true);
     const e = JSON.parse(r.content[0]!.text) as { code: string; context?: { fuzzyMatches?: unknown } };
     expect(e.code).toBe('symbol-not-found');
-    const fz = e.context?.fuzzyMatches as Array<{ id: string; confidence: number; matchKind: string }>;
+    const fz = e.context?.fuzzyMatches as Array<{ id: string; matchScore: number; matchKind: string }>;
     expect(Array.isArray(fz)).toBe(true);
     expect(fz.length).toBeLessThanOrEqual(3);
     for (const c of fz) {
       expect(typeof c.id).toBe('string');
-      expect(typeof c.confidence).toBe('number');
+      expect(typeof c.matchScore).toBe('number');
       expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
     }
   });

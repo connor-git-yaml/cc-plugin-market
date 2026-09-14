@@ -189,7 +189,7 @@ describe('impact tool', () => {
     const r = await handleImpact({ target: 'Linea' });
     const e = parseError(r);
     expect(e.code).toBe('symbol-not-found');
-    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; confidence: number; matchKind: string }>;
+    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; matchScore: number; matchKind: string }>;
     expect(Array.isArray(fz)).toBe(true);
     expect(fz.length).toBeGreaterThan(0);
     expect(fz.length).toBeLessThanOrEqual(3);
@@ -197,13 +197,13 @@ describe('impact tool', () => {
     for (const c of fz) {
       expect(typeof c).toBe('object');
       expect(typeof c.id).toBe('string');
-      expect(typeof c.confidence).toBe('number');
+      expect(typeof c.matchScore).toBe('number');
       expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
     }
     // 算法合同：'Linea' levenshtein 命中 Linear，confidence <0.9（故不 autoResolve 走 error 路径）
     expect(fz[0]?.id).toBe('fixture/nn.py::Linear');
     expect(fz[0]?.matchKind).toBe('levenshtein');
-    expect(fz[0]?.confidence).toBeLessThan(0.9);
+    expect(fz[0]?.matchScore).toBeLessThan(0.9);
   });
 
   it('C-110 [F174] impact autoResolved=true → 用 resolvedTo 继续 + resolvedFrom/resolvedTo/warnings', async () => {
@@ -213,8 +213,8 @@ describe('impact tool', () => {
     const data = parseSuccess(r);
     expect(data['resolvedFrom']).toBe('Value');
     expect(data['resolvedTo']).toBe('fixture/engine.py::Value');
-    expect(typeof data['resolvedConfidence']).toBe('number');
-    expect((data['resolvedConfidence'] as number)).toBeGreaterThanOrEqual(0.9);
+    expect(typeof data['resolvedMatchScore']).toBe('number');
+    expect((data['resolvedMatchScore'] as number)).toBeGreaterThanOrEqual(0.9);
     expect(data['warnings'] as string[]).toContain('fuzzy-resolved');
     // 仍返回正常 impact 数据（affected 来自 fixture/engine.py::Value 的 callers）
     expect(Array.isArray(data['affected'])).toBe(true);
@@ -390,31 +390,31 @@ describe('context tool', () => {
     const r = await handleContext({ symbolId: 'Linea' });
     const e = parseError(r);
     expect(e.code).toBe('symbol-not-found');
-    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; confidence: number; matchKind: string }>;
+    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; matchScore: number; matchKind: string }>;
     expect(Array.isArray(fz)).toBe(true);
     expect(fz.length).toBeGreaterThan(0);
     expect(fz.length).toBeLessThanOrEqual(3);
     for (const c of fz) {
       expect(typeof c).toBe('object');
       expect(typeof c.id).toBe('string');
-      expect(typeof c.confidence).toBe('number');
+      expect(typeof c.matchScore).toBe('number');
       expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
     }
     // 算法合同：'Linea' levenshtein 命中 Linear，confidence <0.9
     expect(fz[0]?.id).toBe('fixture/nn.py::Linear');
     expect(fz[0]?.matchKind).toBe('levenshtein');
-    expect(fz[0]?.confidence).toBeLessThan(0.9);
+    expect(fz[0]?.matchScore).toBeLessThan(0.9);
   });
 
-  it('C-209 [F174] context autoResolved=true → resolvedFrom/resolvedTo/resolvedConfidence + warnings', async () => {
+  it('C-209 [F174] context autoResolved=true → resolvedFrom/resolvedTo/resolvedMatchScore + warnings', async () => {
     setMockGraph();
     // 'Value'（bare）→ partial-name 唯一加权 0.90 → autoResolve 到 fixture/engine.py::Value
     const r = await handleContext({ symbolId: 'Value' });
     const data = parseSuccess(r);
     expect(data['resolvedFrom']).toBe('Value');
     expect(data['resolvedTo']).toBe('fixture/engine.py::Value');
-    expect(typeof data['resolvedConfidence']).toBe('number');
-    expect((data['resolvedConfidence'] as number)).toBeGreaterThanOrEqual(0.9);
+    expect(typeof data['resolvedMatchScore']).toBe('number');
+    expect((data['resolvedMatchScore'] as number)).toBeGreaterThanOrEqual(0.9);
     expect(data['warnings'] as string[]).toContain('fuzzy-resolved');
     // 仍返回正常 context 数据（definition 来自 resolve 后的节点）
     expect((data['definition'] as Record<string, unknown>)['id']).toBe('fixture/engine.py::Value');
@@ -920,5 +920,95 @@ describe('F278 symbol-not-found hint 分流', () => {
     expect(e.code).toBe('symbol-not-found');
     expect(e.hint).toBe('请检查 id 格式或参考 fuzzyMatches 候选');
     expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+  });
+});
+
+// ============================================================
+// M11 卡 A（P1-I）— 诚实工具面：置信度词表统一 / 调用边 provenance / tokenBudget
+// ============================================================
+describe('M11 卡 A — 诚实工具面（context / impact 返回面）', () => {
+  const RES = { stage: 'member', strategy: 'class-member', basis: 'index' } as const;
+  function makeProvenanceGraph(): GraphJSON {
+    const g = makeGraph();
+    const linear = g.links.find((l) => l.source === 'fixture/nn.py::Linear')! as GraphJSON['links'][number];
+    linear.resolution = { ...RES };
+    linear.callSites = [{ line: 12, column: 4 }, { line: 30 }];
+    linear.callSiteCount = 2;
+    return g;
+  }
+
+  it('H-1 context.callers 条目：confidence 为数值 + confidenceLabel 为标签；带标签的边透传 resolution/callSites，无标签的边诚实缺席', async () => {
+    setMockGraph(makeProvenanceGraph());
+    const data = parseSuccess(await handleContext({ symbolId: 'fixture/engine.py::Value' }));
+    const callers = data['callers'] as Array<Record<string, unknown>>;
+    const linear = callers.find((c) => c['id'] === 'fixture/nn.py::Linear')!;
+    expect(linear['confidence']).toBe(0.95);
+    expect(linear['confidenceLabel']).toBe('EXTRACTED');
+    expect(linear['resolution']).toEqual(RES);
+    expect(linear['callSites']).toEqual([{ line: 12, column: 4 }, { line: 30 }]);
+    expect(linear['callSiteCount']).toBe(2);
+    const sgd = callers.find((c) => c['id'] === 'fixture/optim.py::SGD')!;
+    expect(sgd['confidenceLabel']).toBe('AMBIGUOUS');
+    expect('resolution' in sgd).toBe(false);
+    expect('callSites' in sgd).toBe(false);
+  });
+
+  it('H-2 impact.affected 条目：confidenceLabel + resolution + callSites 随所经边透传', async () => {
+    setMockGraph(makeProvenanceGraph());
+    const data = parseSuccess(await handleImpact({ target: 'fixture/engine.py::Value', depth: 1, minConfidence: 0 }));
+    const affected = data['affected'] as Array<Record<string, unknown>>;
+    const linear = affected.find((a) => a['id'] === 'fixture/nn.py::Linear')!;
+    expect(linear['confidenceLabel']).toBe('EXTRACTED');
+    expect(linear['resolution']).toEqual(RES);
+    expect(linear['callSites']).toEqual([{ line: 12, column: 4 }, { line: 30 }]);
+    const mse = affected.find((a) => a['id'] === 'fixture/loss.py::MSELoss')!;
+    expect(mse['confidenceLabel']).toBe('INFERRED');
+    expect('resolution' in mse).toBe(false);
+  });
+
+  it('H-3 context.definition：标签串改名为 confidenceLabel，旧键 confidence 不再出现', async () => {
+    setMockGraph();
+    const data = parseSuccess(await handleContext({ symbolId: 'fixture/engine.py::Value' }));
+    const def = data['definition'] as Record<string, unknown>;
+    expect(def['confidenceLabel']).toBe('EXTRACTED');
+    expect('confidence' in def).toBe(false);
+  });
+
+  it('H-4 fuzzy 词表：fuzzyMatches[].matchScore / resolvedMatchScore；旧键 confidence / resolvedConfidence 不再出现', async () => {
+    setMockGraph();
+    const e = parseError(await handleContext({ symbolId: 'fixture/nn.py::Linearz' }));
+    expect(e.code).toBe('symbol-not-found');
+    const fz = e.context?.['fuzzyMatches'] as Array<Record<string, unknown>>;
+    expect(fz.length).toBeGreaterThan(0);
+    for (const c of fz) {
+      expect(typeof c['matchScore']).toBe('number');
+      expect('confidence' in c).toBe(false);
+    }
+    const ok = parseSuccess(await handleContext({ symbolId: 'engine.py::Value' }));
+    expect(ok['warnings']).toContain('fuzzy-resolved');
+    expect(typeof ok['resolvedMatchScore']).toBe('number');
+    expect('resolvedConfidence' in ok).toBe(false);
+  });
+
+  it('H-5 tokenBudget：impact / context 成功响应都带 { payloadBytes, capBytes, estimatedTokens, truncated }', async () => {
+    setMockGraph();
+    for (const r of [
+      await handleImpact({ target: 'fixture/engine.py::Value' }),
+      await handleContext({ symbolId: 'fixture/engine.py::Value' }),
+    ]) {
+      const tb = parseSuccess(r)['tokenBudget'] as Record<string, unknown>;
+      expect(typeof tb['payloadBytes']).toBe('number');
+      expect(tb['capBytes']).toBe(1_000_000);
+      expect(typeof tb['estimatedTokens']).toBe('number');
+      expect(tb['truncated']).toBe(false);
+    }
+  });
+
+  it('H-6 相似度命中永不进 impact/context：matchScore < 0.9 的候选不 autoResolve（裁决不变量护栏）', async () => {
+    setMockGraph();
+    const e = parseError(await handleImpact({ target: 'fixture/nn.py::Linearz' }));
+    expect(e.code).toBe('symbol-not-found');
+    const fz = e.context?.['fuzzyMatches'] as Array<Record<string, unknown>>;
+    expect((fz[0]!['matchScore'] as number)).toBeLessThan(0.9);
   });
 });

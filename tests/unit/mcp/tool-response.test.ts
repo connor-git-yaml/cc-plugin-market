@@ -43,7 +43,8 @@ describe('F171 buildSuccessResponse', () => {
   it('小 payload 原样返回，无 warnings', () => {
     const r = buildSuccessResponse({ a: 1, items: [1, 2, 3] }, ['items']);
     expect(r.isError).toBeUndefined();
-    expect(parse(r)).toEqual({ a: 1, items: [1, 2, 3] });
+    // M11 卡 A：成功 envelope 恒带 tokenBudget（专项用例见 tool-response-token-budget.test.ts）
+    expect(parse(r)).toEqual({ a: 1, items: [1, 2, 3], tokenBudget: expect.objectContaining({ truncated: false }) });
   });
 
   it('超 cap 时截断可截断数组并加 payload-truncated warning', () => {

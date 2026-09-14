@@ -28,6 +28,7 @@
       ],
       "schemaVersion": "2.0",
       "sourceCommit": null,
+      "sourceTreeDirty": null,
       "fingerprint": {
         "formatVersion": 1,
         "extensionSurface": {
@@ -429,7 +430,19 @@
         "relation": "calls",
         "confidence": "INFERRED",
         "confidenceScore": 0.65,
-        "directional": true
+        "directional": true,
+        "resolution": {
+          "stage": "cross-module",
+          "strategy": "import-table",
+          "basis": "index"
+        },
+        "callSites": [
+          {
+            "line": 6,
+            "column": 11
+          }
+        ],
+        "callSiteCount": 1
       },
       {
         "source": "src/py/consumer.py",

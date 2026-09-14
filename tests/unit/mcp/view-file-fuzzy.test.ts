@@ -91,7 +91,7 @@ describe('F184 FR-003 — view_file fuzzy symbol 解析', () => {
     // 完整 SymbolCandidate 三字段（W-003）
     for (const c of fuzzyMatches) {
       expect(c).toHaveProperty('id');
-      expect(c).toHaveProperty('confidence');
+      expect(c).toHaveProperty('matchScore');
       expect(c).toHaveProperty('matchKind');
     }
   });

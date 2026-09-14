@@ -1,0 +1,181 @@
+# MCP 返回面诚实化合同（M11 卡 A · P1-I）
+#
+# 单一事实源：本文件定义 MCP 图查询工具返回面上「置信度 / 匹配分数 / 调用边解析标签 /
+# 调用点 / token 预算 / tools-list 顺序」六项字段的名称、枚举与语义。
+# TS 侧常量在 src/knowledge-graph/call-resolution-labels.ts；两处由
+# tests/unit/contracts/mcp-return-surface-contract.test.ts 机械对拍，改一处必同批改另一处。
+schemaVersion: 1
+vocabulary:
+  confidence:
+    type: number
+    min: 0
+    max: 1
+    meaning: "边级置信度分数 = graph.json links[].confidenceScore（EXTRACTED 0.95 / INFERRED 0.65 / AMBIGUOUS 0.25 的数值映射）；恒为数值，不再与标签串共用同一个键"
+    carriedBy:
+      - context.callers[]
+      - context.callees[]
+      - context.imports[]
+      - impact.affected[]
+      - detect_changes.affectedSymbols[]
+  confidenceLabel:
+    type: string
+    enum:
+      - EXTRACTED
+      - INFERRED
+      - AMBIGUOUS
+    meaning: "三级置信度标签（节点 / 边）。此前 context.definition.confidence 承载的是这个标签串，与邻居条目上的数值 confidence 同名异义——现改名 confidenceLabel"
+    carriedBy:
+      - context.definition
+      - context.callers[]
+      - context.callees[]
+      - impact.affected[]
+      - detect_changes.affectedSymbols[]
+  matchScore:
+    type: number
+    min: 0
+    max: 1
+    meaning: "fuzzy symbol 解析的匹配分数（exact 1.0 / path-suffix 0.9 / partial-name 0.7~0.9 / levenshtein 0.5~0.75）。它衡量的是「名字像不像」，不是关系置信度，故不得叫 confidence"
+    carriedBy:
+      - fuzzyMatches[]（symbol-not-found 错误的 context）
+      - resolvedMatchScore（autoResolved 时的顶层溯源字段）
+callEdgeResolution:
+  meaning: "calls 边由 call-resolver 四阶段 + F260 接收者类型解析产出；每条边标注命中的阶段 / 策略 / 证据基础，消费方据此区分「AST 索引直查」与「启发式占位」"
+  fieldName: resolution
+  stages:
+    - local-export
+    - receiver-type
+    - member
+    - cross-module
+    - fallback
+  bases:
+    - index
+    - heuristic
+  basesMeaning:
+    index: "由 AST 派生的确定性索引表命中（导出表 / 类成员表 / import 表 / MRO / 接收者类型索引）"
+    heuristic: "占位或通配：目标按命名规则拼出，可能不存在；下游会当悬空边丢弃或以 low/medium 置信度保留"
+  strategies:
+    export-table:
+      stage: local-export
+      basis: index
+      tier: high
+    receiver-type-index:
+      stage: receiver-type
+      basis: index
+      tier: medium
+    namespace-alias:
+      stage: member
+      basis: index
+      tier: medium
+    class-member:
+      stage: member
+      basis: index
+      tier: high
+    class-mro:
+      stage: member
+      basis: index
+      tier: medium
+    class-member-placeholder:
+      stage: member
+      basis: heuristic
+      tier: medium
+    remote-class-member:
+      stage: member
+      basis: index
+      tier: medium
+    remote-class-placeholder:
+      stage: member
+      basis: heuristic
+      tier: medium
+    class-unlocated-placeholder:
+      stage: member
+      basis: heuristic
+      tier: medium
+    suppressed-dynamic-placeholder:
+      stage: member
+      basis: heuristic
+      tier: low
+    import-table:
+      stage: cross-module
+      basis: index
+      tier: medium
+    star-import:
+      stage: cross-module
+      basis: heuristic
+      tier: low
+    super-mro:
+      stage: fallback
+      basis: index
+      tier: low
+    unresolved-placeholder:
+      stage: fallback
+      basis: heuristic
+      tier: low
+  mergeRule: "同 (source, target, relation) 的多条调用边在 graph-builder 合并为一条：resolution 取首条（与置信度 first-wins 同步），callSites 合并全部调用点"
+  absence: "非 calls 边、或由非 call-resolver 路径产出的边不带 resolution（诚实缺席，不得猜填）"
+callSites:
+  fieldName: callSites
+  countField: callSiteCount
+  shape:
+    line: "int ≥ 1（调用点所在行，来自 CallSite.line）"
+    column: "int ≥ 0，可选（CallSite.column 缺席时不填）"
+  cap: 20
+  ordering: "按 line 升序、column 升序；同 (line, column) 去重；超过 cap 的只计入 callSiteCount"
+  carriedBy:
+    - graph.json links[]（calls 边）
+    - context.callers[]
+    - context.callees[]
+    - impact.affected[]
+    - detect_changes.affectedSymbols[]
+    - graph_node.neighbors[].edge
+tokenBudget:
+  fieldName: tokenBudget
+  fields:
+    payloadBytes: "附加 tokenBudget 之前的 payload UTF-8 字节数（截断后）"
+    capBytes: "payload 字节上限（PAYLOAD_CAP_BYTES = 1000000）"
+    estimatedTokens: "estimateTokens(payload)（Math.ceil(len / 3.5)，与 context-assembler 同一估算式）"
+    truncated: "是否因超 cap 收缩了可截断数组"
+    truncatedKeys: "被收缩的数组键名列表；仅 truncated=true 时出现"
+  carriedBy:
+    - impact
+    - context
+    - detect_changes
+    - view_file
+    - search_in_file
+    - list_directory
+    - graph_query
+    - graph_node
+    - graph_path
+    - graph_community
+    - graph_hyperedges
+    - graph_god_nodes
+determinism:
+  toolsListOrder:
+    - prepare
+    - generate
+    - batch
+    - diff
+    - panoramic-query
+    - server_build_info
+    - graph_query
+    - graph_node
+    - graph_path
+    - graph_community
+    - graph_hyperedges
+    - graph_god_nodes
+    - impact
+    - context
+    - detect_changes
+    - view_file
+    - search_in_file
+    - list_directory
+  guarantees:
+    - "tools/list 顺序 = 注册顺序 = 本表顺序；同一 server 进程内两次 tools/list 逐字节相同"
+    - "impact / context / graph_node 对同一输入两次调用的响应文本逐字节相同（top-N 排序键：score desc → confidence desc → id asc）"
+    - "callSites 按 (line, column) 排序后写盘，graph.json 两次构建逐字节相同"
+breakingChanges:
+  - from: fuzzyMatches[].confidence
+    to: fuzzyMatches[].matchScore
+  - from: resolvedConfidence
+    to: resolvedMatchScore
+  - from: context.definition.confidence
+    to: context.definition.confidenceLabel
