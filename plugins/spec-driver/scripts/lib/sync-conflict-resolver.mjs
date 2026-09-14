@@ -1,8 +1,8 @@
 /**
  * sync-conflict-resolver.mjs — 冲突解决模块
  *
- * 检测 MergeSkeleton 中同一 FR ID 的多个 active 版本，
- * 以编号更大者（sourceSpec 更大）胜出。
+ * 检测 MergeSkeleton 中**同一 spec 内**同一 FR ID 的多个 active 版本（只会来自 spec 自身重复编号），
+ * 保留首次出现者。跨 spec 同号不是冲突：FR 编号是 spec 局部编号（2026-09-14 对抗审查 C-1）。
  * 所有导出函数均为纯函数（无副作用），返回新对象。
  *
  * @module sync-conflict-resolver
@@ -38,9 +38,9 @@ function deepClone(value) {
 /**
  * 解决 MergeSkeleton 中的 FR 冲突。
  *
- * 遍历所有章节的 functionalRequirements，检测同一 FR ID 是否存在多个 active 版本。
- * 冲突解决规则：编号更大者（sourceSpec 数值更大）胜出保持 active，
- * 编号更小者标记为 superseded。
+ * 遍历所有章节的 functionalRequirements，按 (sourceSpec, id) 分组检测多个 active 版本。
+ * 冲突解决规则：同组内首次出现者保持 active，其余标记为 superseded（同组 sourceSpec 相同，
+ * 「编号更大者胜出」在此退化为稳定排序下的首条）。
  *
  * 纯函数：不修改输入的 skeleton 对象，返回新对象。
  *
@@ -58,17 +58,18 @@ export function resolveConflicts(skeleton) {
       continue;
     }
 
-    // 按 FR ID 分组，找出有多个 active 版本的 FR
+    // 按 (sourceSpec, id) 分组，找出同一 spec 内有多个 active 版本的 FR
     const activeByFrId = {};
     for (let i = 0; i < frList.length; i += 1) {
       const fr = frList[i];
       if (fr.status !== 'active') {
         continue;
       }
-      if (!activeByFrId[fr.id]) {
-        activeByFrId[fr.id] = [];
+      const key = `${fr.sourceSpec}::${fr.id}`;
+      if (!activeByFrId[key]) {
+        activeByFrId[key] = [];
       }
-      activeByFrId[fr.id].push({ index: i, fr });
+      activeByFrId[key].push({ index: i, fr });
     }
 
     // 对有冲突的 FR 执行裁决
@@ -77,17 +78,13 @@ export function resolveConflicts(skeleton) {
         continue;
       }
 
-      // 按 sourceSpec 编号降序排列，编号最大者胜出
-      entries.sort((a, b) => {
-        const numA = parseInt(a.fr.sourceSpec, 10) || 0;
-        const numB = parseInt(b.fr.sourceSpec, 10) || 0;
-        return numB - numA;
-      });
-
+      // 同键条目来自同一 spec（分组键含 sourceSpec），按出现顺序首条胜出；此前的「编号降序」比较器在同 spec 内恒为 0，
+      // 只是靠排序稳定性碰巧保住首条（角 B 审查 I-B1）
       const winner = entries[0];
-      // 其余全部标记为 superseded
-      for (let i = 1; i < entries.length; i += 1) {
-        const loser = entries[i];
+      // 其余全部标记为 superseded（按身份跳过 winner，而不是按下标——否则「谁胜出」与「谁被标记」脱钩，
+      // 胜者改成末条时会把胜者自己标成 superseded 而观测不出差异，角 B 审查 I-B1 的等价变异）
+      for (const loser of entries) {
+        if (loser === winner) continue;
         frList[loser.index].status = 'superseded';
         frList[loser.index].supersededBy = winner.fr.sourceSpec;
 
@@ -95,7 +92,7 @@ export function resolveConflicts(skeleton) {
           subject: frId,
           winner: winner.fr.sourceSpec,
           loser: loser.fr.sourceSpec,
-          reason: `FR ${frId} 存在多个 active 版本，编号更大者 (${winner.fr.sourceSpec}) 优先`,
+          reason: `FR ${winner.fr.id} 在 spec ${winner.fr.sourceSpec} 内存在多个 active 版本，保留首次出现`,
         });
       }
     }

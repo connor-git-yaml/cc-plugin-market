@@ -2,8 +2,10 @@
  * sync-validator.mjs — 验证模块
  *
  * 对合并结果执行三项验证检查：
- * 1. fr-count: 合并后 activeFRCount >= INITIAL spec 的 FR 数量
- * 2. no-contradiction: 同一 FR ID 不存在两个 active 版本
+ * 1. fr-count: 合并守恒——骨架第 5 章的 FR 总数（含 superseded）== 各 spec 抽取条数之和（基线取自合并**之前**的解析结果，
+ *    不再从骨架自身读：此前「活跃 ≥ INITIAL 活跃」的基线与被检对象同源，抽取全丢时 0 ≥ 0 恒 pass——190 份 spec 抽 0 条 FR
+ *    而 validation 自证通过的病根，角 A 审查 C-4）
+ * 2. no-contradiction: 同一 spec 内同一 FR ID 不存在两个 active 版本（跨 spec 同号无语义关系，不算矛盾）
  * 3. changelog-coverage: 变更历史覆盖所有归属 spec
  *
  * 所有导出函数均为纯函数（无副作用）。
@@ -20,12 +22,13 @@
  *
  * @param {object} skeleton — MergeSkeleton（冲突解决后）
  * @param {{ productId: string, entries: Array<{ specId: string, type: string }> }} timeline
+ * @param {Record<string, { requirements?: Array<object> }>} parsedSpecs — 合并前的逐 spec 解析结果（fr-count 的外部基线）
  * @returns {{ productId: string, passed: boolean, checks: Array<{ name: string, passed: boolean, detail: string, data: Record<string, number|string> }> }}
  *   ValidationReport
  */
-export function validateMergeResult(skeleton, timeline) {
+export function validateMergeResult(skeleton, timeline, parsedSpecs) {
   const checks = [
-    checkFRCount(skeleton, timeline),
+    checkFRCount(skeleton, timeline, parsedSpecs),
     checkNoContradiction(skeleton),
     checkChangelogCoverage(skeleton, timeline),
   ];
@@ -44,47 +47,40 @@ export function validateMergeResult(skeleton, timeline) {
 // ────────────────────────────────────────────────────────────
 
 /**
- * fr-count 检查：合并后活跃 FR 数量 >= INITIAL spec 的 FR 数量
+ * fr-count 检查：合并守恒——四类 handler 一律只追加，骨架第 5 章的 FR 总数必须等于各 spec 抽取条数之和；
+ * 少了就是某个 handler 把条目吃掉了，多了就是某份 spec 被合并了两次（子编号坍缩曾让 094-07 进骨架六次）。
  *
  * @param {object} skeleton
  * @param {object} timeline
+ * @param {Record<string, { requirements?: Array<object> }>} parsedSpecs
  * @returns {object} ValidationCheck
  */
-function checkFRCount(skeleton, timeline) {
-  // 找到 INITIAL 条目
-  const initialEntry = timeline.entries.find((e) => e.type === 'INITIAL');
+function checkFRCount(skeleton, timeline, parsedSpecs) {
   const activeFRCount = skeleton.mergeStats.activeFRCount;
-
-  // 计算 INITIAL spec 的 FR 数量
-  // 从骨架的第 5 章中，查找 sourceSpec === INITIAL specId 的 active FR
-  let initialFRCount = 0;
-  if (initialEntry) {
-    const ch5 = skeleton.chapters['5'];
-    if (ch5) {
-      // 统计 sourceSpec 为 INITIAL 的 FR 数量作为基线
-      initialFRCount = ch5.functionalRequirements.filter(
-        (fr) => fr.sourceSpec === initialEntry.specId
-      ).length;
-    }
-  }
-
-  const passed = activeFRCount >= initialFRCount;
+  const extractedFRCount = timeline.entries.reduce((sum, entry) => {
+    const requirements = parsedSpecs?.[entry.specId]?.requirements;
+    return sum + (Array.isArray(requirements) ? requirements.length : 0);
+  }, 0);
+  const ch5 = skeleton.chapters['5'];
+  const skeletonFRCount = ch5 ? ch5.functionalRequirements.length : 0;
+  const passed = skeletonFRCount === extractedFRCount;
 
   return {
     name: 'fr-count',
     passed,
     detail: passed
-      ? `活跃 FR 数量 (${activeFRCount}) >= INITIAL FR 数量 (${initialFRCount})`
-      : `活跃 FR 数量 (${activeFRCount}) < INITIAL FR 数量 (${initialFRCount})`,
+      ? `骨架 FR 总数 (${skeletonFRCount}) == 各 spec 抽取条数之和 (${extractedFRCount})，其中活跃 ${activeFRCount}`
+      : `骨架 FR 总数 (${skeletonFRCount}) != 各 spec 抽取条数之和 (${extractedFRCount})——合并丢失或重复合并`,
     data: {
       activeFRCount,
-      initialFRCount,
+      extractedFRCount,
+      skeletonFRCount,
     },
   };
 }
 
 /**
- * no-contradiction 检查：同一 FR ID 不存在两个 active 版本
+ * no-contradiction 检查：同一 spec 内同一 FR ID 不存在两个 active 版本
  * （冲突解决后应不存在，此为二次校验）
  *
  * @param {object} skeleton
@@ -100,10 +96,11 @@ function checkNoContradiction(skeleton) {
       if (fr.status !== 'active') {
         continue;
       }
-      if (!activeById[fr.id]) {
-        activeById[fr.id] = [];
+      const key = `${fr.sourceSpec}::${fr.id}`;
+      if (!activeById[key]) {
+        activeById[key] = [];
       }
-      activeById[fr.id].push(fr.sourceSpec);
+      activeById[key].push(fr.sourceSpec);
     }
   }
 

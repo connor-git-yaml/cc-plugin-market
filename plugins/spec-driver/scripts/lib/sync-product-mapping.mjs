@@ -60,6 +60,24 @@ function deepClone(value) {
 // ────────────────────────────────────────────────────────────
 
 /**
+ * spec 编号：三位主编号，可带字母后缀（`170c`，本仓在用的同族拆卡约定）或两位子编号（`094-02`）；子编号后必须紧跟 `-名称` 或结束，
+ * 避免把 `123-2024-report` 这类名称里的数字段误当子编号。目录名与 mapping 条目共用同一口径——
+ * 此前两侧都截成三位，六份 094-0x 坍缩成同一个 id：parsedSpecs 互相覆盖、最后一份的 FR 被合并六次、
+ * 产生 77 条假冲突而其余五份的需求整体消失（2026-09-14 delta 审查实测）。
+ */
+// 编号后必须是 `-` 或结束：`1234-foo` 不是 `123`（角 B 审查 W-B7：mapping 侧此前缺这半个守卫，与目录侧不对称）
+export const SPEC_ID_PATTERN = /^(\d{3}[a-z]?(?:-\d{2}(?=-\D|$))?)(?=-|$)/;
+
+/**
+ * @param {string} text 目录名或 mapping 条目
+ * @returns {string|null}
+ */
+export function extractSpecId(text) {
+  const match = SPEC_ID_PATTERN.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
  * 解析 product-mapping.yaml 内容为 ProductMapping 对象。
  *
  * @param {string} yamlContent — YAML 字符串
@@ -73,7 +91,8 @@ export function parseProductMapping(yamlContent) {
 
   let document;
   try {
-    document = parseYamlDocument(yamlContent);
+    // 带 BOM 的文件此前整份被解析成空映射 → 全部 spec 判未映射（角 B 审查 W-B5 变体实测）
+    document = parseYamlDocument(yamlContent.replace(/^\uFEFF/, ''));
   } catch {
     return { products: {} };
   }
@@ -99,13 +118,15 @@ export function parseProductMapping(yamlContent) {
           let rawId = null;
           if (typeof entry === 'string') {
             rawId = entry;
+          } else if (typeof entry === 'number' && Number.isInteger(entry) && entry >= 0) {
+            // 手写 `- 002` 不带引号时 YAML 读成数字 2，此前被 typeof 过滤整条消失（角 B 审查 W-B4）
+            rawId = String(entry).padStart(3, '0');
           } else if (isObject(entry) && typeof entry.id === 'string') {
             rawId = entry.id;
           }
           if (!rawId) return null;
-          // 从 "001-reverse-spec-v2" 提取纯数字编号 "001"
-          const numMatch = /^(\d{3})/.exec(rawId);
-          return numMatch ? numMatch[1] : rawId;
+          // 从 "001-reverse-spec-v2" / "094-02-panoramic-dir-restructure" 提取编号 "001" / "094-02"
+          return extractSpecId(rawId) ?? rawId;
         })
         .filter(Boolean);
     }

@@ -64,15 +64,10 @@ function createEmptySkeleton(productId) {
   };
 }
 
-/**
- * 在 FR 列表中查找同 ID 的条目
- * @param {Array<object>} frList
- * @param {string} frId
- * @returns {object|null}
- */
-function findFRById(frList, frId) {
-  return frList.find((fr) => fr.id === frId) ?? null;
-}
+// FR 编号是 spec 局部编号（每份 spec 从 FR-001 起编），跨 spec 同号毫无语义关系；早期实现按裸 ID 跨 spec 归并，
+// 实测把 91.3% 的 FR 静默丢弃并把无关需求判为 superseded（2026-09-14 对抗审查 C-1）。身份键因此固定为 (sourceSpec, id)：
+// 四类 handler 一律只追加本 spec 的 FR；同一 spec 内的重复编号不在此静默跳过 / 覆盖 / 追加描述，
+// 而是交给 resolveConflicts 按 (sourceSpec, id) 分组、保留首条并登记 conflict（delta 审查 C-2：FIX 路径曾 last-wins 覆盖真需求）。
 
 /**
  * 向章节的 sourceSpecs 添加 specId（去重）
@@ -134,7 +129,7 @@ function mergeInitial(skeleton, specId, parsedContent) {
 }
 
 /**
- * FEATURE 类型：追加新的 FR 和 UserStory（id 不重复则 append）
+ * FEATURE 类型：追加本 spec 的 FR 和 UserStory
  */
 function mergeFeature(skeleton, specId, parsedContent) {
   const ch5 = skeleton.chapters['5'];
@@ -142,17 +137,13 @@ function mergeFeature(skeleton, specId, parsedContent) {
 
   if (Array.isArray(parsedContent.requirements)) {
     for (const fr of parsedContent.requirements) {
-      const existing = findFRById(ch5.functionalRequirements, fr.id);
-      if (!existing) {
-        ch5.functionalRequirements.push({
-          id: fr.id,
-          description: fr.description,
-          sourceSpec: specId,
-          status: 'active',
-          supersededBy: null,
-        });
-      }
-      // 如果已存在同 ID 的 FR，不追加（保持现有版本）
+      ch5.functionalRequirements.push({
+        id: fr.id,
+        description: fr.description,
+        sourceSpec: specId,
+        status: 'active',
+        supersededBy: null,
+      });
     }
   }
 
@@ -181,27 +172,20 @@ function mergeFeature(skeleton, specId, parsedContent) {
 }
 
 /**
- * FIX 类型：查找同 FR ID，更新 description，标记 sourceSpec
+ * FIX 类型：追加本 spec 的 FR（fix 卡的 FR 是它自己的需求，不按编号回写别的 spec）
  */
 function mergeFix(skeleton, specId, parsedContent) {
   const ch5 = skeleton.chapters['5'];
 
   if (Array.isArray(parsedContent.requirements)) {
     for (const fr of parsedContent.requirements) {
-      const existing = findFRById(ch5.functionalRequirements, fr.id);
-      if (existing && existing.status === 'active') {
-        existing.description = fr.description;
-        existing.sourceSpec = specId;
-      } else if (!existing) {
-        // FIX 中的新 FR（防御性：理论上 fix 不新增，但容错处理）
-        ch5.functionalRequirements.push({
-          id: fr.id,
-          description: fr.description,
-          sourceSpec: specId,
-          status: 'active',
-          supersededBy: null,
-        });
-      }
+      ch5.functionalRequirements.push({
+        id: fr.id,
+        description: fr.description,
+        sourceSpec: specId,
+        status: 'active',
+        supersededBy: null,
+      });
     }
   }
 
@@ -211,7 +195,7 @@ function mergeFix(skeleton, specId, parsedContent) {
 }
 
 /**
- * REFACTOR 类型：查找同 FR ID，替换 description，记录 supersededBy
+ * REFACTOR 类型：追加本 spec 的 FR 并登记进第 11 章（取代关系须由 spec 显式声明，不由编号推断）
  */
 function mergeRefactor(skeleton, specId, parsedContent) {
   const ch5 = skeleton.chapters['5'];
@@ -219,29 +203,13 @@ function mergeRefactor(skeleton, specId, parsedContent) {
 
   if (Array.isArray(parsedContent.requirements)) {
     for (const fr of parsedContent.requirements) {
-      const existing = findFRById(ch5.functionalRequirements, fr.id);
-      if (existing && existing.status === 'active') {
-        // 标记旧版本被取代
-        existing.status = 'superseded';
-        existing.supersededBy = specId;
-
-        // 追加新版本
-        ch5.functionalRequirements.push({
-          id: fr.id,
-          description: fr.description,
-          sourceSpec: specId,
-          status: 'active',
-          supersededBy: null,
-        });
-      } else if (!existing) {
-        ch5.functionalRequirements.push({
-          id: fr.id,
-          description: fr.description,
-          sourceSpec: specId,
-          status: 'active',
-          supersededBy: null,
-        });
-      }
+      ch5.functionalRequirements.push({
+        id: fr.id,
+        description: fr.description,
+        sourceSpec: specId,
+        status: 'active',
+        supersededBy: null,
+      });
     }
   }
 
@@ -263,27 +231,20 @@ function mergeRefactor(skeleton, specId, parsedContent) {
 }
 
 /**
- * ENHANCEMENT 类型：查找同 FR ID，增强 description（追加而非替换）
+ * ENHANCEMENT 类型：追加本 spec 的 FR 和 UserStory
  */
 function mergeEnhancement(skeleton, specId, parsedContent) {
   const ch5 = skeleton.chapters['5'];
 
   if (Array.isArray(parsedContent.requirements)) {
     for (const fr of parsedContent.requirements) {
-      const existing = findFRById(ch5.functionalRequirements, fr.id);
-      if (existing && existing.status === 'active') {
-        // 增强：追加描述
-        existing.description = `${existing.description}\n[增强 by ${specId}] ${fr.description}`;
-        existing.sourceSpec = specId;
-      } else if (!existing) {
-        ch5.functionalRequirements.push({
-          id: fr.id,
-          description: fr.description,
-          sourceSpec: specId,
-          status: 'active',
-          supersededBy: null,
-        });
-      }
+      ch5.functionalRequirements.push({
+        id: fr.id,
+        description: fr.description,
+        sourceSpec: specId,
+        status: 'active',
+        supersededBy: null,
+      });
     }
   }
 

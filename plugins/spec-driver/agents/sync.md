@@ -87,5 +87,5 @@ node "$PLUGIN_DIR/scripts/sync-merge-engine.mjs" --project-root "$PROJECT_ROOT" 
 - 不修改增量 spec（只读）
 - 幂等性（重复运行产生相同结果）
 - 手动映射优先（不覆盖已有条目）
-- 最新优先（冲突时编号更大的 spec 优先）
+- FR 身份 = (来源 spec, 编号)：跨 spec 同号无语义关系、各自保留，不按编号取代；同一 spec 内重复编号已由引擎按出现顺序并入首条描述并在 `warnings` 登记；`conflicts[].subject` 形如 `157::FR-004`（sourceSpec::id）
 - 保守合并（不确定归属标记 unclassified）
