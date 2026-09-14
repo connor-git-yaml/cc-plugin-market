@@ -116,3 +116,63 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 5. 交界调研 → **聚焦增量版，挂 P1-I 立卡前**。
 6. （追加）perf 归因两项改进 → **并入第一批，开一张 small fix 卡**（§3 第五行）。
 7. （追加）本机卫生 → 主线程直接清理，保留三个基线目标与 F150 的 HikariCP / GORM / hono。
+
+## 9. 第一批派发 prompt（2026-09-14，用户拍板后由主线程代拟；每张在独立 worktree 执行）
+
+### 9.0 五张卡共用前置（逐条复制进每张 prompt）
+
+- 启动前 `git fetch origin master`，确认 HEAD ≥ `0adc83f6`；在独立 worktree 跑（`git worktree add`），**不要**在主仓工作目录里做；worktree 的 `node_modules` 软链若为空，删软链后按本分支 lockfile `npm ci`。
+- 编号：启动时以 `specs/` 与远端 `feature/* fix/*` 分支的最大编号 +1 为准（2026-09-14 最大为 292；多卡并行会撞号，先 fetch 再取号）。
+- 模式按卡指定；每完成一个 phase 立即做对抗审查：Codex 配额耗尽期间用独立子代理异构对抗，**门禁 / 判定器 / 守护 / 安全类改动至少两个切入角**（fail-open 面 / 绕过构造面），且对抗 prompt 须把「论据本身」列为攻击面；commit message 标注「Codex 审查暂停，异构档位缺席」。
+- 每处修复单独做变异体检查（先自证变异注入落位）；「声称有守护但变异不红」是固定切入角；冻结型快照严禁 `vitest -u`。
+- 提交只用显式路径；`specs/src.spec.md` 是再生噪声，`git checkout --` 还原、永不入 commit；`specs/products/_generated/*` 与 `.specify/project-context.suggestions.*` 只在有意的 sync 运行时才提交。
+- 任何真实 LLM 运行走订阅优先凭据（`.env.local` 的 SILICONFLOW 只给 jury）；重子代理不得与全量 vitest 或基线采集并发。
+- 交付前：`git fetch origin master:master` → `git rebase master` → `npx vitest run` + `npm run build` + `npm run typecheck:tests` + `npm run test:plugins` + `npm run repo:check` + `npm run release:check` 零失败 → 列 7 字段 report（commit / 改动统计 / 关键 finding / 审查档位与结论 / verify / rebase 状态 / 下一步）等用户「确认 push」→ `git push origin HEAD:master`（ff）→ 删分支。
+- 交付报告末尾必附「工具使用反馈」一节（Spectra MCP 可用性 / 信息完整性 / 流程顺畅度 / 结果准确性；无则写「无」），有实质反馈按条目格式 append 到 `docs/design/dogfooding-feedback-ledger.md` 随需求一并 commit。
+- typecheck 燃尽（里程碑目标 1042 → ≤ 100）：每张卡对**自己触及的测试文件**把类型错误清零；零风险类（TS2578 等）由簇④卡统一清。
+
+### 9.1 卡 A · P1-I 诚实工具面（`/spec-driver:spec-driver-feature`，medium）
+
+问题（verify 过的现状）：M10「诚实的图」只兑现一半。MCP 返回面仍缺：图边解析 stage / 策略标签（消费方无法区分 AST 直解析、启发式、INFERRED）；`confidence` 在两套词汇间漂移；无 `tokenBudget`；`impact` / `context` 的 top-N 顺序与 `tools/list` 顺序无确定性回归；callers / callees 不带调用点行号与语境（F277 账本 #22）。
+方案：五项按「返回面契约先行」做：先在 `contracts/` 定义字段与枚举，再改 `src/mcp/**` 与 `src/agent-context/**`，最后补 `tests/e2e/*mcp*` 的确定性回归（同输入两次 `tools/list` 与 top-N 逐字节相同）。调研阶段**聚焦**「工具面诚实化」的外部范式（其它竞品维度不重跑，09-12 三路审查证据仍新鲜）。
+🔴 回归护栏：F266 空图 fail-loud 与诚实 envelope 不得回退；相似度命中永不进 impact / context（裁决不变量）；builder 戳只可见不判定（F261 D1）。
+验收：外部语料 A/B 必带（GORM / HikariCP 的 09-12 基线，`scripts/graph-accuracy.mjs` 调用范式）；每一项返回面变化都有客户端侧解析可见性测试；`tools/list` 与 top-N 确定性回归绿。
+预算：medium；LLM 只在 A/B 建图时用（订阅）。
+写入路径：`src/mcp/**`、`src/agent-context/**`、`contracts/`、`tests/e2e/*mcp*`、`tests/unit/mcp/**`。
+
+### 9.2 卡 B · F291a per-target 阻断预算（`/spec-driver:spec-driver-fix`，medium，门禁类 · 异构对抗常设）
+
+问题：fix-compliance 判定器的 `blockCount` 是 per-session 而非 per-target；同一会话内切换目标后预算被前一目标消耗（F290 残余，设计稿 `docs/design/f291-per-target-budget-and-reentry-corroboration.md` 有实测爆炸半径）。
+方案：按设计稿「下一轮执行要点」：**先**把 `T1-E4` / `T2-E6` 两类用例改造成按 `stateKeyFor` 推导路径并断言「预置的是当前键的锁」，**再**上复合键；不改 F270 既有裁决；`enforcement: warn` 逃生口保留。
+🔴 回归护栏：F289 两处锚 fix 的反向缺陷史（earliest → 跨目标 fail-open；latest-activity → 同目标永久 fail-closed）；改门禁窗口**必同目标 + 跨目标双语料对拍**；harness 回灌计数上界（F276）不得放宽。
+验收：同目标 8 轮自愈、跨目标切换不 fail-open 的双语料全绿；headless（`--print`）Stop payload 实录一次（2.1.270 字段：`background_tasks` / `last_assistant_message` / `stop_hook_active`）；变异体全红。
+预算：medium；零 LLM。
+写入路径：`plugins/spec-driver/hooks/**`、`plugins/spec-driver/scripts/fix-compliance*`、`plugins/spec-driver/tests/**`（与卡 C 同目录不同文件，先 ship 先 push，后者 rebase 重验）。
+
+### 9.3 卡 C · 簇④ 引擎 / CLI 小补合集（`/spec-driver:spec-driver-story`，small~medium）
+
+问题与方案（每项独立可测，按顺序做，做不完的如实登记移交）：
+1. `get-phases` 补 `gates_before / gates_after`；2. scope 阶段 `agents-byte-budget` 候选集从 `AGENTS_CANDIDATES` 现取；3. Constitution Check 引用的 FR 须 ∈ 矩阵已认领集合（机械检测）；4. verify 补登由矩阵差集机械生成；5. `agents/plan.md` (ii) 门禁类升格条款改第 6 个共享块；6. `generate-template` phase id 字符串化；7. verify.md 分层（定义层 / 流程层）；8. 共享制品的类别判定规则；9. sync：fix-report 消费通道（94 个仅 fix-report 的目录进变更历史 / 已知限制）；10. sync：派发前 mapping 条目数 / digest 节数 / 归属判定机械对拍；11. sync：`fr-count` 绝对下界（与 spec 原文条目数对账）+ spec 写法 lint；12. 三套 `parseProductMapping` 收敛到 `sync-product-mapping.mjs`（顺带修 catalog `specCount: 0` 假数与「上轮有本轮产不出」字段脱落 warning）；13. mapping 写回改 in-place 补丁或改掉「可手动编辑」自述；14. typecheck 零风险类（TS2578 等）清零。
+🔴 回归护栏：`plugins/spec-driver/tests/sync-merge-engine-*.test.mjs` 36 例 + 40 变异体口径不得退（同一标识符共享 helper；护栏取数路径独立于被护对象）。
+验收：每项有红先行测试与变异体；`npm run test:plugins` 零失败；第 12 项后 `catalog-index.yaml` 的 `specCount` 为真值。
+预算：small~medium；零 LLM。
+写入路径：`plugins/spec-driver/scripts/**`（不含 fix-compliance*）、`plugins/spec-driver/agents/*.md`、`plugins/spec-driver/templates/**`、`plugins/spec-driver/tests/**`。
+
+### 9.4 卡 D · 簇⑦ 图新鲜度自动化（`/spec-driver:spec-driver-fix`，small）
+
+问题：`graph-quality:freshness` 在每次 commit 后必 warn（图记录的 sourceCommit 与 HEAD 不一致），F270 / F275 / F277 三次再现，09-14 又手动重建两次；MCP 因此只能作旁证。
+方案：`repo:sync` 顺带 `spectra batch --mode graph-only`（纯 AST、零 LLM、<2 min），或 pre-push 钩子；明确 sourceCommit 的比较语义（HEAD vs 最近一次触及采集面的 commit）并写进 `docs/shared/agent-repo-maintenance.md`。
+🔴 回归护栏：`spectra graph` 会静默毁图（F239）勿误触；`graph-quality` 其余门禁语义不变；`.worktreeinclude` 机制不受影响。
+验收：连续两次只改 docs 的 commit 后 `repo:check` 无 freshness warn；改 `src/` 后 warn 出现且 `repo:sync` 一次消除。
+预算：small；零 LLM。
+写入路径：`scripts/repo-sync*.mjs`、`scripts/lib/graph-quality-core.mjs`、`docs/shared/agent-repo-maintenance.md`、`.githooks/`（如走 pre-push）。
+
+### 9.5 卡 E · CLI-proxy 无头调用瘦身 + collector 成本口径（`/spec-driver:spec-driver-fix`，small）
+
+问题（09-14 实测）：一次只回「ok」的 `claude --print --output-format stream-json` 今天的 usage = input 3 + cache_creation 40,747 + cache_read 26,085 ≈ 67k / 次；`src/core/llm-client.ts`（Fix 134）把三项相加记作 input，spec 生成的每个模块调用因此报 70k 起步，带一轮工具迭代就 140k；`scripts/baseline-collect.mjs` 的 `estimatedCostUsd` 把缓存读按全价计，虚高约 5×。4.3.0 → 4.6.0 基线 diff 三档 red 全部由此而来。
+方案：(1) `src/auth/cli-proxy.ts` 的 spec 生成调用加 `--max-turns 1`，禁工具与 MCP（`--strict-mcp-config` + 空 `--mcp-config`，工具用 `--disallowedTools` 或等价；以 `claude --help` 实测的旗标为准）；(2) collector 与 batch-summary 把 `cache_creation_input_tokens` / `cache_read_input_tokens` 单列，`estimatedCostUsd` 按各自单价（创建 1.25×、读取 0.1×）估算；(3) A/B：改前改后各跑一次 micrograd `--mode full`，断言每模块 input 从 ~70k 降到 ~10k 量级、spec 产物结构（章节集合、FR 行数）不变，把改后的 fixture 作为新基线入库并在 CHANGELOG 记录口径变化。
+🔴 回归护栏：F222 CLI 零认证降级语义不变（`llmDegraded` 结构化字段）；`--require-llm` 行为不变；不得为省 token 换更弱模型。
+验收：A/B 数字入 fix-report；`tests/baseline/*/spectra/full.json` 三档重采并 `baseline:diff`（新 vs 09-14 fixture）token 降幅 ≥ 70%；单测覆盖 cli-proxy 的 argv 构造（PATH 上 claude shim）。
+预算：small；LLM 只在 A/B（micrograd 两次约 6 min）。
+写入路径：`src/auth/cli-proxy.ts`、`src/core/llm-client.ts`、`scripts/baseline-collect.mjs`、`tests/unit/auth/**`、`tests/baseline/**`。
+
