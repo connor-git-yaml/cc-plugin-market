@@ -17,7 +17,7 @@ import {
   computeEvidenceFingerprint, buildFeedbackText,
 } from '../scripts/fix-compliance-judge.mjs';
 import {
-  mutateBlockState, acquireStateLock, releaseStateLock, loadBlockState, saveBlockState, STATE_STORAGE_DIAGNOSTICS,
+  mutateBlockState, acquireStateLock, releaseStateLock, loadBlockState, saveBlockState, STATE_STORAGE_DIAGNOSTICS, targetBudgetOf, NO_TARGET_BUDGET_KEY,
 } from '../scripts/lib/fix-compliance-io.mjs';
 import { countBlockFeedbackEntries, normalizeTranscriptEntry, HOOK_FEEDBACK_PREFIX } from '../scripts/lib/fix-compliance-core.mjs';
 
@@ -93,10 +93,31 @@ function readEvents(root) {
 }
 const verdictEvents = (root) => readEvents(root).filter((e) => e.eventType === 'fix-compliance-verdict');
 const runSummaries = (root) => readEvents(root).filter((e) => e.eventType === 'workflow-run-summary');
-function readState(root, sessionId) {
+/**
+ * F291a（方案①′）：状态仍是每会话一份 `<sid>.json`，阻断预算在 `targets[桶键]` 分桶（桶键 = 规范化的目标目录字面量）；
+ * 本文件 judge 驱动的用例目标恒为 FIXTURE_TARGET，直接调 io 原语的用例也把桶落在同一键上。
+ */
+const FIXTURE_TARGET = 'specs/301-fix-sample-bug';
+/** 读会话状态并把某目标桶摊平到顶层（blockCount / degradedRecorded / nonBlockStopCount / lastCountedFingerprint）；inFlightDeferCount 取顶层 */
+function readState(root, sessionId, targetKey = FIXTURE_TARGET) {
   const p = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${sessionId}.json`);
-  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  if (!fs.existsSync(p)) return null;
+  const st = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const bucket = (st.targets || {})[targetKey] || {};
+  return {
+    sessionId: st.sessionId, inFlightDeferCount: st.inFlightDeferCount ?? 0, targets: st.targets || {},
+    blockCount: bucket.blockCount ?? 0, degradedRecorded: bucket.degradedRecorded === true,
+    nonBlockStopCount: bucket.nonBlockStopCount ?? 0, lastCountedFingerprint: bucket.lastCountedFingerprint ?? null,
+  };
 }
+/** 预置状态文件：桶字段落 targets[targetKey]，inFlightDeferCount 落顶层 */
+function presetState(stateDir, sessionId, { inFlightDeferCount, ...bucket }, targetKey = FIXTURE_TARGET) {
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(stateDir, `${sessionId}.json`), `${JSON.stringify({ sessionId, ...(inFlightDeferCount === undefined ? {} : { inFlightDeferCount }), targets: { [targetKey]: bucket } })}\n`);
+}
+/** F291a：原语层用例对夹具目标桶做 +1（状态顶层不再有 blockCount） */
+const bump = (st) => ({ ...st, targets: { ...(st.targets || {}), [FIXTURE_TARGET]: { ...targetBudgetOf(st, FIXTURE_TARGET), blockCount: targetBudgetOf(st, FIXTURE_TARGET).blockCount + 1 } } });
+const BUMP_SRC = "(st) => { const k = 'specs/301-fix-sample-bug'; const b = (st.targets || {})[k] || {}; return { next: { ...st, targets: { ...(st.targets || {}), [k]: { ...b, blockCount: (b.blockCount || 0) + 1 } } } }; }";
 const lockPath = (root, sessionId) => path.join(root, '.specify', 'runs', '.fix-compliance-state', `${sessionId}.lock`);
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -106,37 +127,38 @@ const HEX64 = /^[0-9a-f]{64}$/;
 describe('F288 G1 · mutateBlockState 原语', () => {
   it('T1-U1 锁内 RMW：写回后锁文件被持有者 unlink；next=null 不写盘；lastCountedFingerprint 字段持久化且非法值归 null', () => {
     const root = stageRoot();
-    const r1 = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1, lastCountedFingerprint: 'a'.repeat(64) }, result: 'w' }));
+    const bucket = (st) => targetBudgetOf(st, FIXTURE_TARGET);
+    const r1 = mutateBlockState(root, 's', (st) => ({ next: { ...st, targets: { ...st.targets, [FIXTURE_TARGET]: { ...bucket(st), blockCount: bucket(st).blockCount + 1, lastCountedFingerprint: 'a'.repeat(64) } } }, result: 'w' }));
     assert.equal(r1.ok, true); assert.equal(r1.written, true); assert.equal(r1.lockUnavailable, false); assert.equal(r1.result, 'w');
-    assert.equal(r1.state.blockCount, 1); assert.equal(r1.state.lastCountedFingerprint, 'a'.repeat(64));
+    assert.equal(bucket(r1.state).blockCount, 1); assert.equal(bucket(r1.state).lastCountedFingerprint, 'a'.repeat(64));
     assert.equal(fs.existsSync(lockPath(root, 's')), false, '锁文件必须由持有者释放');
-    const r2 = mutateBlockState(root, 's', (st) => ({ next: null, result: st.blockCount }));
+    const r2 = mutateBlockState(root, 's', (st) => ({ next: null, result: bucket(st).blockCount }));
     assert.equal(r2.written, false); assert.equal(r2.result, 1);
-    assert.equal(loadBlockState(root, 's').lastCountedFingerprint, 'a'.repeat(64));
-    saveBlockState(root, 's', { blockCount: 1, lastCountedFingerprint: 'not-hex' });
-    assert.equal(loadBlockState(root, 's').lastCountedFingerprint, null, '非法指纹归 null（向后兼容口径）');
-    assert.equal(loadBlockState(root, 'never').lastCountedFingerprint, null, '缺省 null');
+    assert.equal(bucket(loadBlockState(root, 's')).lastCountedFingerprint, 'a'.repeat(64));
+    saveBlockState(root, 's', { targets: { [FIXTURE_TARGET]: { blockCount: 1, lastCountedFingerprint: 'not-hex' } } });
+    assert.equal(bucket(loadBlockState(root, 's')).lastCountedFingerprint, null, '非法指纹归 null（向后兼容口径）');
+    assert.equal(bucket(loadBlockState(root, 'never')).lastCountedFingerprint, null, '缺省 null');
   });
 
   it('T1-U2 陈旧锁接管（pid 不存活 / 墙钟超 300s）落 state-lock-taken-over；活锁（pid 存活且新鲜）有界重试后降级为无锁 RMW + state-lock-unavailable，裁决数据照样写回', () => {
     const root = stageRoot();
     fs.mkdirSync(path.dirname(lockPath(root, 's')), { recursive: true });
     fs.writeFileSync(lockPath(root, 's'), JSON.stringify({ lockId: 'x', pid: 2147483000, startedAt: Date.now() }));
-    const stale = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));
+    const stale = mutateBlockState(root, 's', (st) => ({ next: bump(st) }));
     assert.equal(stale.lockUnavailable, false);
     assert.ok(stale.diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver));
-    assert.equal(stale.state.blockCount, 1);
+    assert.equal(targetBudgetOf(stale.state, FIXTURE_TARGET).blockCount, 1);
     fs.writeFileSync(lockPath(root, 's'), JSON.stringify({ lockId: 'y', pid: process.pid, startedAt: Date.now() - 301 * 1000 }));
-    const old = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));
+    const old = mutateBlockState(root, 's', (st) => ({ next: bump(st) }));
     assert.ok(old.diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver), '墙钟兜底');
-    assert.equal(old.state.blockCount, 2);
+    assert.equal(targetBudgetOf(old.state, FIXTURE_TARGET).blockCount, 2);
     fs.writeFileSync(lockPath(root, 's'), JSON.stringify({ lockId: 'z', pid: process.pid, startedAt: Date.now() }));
     const t0 = Date.now();
-    const live = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));
+    const live = mutateBlockState(root, 's', (st) => ({ next: bump(st) }));
     const ms = Date.now() - t0;
     assert.equal(live.lockUnavailable, true);
     assert.ok(live.diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockUnavailable));
-    assert.equal(live.ok, true); assert.equal(live.state.blockCount, 3, '锁不可得 ⇒ 无锁 RMW（= 改动前行为），不跳过');
+    assert.equal(live.ok, true); assert.equal(targetBudgetOf(live.state, FIXTURE_TARGET).blockCount, 3, '锁不可得 ⇒ 无锁 RMW（= 改动前行为），不跳过');
     assert.ok(ms >= 400 && ms < 5000, `有界重试 ≈480ms（实测 ${ms}ms）`);
     assert.equal(JSON.parse(fs.readFileSync(lockPath(root, 's'), 'utf8')).lockId, 'z', '别人的活锁不得被 unlink');
     const foreign = { acquired: true, lockPath: lockPath(root, 's'), lockId: 'not-z' };
@@ -144,12 +166,12 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     assert.equal(fs.existsSync(lockPath(root, 's')), true, 'lockId 不一致 ⇒ 不 unlink');
     // 对抗复审 W-4：startedAt 在未来（伪造）⇒ 墙钟兜底不得被绕掉；pid 无权探测（pid 1）⇒ 不算存活
     fs.writeFileSync(lockPath(root, 's'), JSON.stringify({ lockId: 'f', pid: process.pid, startedAt: Date.now() + 1e15 }));
-    const future = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));
+    const future = mutateBlockState(root, 's', (st) => ({ next: bump(st) }));
     assert.equal(future.lockUnavailable, false, '未来 startedAt 的锁必须被接管');
     assert.ok(future.diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver));
     if (typeof process.getuid === 'function' && process.getuid() !== 0) {
       fs.writeFileSync(lockPath(root, 's'), JSON.stringify({ lockId: 'g', pid: 1, startedAt: Date.now() }));
-      const eperm = mutateBlockState(root, 's', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));
+      const eperm = mutateBlockState(root, 's', (st) => ({ next: bump(st) }));
       assert.equal(eperm.lockUnavailable, false, 'pid 1（EPERM）的锁必须被接管');
       assert.ok(eperm.diagnostics.includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver));
     }
@@ -164,7 +186,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
 
   it('T1-C1 原语层：8 进程并发无条件 +1 ⇒ 最终 8、丢更新 0（加锁臂）', async () => {
     const root = stageRoot();
-    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nconst r = mutateBlockState(process.argv[2], 'c1', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable }));`;
+    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nconst r = mutateBlockState(process.argv[2], 'c1', ${BUMP_SRC});\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable }));`;
     const scriptPath = path.join(root, 'inc.mjs');
     fs.writeFileSync(scriptPath, script);
     const children = Array.from({ length: 8 }, () => new Promise((resolve) => {
@@ -177,7 +199,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     for (const r of results) assert.equal(r.code, 0, r.out);
     const parsed = results.map((r) => JSON.parse(r.out));
     assert.ok(parsed.every((p) => p.ok), JSON.stringify(parsed));
-    assert.equal(loadBlockState(root, 'c1').blockCount, 8, '丢更新必须为 0');
+    assert.equal(targetBudgetOf(loadBlockState(root, 'c1'), FIXTURE_TARGET).blockCount, 8, '丢更新必须为 0');
     assert.equal(parsed.filter((p) => p.lockUnavailable).length, 0, '480ms 内 8 路竞争不应耗尽重试');
   });
 
@@ -186,7 +208,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     // 预置一把「死 pid」陈旧锁：pidAlive(2147483000)=false ⇒ 必被接管；8 进程从"锁已存在且陈旧"起跑（非从零竞争新锁）
     fs.mkdirSync(path.dirname(lockPath(root, 'c5')), { recursive: true });
     fs.writeFileSync(lockPath(root, 'c5'), JSON.stringify({ lockId: 'stale', pid: 2147483000, startedAt: Date.now() }));
-    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nimport { STATE_STORAGE_DIAGNOSTICS } from ${JSON.stringify(IO_URL)};\nconst r = mutateBlockState(process.argv[2], 'c5', (st) => ({ next: { ...st, blockCount: st.blockCount + 1 } }));\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable, tookOver: (r.diagnostics||[]).includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver) }));`;
+    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nimport { STATE_STORAGE_DIAGNOSTICS } from ${JSON.stringify(IO_URL)};\nconst r = mutateBlockState(process.argv[2], 'c5', ${BUMP_SRC});\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable, tookOver: (r.diagnostics||[]).includes(STATE_STORAGE_DIAGNOSTICS.lockTakenOver) }));`;
     const scriptPath = path.join(root, 'inc-c5.mjs');
     fs.writeFileSync(scriptPath, script);
     const children = Array.from({ length: 8 }, () => new Promise((resolve) => {
@@ -200,7 +222,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     const parsed = results.map((r) => JSON.parse(r.out));
     assert.ok(parsed.every((p) => p.ok), JSON.stringify(parsed));
     // 核心断言：陈旧锁被接管后，8 路各 +1 无一丢失（裸 unlink 接管 = 活锁被误删则会丢更新；此为回归地板）
-    assert.equal(loadBlockState(root, 'c5').blockCount, 8, '陈旧锁并发接管下丢更新必须为 0');
+    assert.equal(targetBudgetOf(loadBlockState(root, 'c5'), FIXTURE_TARGET).blockCount, 8, '陈旧锁并发接管下丢更新必须为 0');
     // 陈旧锁只应被接管有限次（不因每进程各接管一次而抖动成 8 次）——至少 1 次、且残留 stale 副本被清理不影响新锁
     assert.ok(parsed.some((p) => p.tookOver), '至少一个进程落 state-lock-taken-over');
     assert.equal(fs.existsSync(lockPath(root, 'c5')), false, '收尾锁文件已释放（无残留活锁）');
@@ -211,7 +233,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     const root = stageRoot();
     fs.mkdirSync(path.dirname(lockPath(root, 'c6')), { recursive: true });
     fs.writeFileSync(lockPath(root, 'c6'), JSON.stringify({ lockId: 'stale', pid: 2147483000, startedAt: Date.now() }));
-    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nconst hold = Number(process.argv[3] || 0);\nconst r = mutateBlockState(process.argv[2], 'c6', (st) => { if (hold > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, hold); return { next: { ...st, blockCount: st.blockCount + 1 } }; });\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable, diagnostics: r.diagnostics }));`;
+    const script = `import { mutateBlockState } from ${JSON.stringify(IO_URL)};\nconst hold = Number(process.argv[3] || 0);\nconst r = mutateBlockState(process.argv[2], 'c6', (st) => { if (hold > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, hold); return (${BUMP_SRC})(st); });\nprocess.stdout.write(JSON.stringify({ ok: r.ok, lockUnavailable: r.lockUnavailable, diagnostics: r.diagnostics }));`;
     const scriptPath = path.join(root, 'inc-c6.mjs');
     fs.writeFileSync(scriptPath, script);
     const run = (holdMs, env) => new Promise((resolve) => {
@@ -226,7 +248,7 @@ describe('F288 G1 · mutateBlockState 原语', () => {
     for (const r of [a, b]) assert.equal(r.code, 0, r.out);
     const pa = JSON.parse(a.out); const pb = JSON.parse(b.out);
     assert.ok(pa.ok && pb.ok);
-    assert.equal(loadBlockState(root, 'c6').blockCount, 2, '身份核对必须防止 A 删掉 B 的活锁：丢更新 = 0');
+    assert.equal(targetBudgetOf(loadBlockState(root, 'c6'), FIXTURE_TARGET).blockCount, 2, '身份核对必须防止 A 删掉 B 的活锁：丢更新 = 0');
     assert.equal(pa.lockUnavailable, false, 'A 应在 B 释放后取到锁（不该耗尽重试降级）');
     assert.equal(fs.existsSync(lockPath(root, 'c6')), false, '收尾锁已释放');
   });
@@ -356,6 +378,7 @@ describe('F288 G2 · 端到端序列（指纹路由）', () => {
     const root = stageRoot();
     const t = writeTranscript(root, nonCompliantLines());
     const tmpOverride = path.join(root, 'tmp-override');
+    // F291a（方案①′）：状态文件仍按会话 `<sid>.json`——占位放在会话文件路径上即命中判定器的写路径
     fs.mkdirSync(path.join(root, '.specify', 'runs', '.fix-compliance-state', 'nb-su.json'), { recursive: true });
     fs.mkdirSync(path.join(tmpOverride, 'spec-driver-fix-compliance', 'nb-su.json'), { recursive: true });
     const r = stop(root, t, 'nb-su', { promptId: 'P', env: { SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP: tmpOverride } });
@@ -392,7 +415,8 @@ describe('F288 G2 · 端到端序列（指纹路由）', () => {
     assert.equal(r.status, 2, r.stderr);
     const report = spawnSync('node', [CLI, '--mode', 'report', '--project-root', root, '--transcript-path', t], { encoding: 'utf8' });
     const missing = JSON.parse(report.stdout).missing;
-    const st = readState(root, 'anchor');
+    // F291a：最晚 fix 展开之后的窗口里没有提名 ⇒ 本轮记账到无目标桶（早先窗口的提名不跨展开续用）
+    const st = readState(root, 'anchor', NO_TARGET_BUDGET_KEY);
     const latest = computeEvidenceFingerprint({ promptId: 'P', missing, ledgerDelegationCount: 0, latestFixLineIndex: 3 });
     const earliest = computeEvidenceFingerprint({ promptId: 'P', missing, ledgerDelegationCount: 0, latestFixLineIndex: 0 });
     assert.equal(st.lastCountedFingerprint, latest);
@@ -403,8 +427,7 @@ describe('F288 G2 · 端到端序列（指纹路由）', () => {
     const root = stageRoot();
     const t = writeTranscript(root, nonCompliantLines());
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'keep.json'), `${JSON.stringify({ sessionId: 'keep', blockCount: 0, degradedRecorded: false, inFlightDeferCount: 1 })}\n`);
+    presetState(stateDir, 'keep', { blockCount: 0, degradedRecorded: false, inFlightDeferCount: 1 });
     assert.equal(stop(root, t, 'keep', { promptId: 'P' }).status, 2);
     const st = readState(root, 'keep');
     assert.equal(st.inFlightDeferCount, 1);
@@ -415,7 +438,7 @@ describe('F288 G2 · 端到端序列（指纹路由）', () => {
     const root = stageRoot();
     const t = writeTranscript(root, nonCompliantLines());
     const src = fs.readFileSync(CLI, 'utf8');
-    const marker = '    const last = state.lastCountedFingerprint;';
+    const marker = '    const last = bucket.lastCountedFingerprint;';
     assert.ok(src.includes(marker), '注入锚点缺席');
     const patched = path.join(path.dirname(CLI), '.f288-t2e10-judge.tmp.mjs');
     fs.writeFileSync(patched, src.split(marker).join(`    throw new Error('T2-E10 injected');\n${marker}`));
@@ -452,8 +475,7 @@ describe('F288 6b · 预置状态文件换不来放行', () => {
     const root = stageRoot();
     const t = writeTranscript(root, nonCompliantLines());
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'forged.json'), `${JSON.stringify({ sessionId: 'forged', blockCount: 2, nonBlockStopCount: 2, degradedRecorded: true })}\n`);
+    presetState(stateDir, 'forged', { blockCount: 2, nonBlockStopCount: 2, degradedRecorded: true });
     for (const promptId of ['P', 'Q']) {
       const r = stop(root, t, 'forged', { promptId });
       assert.equal(r.status, 2, `预置计数不得兑换放行：${r.stderr}`);
@@ -472,8 +494,7 @@ describe('F288 6b · 预置状态文件换不来放行', () => {
     const root = stageRoot();
     const t = writeTranscript(root, nonCompliantLines());
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'forged2.json'), `${JSON.stringify({ sessionId: 'forged2', blockCount: 2, degradedRecorded: false })}\n`);
+    presetState(stateDir, 'forged2', { blockCount: 2, degradedRecorded: false });
     const r1 = stop(root, t, 'forged2');
     assert.equal(r1.status, 2, r1.stderr);
     assert.ok(verdictEvents(root).pop().diagnostics.includes('state-budget-uncorroborated'));
@@ -502,8 +523,7 @@ describe('F288 G1 · 并发与锁的端到端', () => {
       const root = stageRoot();
       const t = writeTranscript(root, nonCompliantLines());
       const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-      fs.mkdirSync(stateDir, { recursive: true });
-      fs.writeFileSync(path.join(stateDir, 'conc.json'), `${JSON.stringify({ sessionId: 'conc', blockCount: 0, lastCountedFingerprint: 'f'.repeat(64) })}\n`);
+      presetState(stateDir, 'conc', { blockCount: 0, lastCountedFingerprint: 'f'.repeat(64) });
       const payload = JSON.stringify(payloadFor(root, t, 'conc', { prompt_id: 'P' }));
       const procs = [0, 1].map(() => new Promise((resolve) => {
         const child = spawn('node', [CLI, '--mode', 'hook', '--project-root', root], { stdio: ['pipe', 'ignore', 'pipe'] });
@@ -525,8 +545,7 @@ describe('F288 G1 · 并发与锁的端到端', () => {
     const t = writeTranscript(root, compliantLines());
     fs.writeFileSync(path.join(root, 'specs', '301-fix-sample-bug', 'verification', 'verification-report.md'), '# 验证报告\n全部通过\n');
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'lockc.json'), `${JSON.stringify({ sessionId: 'lockc', blockCount: 1 })}\n`);
+    presetState(stateDir, 'lockc', { blockCount: 1 });
     fs.writeFileSync(path.join(stateDir, 'lockc.lock'), JSON.stringify({ lockId: 'q', pid: process.pid, startedAt: Date.now() }));
     const r = stop(root, t, 'lockc', { promptId: 'P' });
     assert.equal(r.status, 0, r.stderr);
@@ -539,7 +558,8 @@ describe('F288 G1 · 并发与锁的端到端', () => {
     const t = writeTranscript(root, nonCompliantLines());
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'lockb.lock'), JSON.stringify({ lockId: 'q', pid: process.pid, startedAt: Date.now() }));
+    // F291a（方案①′）：锁仍按会话——预置活锁落在 `<sid>.lock` 即是判定器要抢的那把
+    fs.writeFileSync(lockPath(root, 'lockb'), JSON.stringify({ lockId: 'q', pid: process.pid, startedAt: Date.now() }));
     const r = stop(root, t, 'lockb', { promptId: 'P' });
     assert.equal(r.status, 2, r.stderr);
     assert.equal(readState(root, 'lockb').nonBlockStopCount, 1);
@@ -552,8 +572,7 @@ describe('F288 G1 · 并发与锁的端到端', () => {
     const t = writeTranscript(root, nonCompliantLines());
     fs.appendFileSync(t, `${JSON.stringify(FEEDBACK('[FIX-COMPLIANCE] 1'))}\n${JSON.stringify(FEEDBACK('[FIX-COMPLIANCE] 2'))}\n`);
     const stateDir = path.join(root, '.specify', 'runs', '.fix-compliance-state');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'term.json'), `${JSON.stringify({ sessionId: 'term', blockCount: 2, nonBlockStopCount: 0, lastCountedFingerprint: 'f'.repeat(64) })}\n`);
+    presetState(stateDir, 'term', { blockCount: 2, nonBlockStopCount: 0, lastCountedFingerprint: 'f'.repeat(64) });
     // 两个进程各带不同 prompt_id（都判「有进展」⇒ 都走 blockCount 达上限的放行）；同一 prompt_id 的第 2 个进程会落入
     // 无进展格（K-14 已登记），那条路径不到达终态写入。
     const procs = ['P', 'Q'].map((promptId) => new Promise((resolve) => {

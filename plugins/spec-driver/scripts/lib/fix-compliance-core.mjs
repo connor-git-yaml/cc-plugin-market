@@ -1599,7 +1599,7 @@ function splitCommandTextSegmentSpans(command) {
  * 状态机零改动意味着可触发该降级通道的 transcript 输入集合与改动前逐字相同。已另开独立跟进项。
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
  * @param {number|null} anchorLineIndex
- * @returns {{ path: string|null, ambiguous: boolean, candidates: string[] }}
+ * @returns {{ path: string|null, ambiguous: boolean, candidates: string[], renames: Array<{ from: string, to: string }> }}
  */
 export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
   const list = Array.isArray(entries) ? entries : [];
@@ -1619,6 +1619,9 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
   // 本判定器跑在**同步** Stop hook 里，几 MB 的合法 transcript 就足以把门禁推到分钟级或宿主超时，
   // 导致门禁不可用或异常 fail-open。回归锚点见 fix-compliance-core.test.mjs 的 F227 性能用例。
   const candidateHistory = new Map();
+  // F291a：被跟随的改名事件（from → to）。候选历史里既有「同一目标的改名前身」也有「另一个目标的提名」，两者形状相同；
+  // 阻断预算只能沿**改名链**迁移（同一目标已付的往返），绝不能沿「换了个目标」迁移（那正是 F289 delta CRITICAL 的捐赠面），故单独登记。
+  const renames = [];
   const pushCandidateHistory = (dir) => {
     candidateHistory.delete(dir); // 已存在则先移除，保证重新 set 落到末尾（move-to-end）
     candidateHistory.set(dir, true);
@@ -1667,6 +1670,7 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
     // 打开 fail-open 用真实 `git mv SRC <不存在的非规范名>` 即可（= SC-005，F224 设计意图，须保住）。
     // 故不作探测，维持纯状态机语义。详见 specs/231-.../fix-report.md「第 12 轮」。
     trackedDir = stripTrailingSlash(operands[1]);
+    renames.push({ from: src, to: trackedDir });
     syncCandidateFromTrackedDir();
   };
 
@@ -1694,7 +1698,7 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
       }
     }
   }
-  return { path: candidate, ambiguous, candidates: Array.from(candidateHistory.keys()) };
+  return { path: candidate, ambiguous, candidates: Array.from(candidateHistory.keys()), renames };
 }
 
 // F216 C4 · fence-aware 标题/锚点识别原语 computeFenceMask 已下沉到

@@ -197,12 +197,17 @@ function stageFixture(fixtureName, { fixReportContent, verification } = {}) {
 }
 
 /** 直接预置 blockState（W7 精确窗口：模拟旧合同缺口已产生的阻断计数） */
-function preinstallBlockState(sessionId, state) {
+/**
+ * 预置会话状态文件（F291a 方案①′形状）：桶字段（blockCount / degradedRecorded / nonBlockStopCount / lastCountedFingerprint）
+ * 落 `targets[targetKey]`，`inFlightDeferCount` 是会话属性落顶层。本文件的夹具目标恒为 FEATURE_DIR（specs/301-fix-sample-bug）。
+ */
+function preinstallBlockState(sessionId, state, targetKey = 'specs/301-fix-sample-bug') {
   const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown-session';
   const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
   fs.mkdirSync(stateDir, { recursive: true });
   const file = path.join(stateDir, `${safe}.json`);
-  fs.writeFileSync(file, `${JSON.stringify({ sessionId: safe, ...state })}\n`, 'utf8');
+  const { inFlightDeferCount, ...bucket } = state;
+  fs.writeFileSync(file, `${JSON.stringify({ sessionId: safe, ...(inFlightDeferCount === undefined ? {} : { inFlightDeferCount }), targets: { [targetKey]: bucket } })}\n`, 'utf8');
   return file;
 }
 
@@ -267,9 +272,25 @@ describe('退出码矩阵（--mode hook）', () => {
  * 读取某 session 的阻断/推迟状态文件（F256 R2：blockCount 与 inFlightDeferCount 分列）。
  * @returns {{blockCount:number, inFlightDeferCount:number, degradedRecorded:boolean}|null} 文件不存在返回 null
  */
-function readState(sessionId, root = tmp) {
+function readState(sessionId, root = tmp, targetKey = null) {
+  // F291a（方案①′）：状态是每会话一份 <sid>.json，阻断预算在 targets[桶键] 分桶。本 helper 给出「会话视图」：
+  // 指定 targetKey 即读该桶；未指定时按各桶取最大值（blockCount / nonBlockStopCount）、degradedRecorded 任一为真即真、
+  // lastCountedFingerprint 取 blockCount 最高桶的——本文件的用例几乎都是单目标会话，会话视图 == 该桶。
   const p = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${sessionId}.json`);
-  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  if (!fs.existsSync(p)) return null;
+  const st = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const targets = st.targets && typeof st.targets === 'object' ? st.targets : {};
+  const buckets = targetKey === null ? Object.values(targets) : [targets[targetKey] || {}];
+  const top = buckets.reduce((best, b) => (best === null || (b.blockCount ?? 0) > (best.blockCount ?? 0) ? b : best), null) || {};
+  return {
+    sessionId: st.sessionId,
+    inFlightDeferCount: st.inFlightDeferCount ?? 0,
+    blockCount: Math.max(0, ...buckets.map((b) => b.blockCount ?? 0)),
+    nonBlockStopCount: Math.max(0, ...buckets.map((b) => b.nonBlockStopCount ?? 0)),
+    degradedRecorded: buckets.some((b) => b.degradedRecorded === true),
+    lastCountedFingerprint: top.lastCountedFingerprint ?? null,
+    targets,
+  };
 }
 
 function readVerdictEvents(root = tmp) {
@@ -699,8 +720,8 @@ describe('F216 T018 SC-003a：阻断→补证据→放行序列闭环', () => {
     assert.equal(r2.status, 0, r2.stderr);
     assert.equal(r2.stderr.trim(), '');
     // F211 清零：合规收口后阻断状态文件被移除
-    const stateFile = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', `${sid}.json`);
-    assert.equal(fs.existsSync(stateFile), false, '合规后 blockState 应清零');
+    // F291a：复合键与 legacy 两处都不得存在（只查裸 sid 会在复合键在场时空转）
+    assert.equal(readState(sid), null, '合规后 blockState 应清零');
     // 反证清零：再次无证据应从第 1 次重新计数（exit 2 而非直接降级）
     const badAgain = stageFixture('noop-unverified-citation.jsonl');
     assert.equal(runCli({ transcriptPath: badAgain, sessionId: sid }).status, 2, '清零后重新从第 1 次阻断');
@@ -714,10 +735,10 @@ describe('F216 T018 SC-003a：阻断→补证据→放行序列闭环', () => {
 describe('F216 T019 SC-004 档位切换矩阵 + W7 精确窗口', () => {
   /** 读取指定 session 的 blockState.blockCount（不存在则返回 null，W2 精确断言用） */
   function readBlockCount(sessionId, root = tmp) {
+    // F291a：经 readState 的会话视图（单目标会话 == 该目标桶）
     const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown-session';
-    const file = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${safe}.json`);
-    if (!fs.existsSync(file)) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8')).blockCount;
+    const state = readState(safe, root);
+    return state ? state.blockCount : null;
   }
 
   it('F216 T019 W2 block→warn→block：同一 session 计数轨迹精确（warn 不 bump、切回续阻断至降级）', () => {
@@ -768,7 +789,7 @@ describe('F216 T019 SC-004 档位切换矩阵 + W7 精确窗口', () => {
     const r = runCli({ transcriptPath: t, sessionId: sid });
     assert.equal(r.status, 0, r.stderr);
     // 合规收口无条件 resetBlockState → 旧计数文件移除
-    assert.equal(fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', `${sid}.json`)), false, 'warn 合规应清零旧计数');
+    assert.equal(readState(sid), null, 'warn 合规应清零旧计数（复合键与 legacy 两处）');
   });
 
   it('F216 T019 W7 精确窗口：预装 count=2 + 仅缺新 repro 证据 → 首次降级放行 + 审计 missing 仅新键 → 补证据清零', () => {
@@ -1770,11 +1791,7 @@ describe('F256 T006 · 盲区 1 端到端：编号被复合命令重编后不再
     const evs1 = readVerdictEvents();
     assert.equal(evs1.length, 1, '合规收口恰一条留痕事件（FR-024）');
     assert.equal(evs1[0].compliant, true);
-    assert.equal(
-      fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'f256-blk1.json')),
-      false,
-      '阻断计数状态文件不得被创建',
-    );
+    assert.equal(readState('f256-blk1'), null, '阻断计数状态文件不得被创建（复合键与 legacy 两处）');
   });
 
   it('磁盘上无同名 short-name 目录 → 完全回落现状（仍按缺失阻断，兜底不凭空放行）', () => {
@@ -2418,7 +2435,8 @@ describe('F256 R2 · 在途推迟必须有界且只对「在途工作关得掉�
     assert.equal(runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-legacy' }).status, 0);
     const st = readState('r2-legacy');
     assert.equal(st.inFlightDeferCount, 1, '缺字段按 0 起算，本次推迟记为 1');
-    assert.equal(st.blockCount, 1, '既有阻断计数不得被新字段写入抹平');
+    // F291a：改造前文件的顶层 blockCount 是 session 级预算，**不迁移**到任何目标桶（fail-closed 迁移，绝不成为跨目标捐赠者）
+    assert.equal(st.blockCount, 0, 'F291a：顶层旧计数不迁移（旧会话至多多付一轮预算）');
   });
 
   it('合同同步：judge 实际产出的 delegation-in-flight-budget-exhausted 必须已登记进 schema enum', () => {
@@ -3155,8 +3173,7 @@ describe('F270 P3 · 重入语义（对抗 CRITICAL-1 修订后：不改路由�
     assert.equal(r1.status, 2);
     const r2 = runCli({ transcriptPath: p, sessionId: 'p3-re', stopHookActive: true });
     assert.equal(r2.status, 2, '重入不得提前放行——BLOCK_LIMIT=2 已有界防循环，提前放行=净损一格预算');
-    const statePath = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'p3-re.json');
-    const st = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const st = readState('p3-re');
     assert.equal(st.blockCount, 2, '重入照常计 blockCount（与改动前逐字一致）');
     assert.equal(st.nonBlockStopCount, 0, '重入不再计解锁计时器（撤线）');
     const r3 = runCli({ transcriptPath: p, sessionId: 'p3-re', stopHookActive: true });
@@ -3225,16 +3242,15 @@ describe('F270 P3 · saveBlockState 带回合同（漏带即清零回归钉）',
     //    why 直接造数：本字段当前**没有生产递增方**（解锁计时器路由自始零接线，已随 F276 卡 C 删除），
     //    递增方留给卡 B 接线。用例守的是**带回**而非递增，故用 saveBlockState 直接摆好初态即可，
     //    不依赖任何路由函数——这样卡 B 接线与否都不影响本合同钉。
-    const { saveBlockState } = await import('../scripts/lib/fix-compliance-io.mjs');
-    saveBlockState(tmp, 'p3-carry', {
-      blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 1,
-    });
+    const { saveBlockState, NO_TARGET_BUDGET_KEY } = await import('../scripts/lib/fix-compliance-io.mjs');
+    // F291a：本 transcript 不提名任何目录 ⇒ 判定器记账到无目标桶，计时器也得预置在同一桶里才谈得上「带回」
+    saveBlockState(tmp, 'p3-carry', { inFlightDeferCount: 0, targets: { [NO_TARGET_BUDGET_KEY]: { blockCount: 0, degradedRecorded: false, nonBlockStopCount: 1 } } });
     const statePath = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'p3-carry.json');
-    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).nonBlockStopCount, 1);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).targets[NO_TARGET_BUDGET_KEY].nonBlockStopCount, 1);
     // 2) 正常不合规 Stop → routeBlock 写入(blockCount 1) → 计时器必须原样带回
     const r = runCli({ transcriptPath: p, sessionId: 'p3-carry', stopHookActive: false });
     assert.equal(r.status, 2);
-    const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const s = readState('p3-carry');
     assert.equal(s.blockCount, 1);
     assert.equal(s.nonBlockStopCount, 1, 'routeBlock 整体覆写不得抹平解锁计时器（自查抓到的漏带 bug）');
     // 3) 在途推迟写入同样不得抹平(构造 harness 在途)
@@ -3246,7 +3262,7 @@ describe('F270 P3 · saveBlockState 带回合同（漏带即清零回归钉）',
       TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
     ]);
     runCli({ transcriptPath: p2, sessionId: 'p3-carry', backgroundTasks: [{ id: 'x', type: 'subagent', status: 'running' }] });
-    const s2 = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const s2 = readState('p3-carry');
     assert.equal(s2.nonBlockStopCount, 1, '推迟分支写入不得抹平解锁计时器');
     assert.equal(s2.inFlightDeferCount, 1, '推迟计数正常累积');
   });
@@ -4012,7 +4028,8 @@ describe('F276 C2 · 存储不可用 fail-closed + 反馈计数上界', () => {
     // TypeError 会被它兜成 exit 0 **静默完全绕过**（"忘传即炸"在本调用链上等价于"忘传即放行"）。
     const judgeSrc = fs.readFileSync(CLI, 'utf8');
     // F288 卡 B：调用点改为 routeBlockEnforcement（指纹路由总入口）；「忘传」形态 = 漏传 deferExtraDiagnostics
-    const CALL_RE = /return routeBlockEnforcement\(projectRoot, sessionId, result, payload, deferExtraDiagnostics\);/;
+    // F291a：调用点多了 budget（预算桶键 + 身份链）；「忘传」形态 = 漏传 deferExtraDiagnostics 与 budget 两参（两者都须有默认值）
+    const CALL_RE = /return routeBlockEnforcement\(projectRoot, sessionId, result, payload, deferExtraDiagnostics, budget\);/;
     // 🔴 先钉构造仍成立：调用点形态变了而这里不改，本用例会静默退化成"跑了个没变异的副本"而恒绿
     assert.match(judgeSrc, CALL_RE, 'routeBlock 调用点形态已变，变异构造失效——请同步更新本用例');
     const mutated = judgeSrc

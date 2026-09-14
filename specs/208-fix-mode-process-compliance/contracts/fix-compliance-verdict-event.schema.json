@@ -20,6 +20,8 @@
     "eventType": { "type": "string", "const": "fix-compliance-verdict" },
     "recordedAt": { "type": "string", "format": "date-time" },
     "sessionId": { "type": "string", "minLength": 1 },
+    "targetDir": { "type": ["string", "null"], "description": "F291a（M11 卡 B）：本次被判的 fix 目标目录（仓库相对路径，judge 解析出的 resolvedPath）；解析不到目标 / 非 fix / fail-open 事件为 null。与 budgetKey 一起让事后审计能分辨同会话各目标各自的预算轨迹（此前只有 sessionId 一个归因维度）" },
+    "budgetKey": { "type": ["string", "null"], "description": "F291a：本次阻断预算记到的桶键——规范化的目标目录字面量（`specs/NNN-fix-<name>`，提名身份优先、跨改名 / 重编号迁移）或 `__no-target__`（定位不到目标的轮次自己一个桶，不向具名目标捐赠）；非 fix / fail-open 事件为 null" },
     "enforcement": { "type": "string", "enum": ["block", "warn"] },
     "closureForm": { "type": "string", "enum": ["repair", "no-op", "undetermined"] },
     "compliant": {

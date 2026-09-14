@@ -26,9 +26,18 @@ import {
   saveBlockState,
   resetBlockState,
   sanitizeSessionId,
+  targetBudgetKey,
+  targetBudgetOf,
+  withTargetBudget,
+  migrateTargetBudget,
+  canonicalFixDirPath,
+  NO_TARGET_BUDGET_KEY,
   listFeatureDirCandidatesByShortName,
   findPathBlocker,
 } from '../scripts/lib/fix-compliance-io.mjs';
+
+/** F291a：本文件阻断预算用例的目标桶键 */
+const K = 'specs/301-fix-sample-bug';
 
 let tmp;
 beforeEach(() => {
@@ -277,36 +286,50 @@ describe('sanitizeSessionId：白名单清洗', () => {
 });
 
 describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
-  it('首次读取（无文件）→ blockCount 0、degradedRecorded false', () => {
+  it('首次读取（无文件）→ 无桶；任一目标桶按初始态（blockCount 0、degradedRecorded false）', () => {
     const s = loadBlockState(tmp, 'sess-1');
-    assert.equal(s.blockCount, 0);
-    assert.equal(s.degradedRecorded, false);
+    assert.deepEqual(s.targets, {});
+    assert.equal(s.inFlightDeferCount, 0);
+    assert.equal(targetBudgetOf(s, 'specs/301-fix-sample-bug').blockCount, 0);
+    assert.equal(targetBudgetOf(s, 'specs/301-fix-sample-bug').degradedRecorded, false);
   });
 
   it('保存后读回一致（主路径 .specify/runs/.fix-compliance-state）', () => {
-    const w = saveBlockState(tmp, 'sess-2', { blockCount: 1, degradedRecorded: false });
+    const w = saveBlockState(tmp, 'sess-2', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 1, degradedRecorded: false } } });
     assert.equal(w.ok, true);
     assert.equal(w.degraded, false);
     assert.ok(w.path.includes(path.join('.specify', 'runs', '.fix-compliance-state')));
-    const s = loadBlockState(tmp, 'sess-2');
+    const s = targetBudgetOf(loadBlockState(tmp, 'sess-2'), 'specs/301-fix-sample-bug');
     assert.equal(s.blockCount, 1);
     assert.equal(s.degradedRecorded, false);
   });
 
   it('degradedRecorded 幂等标记持久化', () => {
-    saveBlockState(tmp, 'sess-3', { blockCount: 2, degradedRecorded: true });
-    const s = loadBlockState(tmp, 'sess-3');
+    saveBlockState(tmp, 'sess-3', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 2, degradedRecorded: true } } });
+    const s = targetBudgetOf(loadBlockState(tmp, 'sess-3'), 'specs/301-fix-sample-bug');
     assert.equal(s.blockCount, 2);
     assert.equal(s.degradedRecorded, true);
   });
 
-  it('历史文件缺 degradedRecorded 字段 → 按 false（向后兼容）', () => {
+  it('F291a 改造前文件（顶层 blockCount）→ 顶层计数不迁移（fail-closed 迁移：session 级预算绝不捐给任何目标）', () => {
     const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, 'sess-legacy.json'), JSON.stringify({ sessionId: 'sess-legacy', blockCount: 1 }));
+    fs.writeFileSync(path.join(stateDir, 'sess-legacy.json'), JSON.stringify({ sessionId: 'sess-legacy', blockCount: 1, degradedRecorded: true, inFlightDeferCount: 2 }));
     const s = loadBlockState(tmp, 'sess-legacy');
+    assert.deepEqual(s.targets, {});
+    assert.equal(targetBudgetOf(s, 'specs/301-fix-sample-bug').blockCount, 0);
+    assert.equal(targetBudgetOf(s, 'specs/301-fix-sample-bug').degradedRecorded, false);
+    assert.equal(s.inFlightDeferCount, 2, '会话属性 inFlightDeferCount 照旧读取');
+  });
+  it('桶字段缺席 → 按默认（向后兼容）', () => {
+    const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'sess-partial.json'), JSON.stringify({ sessionId: 'sess-partial', targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } }));
+    const s = targetBudgetOf(loadBlockState(tmp, 'sess-partial'), 'specs/301-fix-sample-bug');
     assert.equal(s.blockCount, 1);
     assert.equal(s.degradedRecorded, false);
+    assert.equal(s.nonBlockStopCount, 0);
+    assert.equal(s.lastCountedFingerprint, null);
   });
 
   it('损坏文件 → 按初始态返回（不抛出）', () => {
@@ -314,11 +337,11 @@ describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
     fs.mkdirSync(stateDir, { recursive: true });
     fs.writeFileSync(path.join(stateDir, 'sess-broken.json'), '{ not json');
     const s = loadBlockState(tmp, 'sess-broken');
-    assert.equal(s.blockCount, 0);
+    assert.deepEqual(s.targets, {});
   });
 
   it('session_id 清洗后作为文件名组件（不穿越目录）', () => {
-    const w = saveBlockState(tmp, 'a/b', { blockCount: 1, degradedRecorded: false });
+    const w = saveBlockState(tmp, 'a/b', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } });
     assert.equal(w.ok, true);
     assert.ok(w.path.endsWith(`a_b.json`));
   });
@@ -327,11 +350,11 @@ describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
     // 用文件占据 .fix-compliance-state 目录位置，使主路径 mkdir 失败
     fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
     fs.writeFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), 'blocker');
-    const w = saveBlockState(tmp, 'sess-degrade', { blockCount: 1, degradedRecorded: false });
+    const w = saveBlockState(tmp, 'sess-degrade', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } });
     assert.equal(w.ok, true);
     assert.equal(w.degraded, true);
     // 降级写入后仍可从 tmp 路径读回
-    const s = loadBlockState(tmp, 'sess-degrade');
+    const s = targetBudgetOf(loadBlockState(tmp, 'sess-degrade'), 'specs/301-fix-sample-bug');
     assert.equal(s.blockCount, 1);
   });
 
@@ -343,7 +366,7 @@ describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
     const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
     process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = tmpBlocker;
     try {
-      const w = saveBlockState(tmp, 'sess-unavail', { blockCount: 1, degradedRecorded: false });
+      const w = saveBlockState(tmp, 'sess-unavail', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } });
       assert.equal(w.ok, false);
       assert.ok(w.diagnostics.includes('state-storage-unavailable'));
     } finally {
@@ -356,17 +379,18 @@ describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
 describe('resetBlockState：补救成功清零（两级存储均清）', () => {
   it('删除主路径状态文件，load 回到初始态', () => {
     // 先写入非零计数到主路径
-    const w = saveBlockState(tmp, 'sess-reset-1', { blockCount: 2, degradedRecorded: true });
+    const w = saveBlockState(tmp, 'sess-reset-1', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 2, degradedRecorded: true }, 'specs/302-fix-other': { blockCount: 1 } } });
     assert.equal(w.ok, true);
     assert.equal(w.degraded, false);
-    const before = loadBlockState(tmp, 'sess-reset-1');
+    const before = targetBudgetOf(loadBlockState(tmp, 'sess-reset-1'), 'specs/301-fix-sample-bug');
     assert.equal(before.blockCount, 2);
     assert.equal(before.degradedRecorded, true);
     // 重置后应回初始态且主路径文件不复存在
     resetBlockState(tmp, 'sess-reset-1');
     const after = loadBlockState(tmp, 'sess-reset-1');
-    assert.equal(after.blockCount, 0);
-    assert.equal(after.degradedRecorded, false);
+    assert.deepEqual(after.targets, {}, 'F291a：会话文件整份删除 = 全部目标桶一起清零（兄弟桶不得残留）');
+    assert.equal(targetBudgetOf(after, K).blockCount, 0);
+    assert.equal(targetBudgetOf(after, K).degradedRecorded, false);
     const stateFile = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'sess-reset-1.json');
     assert.equal(fs.existsSync(stateFile), false);
   });
@@ -379,13 +403,13 @@ describe('resetBlockState：补救成功清零（两级存储均清）', () => {
     const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
     process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = tmpBase;
     try {
-      const w = saveBlockState(tmp, 'sess-reset-2', { blockCount: 2, degradedRecorded: false });
+      const w = saveBlockState(tmp, 'sess-reset-2', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 2 } } });
       assert.equal(w.ok, true);
       assert.equal(w.degraded, true); // 确认走了 tmpdir 降级
-      assert.equal(loadBlockState(tmp, 'sess-reset-2').blockCount, 2);
+      assert.equal(targetBudgetOf(loadBlockState(tmp, 'sess-reset-2'), 'specs/301-fix-sample-bug').blockCount, 2);
       // 重置必须两级都清 → load 不得回落读到 tmpdir 残留旧计数
       resetBlockState(tmp, 'sess-reset-2');
-      const after = loadBlockState(tmp, 'sess-reset-2');
+      const after = targetBudgetOf(loadBlockState(tmp, 'sess-reset-2'), 'specs/301-fix-sample-bug');
       assert.equal(after.blockCount, 0);
       assert.equal(after.degradedRecorded, false);
     } finally {
@@ -575,34 +599,28 @@ describe('F270 P3 · normalizeState/saveBlockState 新字段', () => {
   // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中「锚在可擦文件=backstop
   //   整体可擦」后撤销——backstop 改为单调量比常量。本组只覆盖存活的 nonBlockStopCount。）
   it('saveBlockState 带回 nonBlockStopCount → load 读回', () => {
-    saveBlockState(tmp, 'p3-1', {
-      blockCount: 1, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 2,
-    });
-    assert.equal(loadBlockState(tmp, 'p3-1').nonBlockStopCount, 2);
+    saveBlockState(tmp, 'p3-1', { inFlightDeferCount: 0, targets: { ['specs/301-fix-sample-bug']: { blockCount: 1, degradedRecorded: false, nonBlockStopCount: 2 } } });
+    assert.equal(targetBudgetOf(loadBlockState(tmp, 'p3-1'), 'specs/301-fix-sample-bug').nonBlockStopCount, 2);
   });
 
   it('历史状态文件缺新字段 → 向后兼容默认 0', () => {
     const dir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'p3-legacy.json'), JSON.stringify({ sessionId: 'p3-legacy', blockCount: 1 }));
-    assert.equal(loadBlockState(tmp, 'p3-legacy').nonBlockStopCount, 0);
+    fs.writeFileSync(path.join(dir, 'p3-legacy.json'), JSON.stringify({ sessionId: 'p3-legacy', targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } }));
+    assert.equal(targetBudgetOf(loadBlockState(tmp, 'p3-legacy'), 'specs/301-fix-sample-bug').nonBlockStopCount, 0);
   });
 
   it('非法 nonBlockStopCount（负/非整/字符串）→ 归 0', () => {
     for (const bad of [-1, 1.5, 'x', null]) {
-      saveBlockState(tmp, 'p3-bad', {
-        blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: bad,
-      });
-      assert.equal(loadBlockState(tmp, 'p3-bad').nonBlockStopCount, 0, `bad=${bad}`);
+      saveBlockState(tmp, 'p3-bad', { inFlightDeferCount: 0, targets: { ['specs/301-fix-sample-bug']: { blockCount: 0, nonBlockStopCount: bad } } });
+      assert.equal(targetBudgetOf(loadBlockState(tmp, 'p3-bad'), 'specs/301-fix-sample-bug').nonBlockStopCount, 0, `bad=${bad}`);
     }
   });
 
   it('整体覆写：不带回 nonBlockStopCount 会被抹平（合同不变，须原样带回）', () => {
-    saveBlockState(tmp, 'p3-c', {
-      blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 5,
-    });
-    saveBlockState(tmp, 'p3-c', { blockCount: 1, degradedRecorded: false });
-    assert.equal(loadBlockState(tmp, 'p3-c').nonBlockStopCount, 0);
+    saveBlockState(tmp, 'p3-c', { inFlightDeferCount: 0, targets: { ['specs/301-fix-sample-bug']: { blockCount: 0, nonBlockStopCount: 5 } } });
+    saveBlockState(tmp, 'p3-c', { targets: { ['specs/301-fix-sample-bug']: { blockCount: 1 } } });
+    assert.equal(targetBudgetOf(loadBlockState(tmp, 'p3-c'), 'specs/301-fix-sample-bug').nonBlockStopCount, 0);
   });
 });
 
@@ -617,7 +635,7 @@ describe('F270 P3 · normalizeState/saveBlockState 新字段', () => {
 // ════════════════════════════════════════
 
 describe('F276 C1 · saveBlockState 两级失败 errors[]', () => {
-  const state = { blockCount: 1, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 0 };
+  const state = { inFlightDeferCount: 0, targets: { ['specs/301-fix-sample-bug']: { blockCount: 1, degradedRecorded: false, nonBlockStopCount: 0 } } };
   const stateFilePath = (root, id) => path.join(root, '.specify', 'runs', '.fix-compliance-state', `${id}.json`);
 
   it('两级皆败（主路径文件占位 + tmp env 指向文件）→ ok:false + errors 两项，各含 path/stage/code', () => {
@@ -773,5 +791,45 @@ describe('F276 C · findPathBlocker 降级分支', () => {
     assert.equal(findPathBlocker(null), null);
     assert.equal(findPathBlocker(''), null);
     assert.equal(findPathBlocker(undefined), null);
+  });
+});
+
+// ════════════════════════════════════════
+// F291a（M11 卡 B · 方案①′）· 桶键规范化 / 目标身份链迁移 / sidechain candidatePath 规范化
+// ════════════════════════════════════════
+describe('F291a · targetBudgetKey / migrateTargetBudget / canonicalFixDirPath', () => {
+  it('同一目录的各种拼写归一到同一桶键；非规范形态落 NO_TARGET_BUDGET_KEY', () => {
+    const canon = 'specs/302-fix-other-bug';
+    for (const spelling of [canon, `${canon}/`, `./${canon}`, `././${canon}//`, 'specs/1998154760/../302-fix-other-bug', `  ${canon}  `, 'specs\\302-fix-other-bug', 'specs/./302-fix-other-bug']) {
+      assert.equal(targetBudgetKey(spelling), canon, JSON.stringify(spelling));
+    }
+    for (const bad of [null, undefined, '', '   ', 'specs/302-Fix-Other', 'docs/302-fix-other-bug', 'specs/302-feature-x', '../specs/302-fix-other-bug', 42]) {
+      assert.equal(targetBudgetKey(bad), NO_TARGET_BUDGET_KEY, JSON.stringify(bad));
+    }
+    assert.equal(canonicalFixDirPath('specs/1998154760/../302-fix-other-bug'), canon);
+    assert.equal(canonicalFixDirPath('specs/302-Fix-Other'), null);
+  });
+  it('withTargetBudget / targetBudgetOf：写回某桶不动其它桶与顶层字段', () => {
+    const s0 = { sessionId: 's', inFlightDeferCount: 2, targets: { 'specs/301-fix-a': { blockCount: 1 } } };
+    const s1 = withTargetBudget(s0, 'specs/302-fix-b', { blockCount: 2, degradedRecorded: true });
+    assert.equal(s1.inFlightDeferCount, 2);
+    assert.equal(targetBudgetOf(s1, 'specs/301-fix-a').blockCount, 1);
+    assert.deepEqual(targetBudgetOf(s1, 'specs/302-fix-b'), { blockCount: 2, degradedRecorded: true, nonBlockStopCount: 0, lastCountedFingerprint: null });
+    assert.deepEqual(targetBudgetOf(s0, 'specs/302-fix-b'), { blockCount: 0, degradedRecorded: false, nonBlockStopCount: 0, lastCountedFingerprint: null }, '缺席桶按初始态');
+  });
+  it('migrateTargetBudget：当前键缺席 + lineage 有桶 ⇒ 取 blockCount 最高者搬到当前键、删掉 lineage 其余桶；当前键在场 / lineage 无桶 ⇒ 原样', () => {
+    const s0 = { sessionId: 's', inFlightDeferCount: 0, targets: { 'specs/301-fix-a': { blockCount: 1 }, 'specs/302-fix-a': { blockCount: 2, degradedRecorded: true }, 'specs/309-fix-z': { blockCount: 1 } } };
+    const m1 = migrateTargetBudget(s0, 'specs/303-fix-a', ['specs/301-fix-a', 'specs/302-fix-a']);
+    assert.equal(m1.migratedFrom, 'specs/302-fix-a');
+    assert.deepEqual(Object.keys(m1.state.targets).sort(), ['specs/303-fix-a', 'specs/309-fix-z']);
+    assert.equal(targetBudgetOf(m1.state, 'specs/303-fix-a').blockCount, 2);
+    assert.equal(targetBudgetOf(m1.state, 'specs/303-fix-a').degradedRecorded, true);
+    assert.equal(targetBudgetOf(m1.state, 'specs/309-fix-z').blockCount, 1, 'lineage 之外的桶不动');
+    const m2 = migrateTargetBudget(s0, 'specs/301-fix-a', ['specs/302-fix-a']);
+    assert.equal(m2.migratedFrom, null, '当前键在场不迁移');
+    assert.equal(m2.state, s0);
+    const m3 = migrateTargetBudget(s0, 'specs/305-fix-q', ['specs/306-fix-q', 'specs/307-fix-q']);
+    assert.equal(m3.migratedFrom, null, 'lineage 无桶不迁移');
+    assert.equal(m3.state, s0);
   });
 });

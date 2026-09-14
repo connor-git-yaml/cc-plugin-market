@@ -1,9 +1,9 @@
 ---
-status: designed-not-shipped
+status: f291a-shipped-as-plan-1prime (M11 卡 B, 2026-09-15) / f291b-not-implemented
 owner: M11
 depends_on: F288 (状态模型) / F289 (Tier 2 绑定) / F290 (残余收口)
 baseline: 3596acee
-f291a_status: designed-not-shipped → M11 候选第一批（门禁类·串行，前置见 M10 §13.3）
+f291a_status: shipped (M11 卡 B · 方案①′，见 §「M11 卡 B 实施记录」；方案①复合文件已被两轮异构对抗证伪)
 f291b_ruling: "暂不实施（2026-09-14 主线程代用户判断·可翻案）"
 ---
 
@@ -52,6 +52,25 @@ card-a 21/0、tier2 25/0 ⟹ 失败确由本改动引入，非预存）。把测
   在用户即将发布前用高风险改动换这个收益，方向不对。
 - **下一轮执行要点**：先把两类受影响用例改造成「按 stateKeyFor 推导路径」而非写死 `<sid>`，再上复合键；
   锁用例须显式断言「预置的是**当前键**的锁」，避免静默失效。
+
+## M11 卡 B 实施记录（2026-09-15）：方案① 被两轮异构对抗证伪，改为方案①′「会话文件内按目标分桶」
+
+方案①（复合键文件 `<sid>__<dirhash>`）按上文实现并让六套 fix-compliance 套件全绿后，两路异构对抗（fail-open 面 / 误伤面）各出 3–4 个 CRITICAL，
+全部由受控 A/B（同一棵树只换受审文件，`git show HEAD:` 旧判定器对照）实跑成立：
+
+| # | 发现 | 方向 | 处置 |
+|---|---|---|---|
+| A-C1 | `sha256` 前 8 位 = 32 bit 可离线碰撞（4.4 min），且 Tier 2 sidechain 标记 `candidatePath` 读侧零校验，`specs/<垃圾>/../302-fix-b` 撞 A 的键 | fail-open | 桶键改为**规范化的目录字面量**（`path.posix.normalize` + `FIX_DIR_NAME_REGEX`），标记读侧规范化 |
+| A-C2 / B-C1 | 裸 sid 兜底文件由判定器自己产生（无提名轮次），legacy 回落让它成为每个目标的「万能捐赠者」：三轮裸 Stop 后 A/B/C 首次评估全 0 往返放行 | fail-open（残余，HEAD 同型） | 无目标轮次用 `__no-target__` 桶；**删除 legacy 回落**；改造前顶层计数不迁移（fail-closed 迁移） |
+| B-C2 | 合规清零只清当前目标 + legacy，兄弟桶残留：B 合规后回到 A 首次评估 0 往返放行 | fail-open（**新回归**） | 单文件整份删除 = 全部目标桶清零 |
+| B-C3 | 逐轮合法改名（光杆 `mv`）/ 复合 `git mv` 重编号（F256 重锚定）键逐轮漂移，8 轮零自愈 | 永久 fail-closed（方案③被否决的同型） | 桶键取**提名身份**（跨 F256 稳定）；核心 `resolveFeatureDirCandidate` 登记被跟随的改名事件 `renames[]`，桶沿改名链迁移（**不**沿候选历史——首版按候选历史迁移当场复现跨目标捐赠） |
+| A-C3 | `inFlightDeferCount`（闸门二，会话属性）被按目标放大 N 倍，上界退化到闸门三 420 | fail-open | 留在会话顶层 |
+| A-W2 / B-W6 | 审计事件 / report 看不到目标与桶键 | 可观测性 | 事件加 `targetDir` / `budgetKey`（schema 已加），`--mode report` 透传 |
+| B-C4 / A-I5 | `targetDir` 取 `resolvedPath` 还是 `candidate.path` 零测试 | 承重开关 | 桶键 = `candidate.path` 优先、被判目录进 lineage；E5b 语料钉住 |
+
+回归语料（`tests/fix-compliance-f291a-per-target.test.mjs`，10 例）：Tier 2 跨目标、无目标桶不捐赠、改造前文件不迁移、兄弟桶不残留、
+同目标 8 轮自愈、逐轮 `mv` 改名 `[2,2,2,0]`、逐轮复合 `git mv` 重编号 `[2,2,2,0]`、推迟预算会话级、sidechain 非规范拼写折回、report / 审计字段。
+方案①的「实测爆炸半径」一节（下方保留作历史）描述的 8 项失败在方案①′下不存在：状态文件与锁路径没变，锁 / 存储不可用用例无需改锚。
 
 ## F291b · stop_hook_active 第三佐证腿（裁决：**暂不实施** · 2026-09-14 · 可翻案）
 

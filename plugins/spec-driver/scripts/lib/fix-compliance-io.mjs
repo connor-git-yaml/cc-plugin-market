@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { parseYamlDocument } from './simple-yaml.mjs';
-import { normalizeTranscriptEntry, resolveEnforcementFromConfig } from './fix-compliance-core.mjs';
+import { normalizeTranscriptEntry, resolveEnforcementFromConfig, FIX_DIR_NAME_REGEX } from './fix-compliance-core.mjs';
 
 /**
  * transcript 体积上限（research.md D6 / T001 校准：实测 fix 会话 ≤0.31MB，20MB≈60 倍余量）。
@@ -309,6 +309,83 @@ export function sanitizeSessionId(sessionId) {
   return cleaned.length > 0 ? cleaned : 'unknown-session';
 }
 
+/**
+ * F291a（M11 卡 B · 方案①′）：阻断预算按 **目标** 记账的桶键。
+ *
+ * 状态文件仍是每会话一份 `<sid>.json`（锁也按会话），文件内 `targets[<桶键>]` 分目标记 blockCount /
+ * degradedRecorded / nonBlockStopCount / lastCountedFingerprint；`inFlightDeferCount` 是会话属性留在顶层。
+ * 桶键 = 规范化后的 fix 目标目录字面量（`specs/NNN-fix-<name>`）：
+ *   - 先 trim / `\`→`/` / `path.posix.normalize`（吞掉 `./`、`//`、`a/../`）/ 去尾斜杠，再过 FIX_DIR_NAME_REGEX；
+ *   - 不合规范形态 / 空 / 非字符串 ⇒ `NO_TARGET_BUDGET_KEY`——「定位不到目标」的轮次有自己的桶，**绝不**向任何具名目标捐赠预算。
+ * why 不再用 sha256 前 8 位（对抗审查 C-1）：32 bit 可离线碰撞（实测 4.4 分钟），且被判方可影响键的输入（Tier 2 sidechain
+ * 标记的 candidatePath）；字面量键 + 规范化让 `specs/<垃圾>/../302-fix-b` 落回 B 自己的桶。
+ * why 不再复合文件名（对抗审查 C-2 / C-3）：复合文件让「合规清零」只清当前目标、兄弟桶残留（回到 A 首次即 0 往返放行）；
+ * 裸 sid 兜底文件由判定器自己产生、又被每个目标回落读到（万能捐赠者）；session 级的在途推迟预算也被按目标放大 N 倍。
+ * @param {unknown} targetDir
+ * @returns {string}
+ */
+export const NO_TARGET_BUDGET_KEY = '__no-target__';
+
+export function targetBudgetKey(targetDir) {
+  if (typeof targetDir !== 'string') return NO_TARGET_BUDGET_KEY;
+  let normalized = targetDir.trim().replace(/\\/g, '/');
+  if (normalized.length === 0) return NO_TARGET_BUDGET_KEY;
+  normalized = path.posix.normalize(normalized).replace(/^(?:\.\/)+/, '').replace(/\/+$/, '');
+  return FIX_DIR_NAME_REGEX.test(normalized) ? normalized : NO_TARGET_BUDGET_KEY;
+}
+
+/** 规范 fix 目录字面量（`specs/NNN-fix-<name>`），不合规范返回 null——sidechain 标记 candidatePath 的读侧校验用。 */
+export function canonicalFixDirPath(value) {
+  const key = targetBudgetKey(value);
+  return key === NO_TARGET_BUDGET_KEY ? null : key;
+}
+
+const HEX64_RE = /^[0-9a-f]{64}$/;
+
+/** 单个目标桶的归一化（缺字段按默认，向后兼容） */
+function normalizeTargetBudget(src) {
+  const s = src && typeof src === 'object' ? src : {};
+  return {
+    blockCount: Number.isInteger(s.blockCount) && s.blockCount >= 0 ? s.blockCount : 0,
+    degradedRecorded: s.degradedRecorded === true,
+    nonBlockStopCount: Number.isInteger(s.nonBlockStopCount) && s.nonBlockStopCount >= 0 ? s.nonBlockStopCount : 0,
+    lastCountedFingerprint: typeof s.lastCountedFingerprint === 'string' && HEX64_RE.test(s.lastCountedFingerprint) ? s.lastCountedFingerprint : null,
+  };
+}
+
+/** 读某目标桶（缺席即初始态）。 */
+export function targetBudgetOf(state, key) {
+  return normalizeTargetBudget(state && state.targets ? state.targets[key] : undefined);
+}
+
+/** 写回某目标桶（纯函数，返回新 state）。 */
+export function withTargetBudget(state, key, budget) {
+  return { ...state, targets: { ...((state && state.targets) || {}), [key]: normalizeTargetBudget(budget) } };
+}
+
+/**
+ * 预算随目标身份链迁移：当前桶键缺席、而 lineage（同一目标的历史路径：F224 改名跟随的旧名 / F227 候选历史 /
+ * F256 短名重锚定前后）里有桶时，把 blockCount 最高的那个桶搬到当前键并删掉 lineage 里其余桶。
+ * why：否则每轮合法改名 / 重编号都让桶键漂移、blockCount 永远停在 0 ⇒ 永远拿不到 BLOCK_LIMIT 后的降级逃生口
+ * （对抗审查 C-3：光杆 mv 与复合 git mv 两条路径各实测 8 轮零自愈）。取最高而非求和：lineage 各成员是同一目标，
+ * 已付的往返只该算一次。
+ * @returns {{ state: object, migratedFrom: string|null }}
+ */
+export function migrateTargetBudget(state, key, lineage = []) {
+  const targets = { ...((state && state.targets) || {}) };
+  if (targets[key] !== undefined) return { state, migratedFrom: null };
+  let best = null;
+  for (const k of lineage) {
+    if (typeof k !== 'string' || k === key || targets[k] === undefined) continue;
+    if (best === null || normalizeTargetBudget(targets[k]).blockCount > normalizeTargetBudget(targets[best]).blockCount) best = k;
+  }
+  if (best === null) return { state, migratedFrom: null };
+  const moved = targets[best];
+  for (const k of lineage) if (k !== key) delete targets[k];
+  targets[key] = moved;
+  return { state: { ...state, targets }, migratedFrom: best };
+}
+
 /** 主存储文件绝对路径 */
 function primaryStatePath(projectRoot, sanitizedId) {
   return path.join(projectRoot, ...STATE_SUBDIR, `${sanitizedId}.json`);
@@ -319,37 +396,30 @@ function tmpStatePath(sanitizedId) {
   return path.join(stateTmpBase(), STATE_TMP_SUBDIR, `${sanitizedId}.json`);
 }
 
-/** 归一化磁盘读到的状态对象（缺字段按默认，向后兼容） */
+/**
+ * 归一化磁盘读到的状态对象（缺字段按默认，向后兼容）。
+ *
+ * F291a：形状 = `{ sessionId, inFlightDeferCount, targets: { [桶键]: { blockCount, degradedRecorded, nonBlockStopCount,
+ * lastCountedFingerprint } } }`。改造前文件的**顶层** blockCount / degradedRecorded / nonBlockStopCount / lastCountedFingerprint
+ * 一律**不迁移**（fail-closed 迁移：旧会话最多多付一轮预算；绝不把 session 级预算捐给任何目标——那正是 F289 delta CRITICAL）。
+ * `inFlightDeferCount`（F256 在途推迟预算，会话属性）照旧留在顶层。
+ * 🔴 各桶字段都在被判方写域：预置计数只能换来再被阻断（放行须 transcript 上 harness 回灌的阻断反馈 ≥ BLOCK_LIMIT，见 judge
+ * releaseCorroborated）；`null` lastCountedFingerprint 是「该目标首次」态（G2 路由三分里与「指纹相同」同落 nonBlock 分支）。
+ */
 function normalizeState(sessionId, parsed) {
   const src = parsed && typeof parsed === 'object' ? parsed : {};
-  const blockCount = Number.isInteger(src.blockCount) && src.blockCount >= 0 ? src.blockCount : 0;
+  const targets = {};
+  if (src.targets && typeof src.targets === 'object' && !Array.isArray(src.targets)) {
+    for (const [key, value] of Object.entries(src.targets)) {
+      if (typeof key === 'string' && key.length > 0) targets[key] = normalizeTargetBudget(value);
+    }
+  }
   return {
     sessionId,
-    blockCount,
-    // 历史文件缺 degradedRecorded 字段 → 按 false（向后兼容，data-model.md §8）
-    degradedRecorded: src.degradedRecorded === true,
-    // F256：在途推迟预算，与 blockCount **分列且互不影响**——推迟不消耗阻断预算是其语义的必要
-    // 组成，共用一个计数器会让在途停顿白白烧掉阻断额度。F256 之前写入的状态文件没有此字段，
-    // 缺省 0（同 blockCount 的向后兼容口径）。
     inFlightDeferCount: Number.isInteger(src.inFlightDeferCount) && src.inFlightDeferCount >= 0
       ? src.inFlightDeferCount
       : 0,
-    // F270 P3：解锁计时器，为「不计入 blockCount 但也不能立即放行」的裁决（证据陈旧 / 无法交叉
-    // 校验 / 在途 undetermined / 重入 / 指纹无进展）计数。缺省 0（向后兼容）。
-    // F288 卡 B：递增方已接线（judge 的指纹路由 nonBlock 分支，同一次锁内 mutation 写回）；所有分支经 mutateBlockState
-    // 的 mutator 展开 `...state` 带回，不再有手工透传面。
-    // 🔴 该字段**不可单独作为任何放行预算**——它落在被判方可写的状态文件里。卡 B 的不可伪造性替代物：judge 把两条
-    // 降级放行都闸在「transcript 上 harness 回灌的阻断反馈 ≥ BLOCK_LIMIT 或 420 backstop」之后（releaseCorroborated），
-    // 预置计数只能换来再被阻断（state-budget-uncorroborated）。
-    nonBlockStopCount: Number.isInteger(src.nonBlockStopCount) && src.nonBlockStopCount >= 0
-      ? src.nonBlockStopCount
-      : 0,
-    // F288 卡 B · G1/G2：上一次被计数 / 被路由的证据状态指纹（sha256 hex）。缺省 null（向后兼容）。
-    // 🔴 `null` 是「会话内首次」态：G2 路由三分里它与「指纹相同」同落 nonBlock 分支，且**所有**分支都必须写回，
-    // 否则 null 成吸收态、routeBlock 结构性不可达（R2-3 ①）。
-    lastCountedFingerprint: typeof src.lastCountedFingerprint === 'string' && /^[0-9a-f]{64}$/.test(src.lastCountedFingerprint)
-      ? src.lastCountedFingerprint
-      : null,
+    targets,
   };
 }
 
@@ -358,7 +428,7 @@ function normalizeState(sessionId, parsed) {
  * load 不区分"存储不可用"——不可用信号由 saveBlockState 在写入时暴露（research.md D2）。
  * @param {string} projectRoot
  * @param {string} sessionId
- * @returns {{ sessionId:string, blockCount:number, degradedRecorded:boolean }}
+ * @returns {{ sessionId:string, inFlightDeferCount:number, targets:Record<string, object> }}
  */
 export function loadBlockState(projectRoot, sessionId) {
   const sanitizedId = sanitizeSessionId(sessionId);
@@ -513,31 +583,18 @@ export function findPathBlocker(errPath) {
  * 上界只有 transcript 派生的反馈计数（见 fix-compliance-judge.mjs 的 routeStorageUnavailable）。
  * 成功面（含回落成功）**不带** `errors` 键。
  *
- * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number, nonBlockStopCount?:number }} state
+ * @param {{ inFlightDeferCount?:number, targets?:Record<string, object> }} state
  * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[],
  *             errors?:{path:string|null,stage:'mkdir'|'write'|null,code:string|null,blocker:string|null}[] }}
  */
 export function saveBlockState(projectRoot, sessionId, state) {
   const sanitizedId = sanitizeSessionId(sessionId);
+  // F291a：整体覆写语义不变——调用方须原样带回 inFlightDeferCount 与全部 targets，否则被抹平（mutator 一律 `...state` 展开）。
+  const normalized = normalizeState(sanitizedId, state);
   const payload = {
     sessionId: sanitizedId,
-    blockCount: Number.isInteger(state && state.blockCount) && state.blockCount >= 0 ? state.blockCount : 0,
-    degradedRecorded: Boolean(state && state.degradedRecorded),
-    inFlightDeferCount: Number.isInteger(state && state.inFlightDeferCount) && state.inFlightDeferCount >= 0
-      ? state.inFlightDeferCount
-      : 0,
-    // F270 P3：整体覆写语义不变——调用方须原样带回本字段，否则被抹平（见 normalizeState 注释）。
-    // F288 卡 B：递增方已接线（judge 的指纹路由 nonBlock 分支）；放行预算的「不可伪造性」由 judge 侧的
-    // transcript 反馈条目佐证闸门承担（放行须 harness 回灌的阻断反馈 ≥ BLOCK_LIMIT 或 420 backstop），
-    // 状态文件本身仍在被判方写域，预置计数只能换来更早被再次阻断，换不来放行。
-    // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中"锚在可擦文件=backstop
-    //   整体可擦"后撤销——backstop 改为单调量比常量、不存锚；该路由本身已随 F276 卡 C 删除。）
-    nonBlockStopCount: Number.isInteger(state && state.nonBlockStopCount) && state.nonBlockStopCount >= 0
-      ? state.nonBlockStopCount
-      : 0,
-    lastCountedFingerprint: typeof (state && state.lastCountedFingerprint) === 'string' && /^[0-9a-f]{64}$/.test(state.lastCountedFingerprint)
-      ? state.lastCountedFingerprint
-      : null,
+    inFlightDeferCount: normalized.inFlightDeferCount,
+    targets: normalized.targets,
     updatedAt: new Date().toISOString(),
   };
 
@@ -837,7 +894,9 @@ export function listSidechainMarkers(projectRoot, sessionId) {
           agentId: typeof parsed.agentId === 'string' ? parsed.agentId : '',
           agentType: typeof parsed.agentType === 'string' ? parsed.agentType : '',
           fixLineIndex: Number.isInteger(parsed.fixLineIndex) ? parsed.fixLineIndex : null,
-          candidatePath: typeof parsed.candidatePath === 'string' ? parsed.candidatePath : null,
+          // F291a（对抗审查 C-1）：读侧规范化 + FIX_DIR_NAME_REGEX 校验——非规范拼写（`specs/<垃圾>/../302-fix-b`）折回规范名，
+          // 折不回的当缺席；标记文件在被判方写域，这里的字符串是预算桶键的输入之一
+          candidatePath: canonicalFixDirPath(parsed.candidatePath),
           recordedAt: typeof parsed.recordedAt === 'string' ? parsed.recordedAt : null,
           path: full,
         });
@@ -903,6 +962,8 @@ export function readStdinSync() {
 export function resetBlockState(projectRoot, sessionId) {
   // F288 卡 B（R2-9）：reset 是幂等删除、无 read-modify-write ⟹ 不需要互斥，锁不可得时照样生效（F211 清零不得被锁吞掉）；
   // 只删状态文件、不删锁文件（锁只由持有者按 lockId 比对后 unlink）。
+  // F291a：会话文件整份删除 = 本会话**全部目标**的预算同时清零（FR-006「补救成功清零转移」按会话，对抗审查 C-2：
+  // 只清当前目标会让兄弟桶残留、回到旧目标首次评估即 0 往返放行）。
   const sanitizedId = sanitizeSessionId(sessionId);
   // 两级都无条件尝试删除：不因主路径删除失败就跳过 tmpdir，否则 load 会回落读到
   // tmpdir 残留旧计数导致清零失效（fix-report 影响范围扫描：重置必须两级都清）。

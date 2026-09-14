@@ -145,6 +145,9 @@ F257 起，推迟成功时**另写一条 `record-workflow-run` 终态记录**（
 
 `inFlightDeferCount` 与 `blockCount` 存于同一份会话状态文件但**分列**、互不影响；F256 之前写下的
 状态文件缺该字段时按 0 起算。合规收口时 `resetBlockState` 删除整份状态文件，两个预算一并清零。
+**F291a（M11 卡 B）**：`blockCount` / `degradedRecorded` / `nonBlockStopCount` / `lastCountedFingerprint` 在文件内
+`targets[桶键]` 按 **fix 目标目录**分桶（同会话切换目标不继承前一目标的预算，F289 delta CRITICAL 收口）；
+`inFlightDeferCount` 仍是会话级。形状与桶键规则见 `data-model.md §8`。
 
 因此本分支的准确表述是：**在证据可能到齐、且缺口确实可由在途工作关闭的前提下，把判定推迟有限次**。
 三道闸门任一不满足即恢复完整裁决。审计事件的 `degraded` 保持 `false`，以便与"达到阻断上限后的

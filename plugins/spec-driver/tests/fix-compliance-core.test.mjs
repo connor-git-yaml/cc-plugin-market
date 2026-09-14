@@ -2012,7 +2012,7 @@ describe('F230 命令位锚定不得误伤合法改名（防过度收紧的正�
     // 方向保守（误阻断而非误放行）：真实的 `prep && mv` 链式改名会被误阻断，缓解手段是把改名
     // 单独写成一条 `git mv specs/900-fix-x specs/901-fix-y`（裸顶层命令即照常跟随，见下方 C6 等）。
     const cand = resolveWithCandidate('cd . && mv specs/900-fix-x specs/901-fix-y');
-    assert.deepEqual(cand, { path: 'specs/900-fix-x', ambiguous: false, candidates: ['specs/900-fix-x'] });
+    assert.deepEqual(cand, { path: 'specs/900-fix-x', ambiguous: false, candidates: ['specs/900-fix-x'], renames: [] });
   });
 
   // F231 第 5 轮：整条命令须为光杆改名，以下四条形态改为不跟随。

@@ -57,6 +57,11 @@ import {
   readArtifactFile,
   resetBlockState,
   mutateBlockState,
+  targetBudgetKey,
+  targetBudgetOf,
+  withTargetBudget,
+  migrateTargetBudget,
+  NO_TARGET_BUDGET_KEY,
   listSidechainMarkers,
   readStdinSync,
   // F287 卡 A · G0：state-storage 码由 io 首发，judge 三处复用只引用不重复登记
@@ -153,7 +158,7 @@ export const NON_BLOCK_LIMIT = BLOCK_LIMIT;
  * 刻意与 blockCount **分列计数**：推迟不消耗阻断预算，否则在途停顿会白白烧掉阻断额度，
  * 使真正需要阻断时已降级放行。
  */
-const IN_FLIGHT_DEFER_LIMIT = 3;
+export const IN_FLIGHT_DEFER_LIMIT = 3;
 
 /**
  * 闸门三：自**最早**一次 fix 技能展开之后允许的 assistant **entry** 上限（F257 缺陷 2）。
@@ -743,6 +748,9 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
       transcriptDiagnostics: [JUDGE_DIAGNOSTICS.featureDirUnresolvable.code], verdict: null,
       assistantEntriesSinceEarliestFix, ledgerDiagnostics,
       snapshotDiagnostics,   // F287 G4：fail-open 早退也保留快照可观测量（runHook 并入落盘）
+      targetDir: null,
+      budgetKey: NO_TARGET_BUDGET_KEY,
+      budgetLineage: [],
     };
   }
 
@@ -764,7 +772,38 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null, sna
     tier2Source: tier2 ? tier2.source : null,
     // F290：Tier 2 阻断文案告知绑定目录（W-2 可观测性）
     tier2CandidatePath: tier2 && tier2.candidate && typeof tier2.candidate.path === 'string' ? tier2.candidate.path : null,
+    // F291a：被判目录（事实字段；审计 / report 透传）
+    targetDir: typeof resolvedPath === 'string' && resolvedPath.length > 0 ? resolvedPath : null,
+    // F291a（方案①′）：预算桶键 = **提名身份**（candidate.path，跨 F256 短名重锚定稳定）优先，其次被判目录；两者都没有 ⇒
+    // 无目标桶（自己一个桶，不向具名目标捐赠）。桶随目标身份链迁移（F224 改名跟随的历史路径 + 被判目录），见 io.migrateTargetBudget。
+    budgetKey: targetBudgetKey(typeof candidate.path === 'string' ? candidate.path : resolvedPath),
+    budgetLineage: budgetLineageFor(candidate, resolvedPath),
   };
+}
+
+/**
+ * F291a：预算桶的身份链 = 沿被跟随的改名事件（F224）从当前提名向前追溯的旧名（`mv A B` ⇒ B 的链含 A，链式改名递归），
+ * 外加 F227 历史兜底 / F256 短名重锚定实际被判的目录（同一提名身份下的另一个磁盘落点）。
+ * 🔴 **不含**候选历史里其它被提名过的目录——那是「换了个目标」，沿它迁移预算就是 F289 delta CRITICAL 的捐赠面
+ * （首版按候选历史全量迁移，Tier 2 跨目标语料当场复现 0 往返放行）。
+ */
+function budgetLineageFor(candidate, resolvedPath) {
+  const key = targetBudgetKey(typeof candidate.path === 'string' ? candidate.path : resolvedPath);
+  if (key === NO_TARGET_BUDGET_KEY) return [];
+  const renames = Array.isArray(candidate.renames) ? candidate.renames : [];
+  const lineage = new Set();
+  let cursor = key;
+  for (let guard = 0; guard < renames.length; guard += 1) {
+    const step = [...renames].reverse().find((r) => targetBudgetKey(r.to) === cursor && !lineage.has(targetBudgetKey(r.from)));
+    if (!step) break;
+    const from = targetBudgetKey(step.from);
+    if (from === NO_TARGET_BUDGET_KEY || from === key) break;
+    lineage.add(from);
+    cursor = from;
+  }
+  const judged = targetBudgetKey(resolvedPath);
+  if (judged !== NO_TARGET_BUDGET_KEY && judged !== key) lineage.add(judged);
+  return [...lineage];
 }
 
 // ────────────────────────────────────────
@@ -801,6 +840,12 @@ export function buildFeedbackText(missing, opts = {}) {
 // 审计事件构造（contracts/fix-compliance-verdict-event.schema.json）
 // ────────────────────────────────────────
 
+/**
+ * F291a（对抗审查 W-2 / W-6）：本次 hook 调用的目标上下文，随每条审计事件落盘（sessionId 不再是唯一归因维度）。
+ * 每个 hook 调用是一个独立进程，runHook 入口置位一次；report 模式不经此处（直接从 evaluate 结果透传）。
+ */
+let auditTargetContext = { targetDir: null, budgetKey: null };
+
 function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded, extraDiagnostics }) {
   const diag = new Set([
     ...((verdict && verdict.diagnostics) || []),
@@ -811,6 +856,9 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
     eventType: 'fix-compliance-verdict',
     recordedAt: new Date().toISOString(),
     sessionId,
+    // F291a：被判目录与预算桶键（事后可分辨同会话各目标各自的预算轨迹）；非 fix / fail-open 事件为 null
+    targetDir: auditTargetContext.targetDir,
+    budgetKey: auditTargetContext.budgetKey,
     enforcement,
     closureForm: verdict ? verdict.closureForm : 'undetermined',
     compliant: verdict ? verdict.compliant : null,
@@ -933,20 +981,41 @@ function emitBlock(projectRoot, sessionId, verdict, blockCount, diagnostics, not
  *   catch 会把 TypeError 兜成放行，故不做 required fail-loud）。
  * @returns {number} 退出码
  */
-function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], counts = {}) {
+/**
+ * F291a：在锁内 RMW 的 state 上定位本目标的预算桶（先按身份链迁移，再取桶）。忘传 budget 退回无目标桶
+ * （IW-1：不 fail-loud，顶层 catch 会兜成放行）。返回的 commit(patch) 把改过的桶写回整份 state；
+ * `base` 是迁移后的 state——决策「不写」时若发生过迁移仍须写回 base，否则迁移结果丢失。
+ */
+function openTargetBudget(state, budget) {
+  const key = budget && typeof budget.key === 'string' && budget.key.length > 0 ? budget.key : NO_TARGET_BUDGET_KEY;
+  const lineage = budget && Array.isArray(budget.lineage) ? budget.lineage : [];
+  const { state: base, migratedFrom } = migrateTargetBudget(state, key, lineage);
+  const bucket = targetBudgetOf(base, key);
+  return {
+    key,
+    bucket,
+    base,
+    migrated: migratedFrom !== null,
+    commit: (patch) => withTargetBudget(base, key, { ...bucket, ...patch }),
+  };
+}
+
+function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], counts = {}, budget = null) {
   const canRelease = releaseCorroborated(counts || {});
   const fingerprint = counts && typeof counts.fingerprint === 'string' ? counts.fingerprint : null;
+  // F291a：状态与锁仍按会话；阻断预算读写本目标的桶（openTargetBudget）
   const mutated = mutateBlockState(projectRoot, sessionId, (state) => {
-    if (state.blockCount < BLOCK_LIMIT) {
+    const { bucket, base, migrated, commit } = openTargetBudget(state, budget);
+    if (bucket.blockCount < BLOCK_LIMIT) {
       return {
-        next: { ...state, blockCount: state.blockCount + 1, lastCountedFingerprint: fingerprint ?? state.lastCountedFingerprint },
-        result: { route: 'block', nextCount: state.blockCount + 1 },
+        next: commit({ blockCount: bucket.blockCount + 1, lastCountedFingerprint: fingerprint ?? bucket.lastCountedFingerprint }),
+        result: { route: 'block', nextCount: bucket.blockCount + 1 },
       };
     }
-    if (!canRelease) return { next: null, result: { route: 'uncorroborated', blockCount: state.blockCount } };
+    if (!canRelease) return { next: migrated ? base : null, result: { route: 'uncorroborated', blockCount: bucket.blockCount } };
     return {
-      next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint ?? state.lastCountedFingerprint },
-      result: { route: 'release', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount },
+      next: commit({ degradedRecorded: true, lastCountedFingerprint: fingerprint ?? bucket.lastCountedFingerprint }),
+      result: { route: 'release', wasAlreadyRecorded: bucket.degradedRecorded, blockCount: bucket.blockCount },
     };
   });
   return dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostics, counts || {});
@@ -1058,32 +1127,34 @@ function nonBlockTerminalWarning(verdict, trigger) {
  * 逐轮序列（端到端钉）：冻结暂停 exit2(nb=1) → exit2(nb=2) → exit0；有进展 exit2(nb=1) → exit2(b=1) → exit2(b=2) → exit0；
  * 最短完全绕过仍是 2 次 exit 2 后放行（持平，不更松）。
  */
-function routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, counts) {
+function routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, counts, budget = null) {
   const canRelease = releaseCorroborated(counts);
   const backstop = finiteOrZero(counts.entryCount) >= NON_BLOCK_ENTRY_LIMIT;
+  // F291a：同 routeBlock——本目标的桶（指纹 / 解锁计时器 / 阻断计数都是目标属性）
   const mutated = mutateBlockState(projectRoot, sessionId, (state) => {
-    const last = state.lastCountedFingerprint;
+    const { bucket, commit } = openTargetBudget(state, budget);
+    const last = bucket.lastCountedFingerprint;
     const progressed = last !== null && fingerprint !== last;
     if (progressed) {
-      if (state.blockCount < BLOCK_LIMIT) {
-        return { next: { ...state, blockCount: state.blockCount + 1, lastCountedFingerprint: fingerprint }, result: { route: 'block', nextCount: state.blockCount + 1 } };
+      if (bucket.blockCount < BLOCK_LIMIT) {
+        return { next: commit({ blockCount: bucket.blockCount + 1, lastCountedFingerprint: fingerprint }), result: { route: 'block', nextCount: bucket.blockCount + 1 } };
       }
-      if (!canRelease) return { next: { ...state, lastCountedFingerprint: fingerprint }, result: { route: 'uncorroborated', blockCount: state.blockCount, noProgress: false } };
-      return { next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint }, result: { route: 'release', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount } };
+      if (!canRelease) return { next: commit({ lastCountedFingerprint: fingerprint }), result: { route: 'uncorroborated', blockCount: bucket.blockCount, noProgress: false } };
+      return { next: commit({ degradedRecorded: true, lastCountedFingerprint: fingerprint }), result: { route: 'release', wasAlreadyRecorded: bucket.degradedRecorded, blockCount: bucket.blockCount } };
     }
-    const limitExhausted = state.nonBlockStopCount >= NON_BLOCK_LIMIT;
+    const limitExhausted = bucket.nonBlockStopCount >= NON_BLOCK_LIMIT;
     if (!limitExhausted && !backstop) {
-      return { next: { ...state, nonBlockStopCount: state.nonBlockStopCount + 1, lastCountedFingerprint: fingerprint }, result: { route: 'nonblock', blockCount: state.blockCount } };
+      return { next: commit({ nonBlockStopCount: bucket.nonBlockStopCount + 1, lastCountedFingerprint: fingerprint }), result: { route: 'nonblock', blockCount: bucket.blockCount } };
     }
-    if (!canRelease) return { next: { ...state, lastCountedFingerprint: fingerprint }, result: { route: 'uncorroborated', blockCount: state.blockCount, noProgress: true } };
+    if (!canRelease) return { next: commit({ lastCountedFingerprint: fingerprint }), result: { route: 'uncorroborated', blockCount: bucket.blockCount, noProgress: true } };
     const trigger = limitExhausted ? JUDGE_DIAGNOSTICS.nonblockLimitExhausted.code : JUDGE_DIAGNOSTICS.nonblockBackstopExhausted.code;
-    return { next: { ...state, degradedRecorded: true, lastCountedFingerprint: fingerprint }, result: { route: 'nonblockRelease', wasAlreadyRecorded: state.degradedRecorded, blockCount: state.blockCount, trigger } };
+    return { next: commit({ degradedRecorded: true, lastCountedFingerprint: fingerprint }), result: { route: 'nonblockRelease', wasAlreadyRecorded: bucket.degradedRecorded, blockCount: bucket.blockCount, trigger } };
   });
   return dispatchRoute(projectRoot, sessionId, verdict, mutated, extraDiagnostics, counts);
 }
 
 /** block 档不合规的总入口：prompt_id 在场走指纹路由，缺席走 routeBlock（= 改动前行为）+ gate-fingerprint-partial。 */
-function routeBlockEnforcement(projectRoot, sessionId, result, payload, extraDiagnostics = []) {
+function routeBlockEnforcement(projectRoot, sessionId, result, payload, extraDiagnostics = [], budget = null) {
   // 🔴 有默认值（IW-1）：本文件 main 的顶层 catch 会把「忘传」抛出的 TypeError 兜成 exit 0 放行，故不做 required fail-loud
   const verdict = result.verdict;
   const counts = {
@@ -1100,9 +1171,9 @@ function routeBlockEnforcement(projectRoot, sessionId, result, payload, extraDia
     latestFixLineIndex: result.latestFixLineIndex,
   });
   if (fingerprint === null) {
-    return routeBlock(projectRoot, sessionId, verdict, [...extraDiagnostics, JUDGE_DIAGNOSTICS.gateFingerprintPartial.code], counts);
+    return routeBlock(projectRoot, sessionId, verdict, [...extraDiagnostics, JUDGE_DIAGNOSTICS.gateFingerprintPartial.code], counts, budget);
   }
-  return routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, { ...counts, fingerprint });
+  return routeByFingerprint(projectRoot, sessionId, verdict, fingerprint, extraDiagnostics, { ...counts, fingerprint }, budget);
 }
 
 /**
@@ -1442,7 +1513,15 @@ function runHook(projectRoot, payload) {
   // 合规 → 重置该 session 阻断状态（补救成功清零转移，FR-006 增补）后静默放行。
   // 无条件调用（不区分 block/warn）：warn 档从不 bump 计数、其状态文件本就不存在，
   // reset 对其为空操作；off 档已在函数入口短路，永不触达此分支。
+  // F291a（方案①′）：阻断预算按目标记账——会话状态文件内按 budgetKey 分桶；桶随目标身份链（budgetLineage）迁移。
+  // 目标定位不到时落无目标桶（不向具名目标捐赠）。状态文件与锁仍按会话。
+  const budget = {
+    key: typeof result.budgetKey === 'string' && result.budgetKey.length > 0 ? result.budgetKey : NO_TARGET_BUDGET_KEY,
+    lineage: Array.isArray(result.budgetLineage) ? result.budgetLineage : [],
+  };
+  auditTargetContext = { targetDir: typeof result.targetDir === 'string' ? result.targetDir : null, budgetKey: budget.key };
   if (result.verdict.compliant) {
+    // 合规 ⇒ 整份会话状态删除（本会话全部目标的预算一起清零）
     resetBlockState(projectRoot, payload.session_id);
     // F270 P2b（FR-024 修订版 / R-2 收口）：曾 fix 展开的会话，**合规裁决也必须留痕**。
     // 原实现此处零落盘——与 !isFix 早退共同构成"事后完全不可见"的审计黑洞（F257 遗留，
@@ -1546,6 +1625,8 @@ function runHook(projectRoot, payload) {
     const entryBudgetLeft = entryCount < EARLIEST_FIX_ENTRY_DEFER_LIMIT;         // 闸门三（单调，抹不掉）
     // F288 卡 B · G1：闸门二的读 + 计数写回在同一次锁内 mutation（推迟不动阻断预算：mutator 只改自己那个字段，
     // 5 字段手工透传与 `inFlightDeferCount = 0` 默认值 fail-open 一并消失）
+    // F291a：在途推迟预算是**会话**属性（在途子代理通知未达是会话事实，不是目标事实），留在状态顶层——
+    // 按目标分桶会把闸门二放大 N 倍（对抗审查 C-3），有效上界退化到闸门三的 420
     const deferMutation = mutateBlockState(projectRoot, sessionId, (state) => {
       const countBudgetLeft = state.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT;  // 闸门二（可被抹除）
       if (countBudgetLeft && entryBudgetLeft) {
@@ -1590,7 +1671,7 @@ function runHook(projectRoot, payload) {
 
   // enforcement=block：F288 卡 B · G2 指纹路由总入口（prompt_id 在场走指纹三分；缺席 = 改动前 routeBlock + gate-fingerprint-partial）。
   // 🔴 指纹路由只在 block 档生效（R2-6）：warn 分支在上方已 return 0，指纹既不参与路由也不写回。
-  return routeBlockEnforcement(projectRoot, sessionId, result, payload, deferExtraDiagnostics);
+  return routeBlockEnforcement(projectRoot, sessionId, result, payload, deferExtraDiagnostics, budget);
 }
 
 // ────────────────────────────────────────
@@ -1619,6 +1700,9 @@ function runReport(projectRoot, transcriptPath, reportSessionId = null) {
     // F289：合同层级与 Tier 2 绑定源（事实字段透传）
     tier: result.tier === 1 || result.tier === 2 ? result.tier : null,
     tier2Source: result.tier2Source ?? null,
+    // F291a：被判目录与预算桶键（事实字段透传；report 不落盘、不施加预算）
+    targetDir: result.targetDir ?? null,
+    budgetKey: result.budgetKey ?? null,
     ...(result.verdict || {}),
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);

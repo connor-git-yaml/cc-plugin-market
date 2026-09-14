@@ -100,11 +100,25 @@
 ```json
 {
   "sessionId": "string",
-  "blockCount": 0,
-  "degradedRecorded": false,
+  "inFlightDeferCount": 0,
+  "targets": {
+    "specs/301-fix-sample-bug": {
+      "blockCount": 0,
+      "degradedRecorded": false,
+      "nonBlockStopCount": 0,
+      "lastCountedFingerprint": null
+    }
+  },
   "updatedAt": "2026-07-09T12:00:00.000Z"
 }
 ```
+
+**F291a（M11 卡 B，方案①′）**：文件仍每会话一份、锁按会话；阻断预算（`blockCount` / `degradedRecorded` / `nonBlockStopCount` /
+`lastCountedFingerprint`）在 `targets[桶键]` **按目标分桶**，`inFlightDeferCount`（F256 在途推迟预算）是会话属性留在顶层。
+桶键 = 规范化的 fix 目标目录字面量（提名身份优先，`path.posix.normalize` + `FIX_DIR_NAME_REGEX`），定位不到目标的轮次用
+`__no-target__` 桶、不向具名目标捐赠；桶随 F224 改名跟随链迁移（`io.migrateTargetBudget`）。改造前文件的顶层 `blockCount` 等
+**不迁移**（fail-closed 迁移：旧会话至多多付一轮预算）。合规清零 = 整份文件删除（全部目标桶一起清零）。审计事件带 `targetDir` /
+`budgetKey`（`contracts/fix-compliance-verdict-event.schema.json`）。以下各段的 `blockCount` 语义按「当前目标桶」读。
 
 **生命周期**：首次不合规阻断时创建（`blockCount: 1`，`degradedRecorded: false`）；每次后续不合规阻断时递增，上限判定在读取时进行（`blockCount >= 2` → 本次降级放行，不再递增）；文件无 TTL/清理机制（与会话生命周期同源，遗留文件对下次判定无副作用，仅按 `session_id` 命中时才被读取，不同 `session_id` 互不干扰，满足并发隔离要求）。
 

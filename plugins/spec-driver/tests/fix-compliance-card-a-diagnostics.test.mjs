@@ -80,8 +80,17 @@ function readEvents(root) {
   return out;
 }
 function readState(root, sessionId) {
+  // F291a（方案①′）：每会话一份 <sid>.json，阻断预算在 targets[桶键] 分桶；本文件用例为单目标会话，取各桶最大值即该桶
   const p = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${sessionId}.json`);
-  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  if (!fs.existsSync(p)) return null;
+  const st = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const buckets = Object.values(st.targets || {});
+  return {
+    ...st,
+    blockCount: Math.max(0, ...buckets.map((b) => b.blockCount ?? 0)),
+    nonBlockStopCount: Math.max(0, ...buckets.map((b) => b.nonBlockStopCount ?? 0)),
+    inFlightDeferCount: st.inFlightDeferCount ?? 0,
+  };
 }
 const counters = (st) => (st ? [st.blockCount, st.nonBlockStopCount, st.inFlightDeferCount] : null);
 
