@@ -1,6 +1,3 @@
 {
-  "enabledPlugins": {
-    "spectra@cc-plugin-market": true,
-    "spec-driver@cc-plugin-market": true
-  }
+  "enabledPlugins": {}
 }
