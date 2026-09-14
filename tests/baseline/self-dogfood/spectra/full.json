@@ -1,23 +1,23 @@
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "meta": {
     "tool": "spectra",
     "spectraVersion": "4.6.0",
     "collectorVersion": "0.3.0",
     "targetProject": "self-dogfood",
-    "targetCommit": "80ee2b0ace48e76a805aebcb7bacefaeacc77231",
+    "targetCommit": "dc1aaabb344e30cb009f45b25a90d79b1382adcb",
     "targetFileCountsByType": {
-      "ts": 4143,
+      "ts": 4159,
       "tsx": 157,
       "py": 721,
-      "md": 4844,
-      "other": 4244
+      "md": 4859,
+      "other": 4252
     },
-    "targetLocEstimate": 1202228,
+    "targetLocEstimate": 1204995,
     "spectraModuleCount": 22,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-09-14T10:29:59.220Z",
+    "runTimestampUtc": "2026-09-14T20:47:06.679Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
@@ -40,37 +40,44 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-09-14T10:29:59.220Z",
+    "pinnedAt": "2026-09-14T20:47:06.679Z",
     "staleAfterDate": "2027-03-13",
     "upstreamVersion": "4.6.0",
     "frozenFixture": false
   },
   "dryRun": {
-    "estimatedTokens": 1662158,
-    "actualTokens": 5285915,
-    "biasRatio": 3.18
+    "estimatedTokens": 1679804,
+    "actualTokens": 2738534,
+    "biasRatio": 1.63
   },
   "perf": {
-    "totalWallMs": 3399935,
+    "totalWallMs": 5627815,
     "llmCallCount": 22,
     "llmCallDurationsMs": {
-      "p50": 190800,
-      "p95": 428800,
-      "min": 4200,
-      "max": 873100,
+      "p50": 218400,
+      "p95": 932300,
+      "min": 122800,
+      "max": 1358600,
       "samplesCount": 22
     },
-    "tokensInput": 4919110,
-    "tokensOutput": 366805,
-    "tokensCacheRead": null,
-    "estimatedCostUsd": 20.26,
-    "memoryPeakKb": 3063248
+    "tokensInput": 2052639,
+    "tokensOutput": 685895,
+    "tokensCacheCreation": 1963149,
+    "tokensCacheRead": 89343,
+    "reportedCostUsd": 22.418848,
+    "reportedCostCoverage": {
+      "covered": null,
+      "total": null,
+      "full": true
+    },
+    "estimatedCostUsd": 22.418848,
+    "memoryPeakKb": 3184656
   },
   "output": {
-    "graphNodeCount": 7928,
-    "graphEdgeCount": 14862,
+    "graphNodeCount": 8039,
+    "graphEdgeCount": 15124,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 7806053,
+    "graphSizeBytes": 9466244,
     "specModuleCount": 22,
     "specSuccessCount": 22,
     "specSkippedCount": 0,
@@ -92,30 +99,33 @@
       "modulesWithDataModel": 25,
       "modulesWithAllFour": 25,
       "modulesWithInputsOutputs": 25,
-      "averageSpecLines": 844,
+      "averageSpecLines": 993,
       "shorterThan100Lines": 0,
-      "longerThan1000Lines": 6,
+      "longerThan1000Lines": 9,
       "outlierFiles": [
-        "adapters.spec.md (1027 lines, too long)",
-        "batch.spec.md (1004 lines, too long)",
-        "core.spec.md (1042 lines, too long)",
-        "debt-scanner.spec.md (1287 lines, too long)",
-        "panoramic.spec.md (4171 lines, too long)",
-        "scaffold-kb.spec.md (1711 lines, too long)"
+        "adapters.spec.md (1028 lines, too long)",
+        "batch.spec.md (1609 lines, too long)",
+        "cli.spec.md (1073 lines, too long)",
+        "core.spec.md (1712 lines, too long)",
+        "debt-scanner.spec.md (1315 lines, too long)",
+        "knowledge-graph.spec.md (1056 lines, too long)",
+        "mcp.spec.md (1207 lines, too long)",
+        "panoramic.spec.md (4777 lines, too long)",
+        "scaffold-kb.spec.md (1927 lines, too long)"
       ],
       "moduleCount": 26
     },
     "graphSanity": {
       "isolatedNodes": 135,
       "selfLoops": 33,
-      "edgesWithMissingTarget": 1175,
-      "averageDegree": 3.7,
-      "maxDegree": 1172,
-      "edgesWithoutType": 14862
+      "edgesWithMissingTarget": 1190,
+      "averageDegree": 3.8,
+      "maxDegree": 1187,
+      "edgesWithoutType": 15124
     },
     "crossLinks": {
-      "totalLinks": 197,
-      "brokenLinks": 3,
+      "totalLinks": 199,
+      "brokenLinks": 5,
       "externalLinks": 0
     },
     "codingContextGrounding": null,

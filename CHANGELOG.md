@@ -29,6 +29,7 @@
 
 ### 测试
 
+- perf 基线 fixture 三目标在已提交树上重采（schema 1.2）：tokens in+out micrograd −89.1% / nanoGPT −79.1% / self-dogfood −48.2%，成本改 CLI 真值；**self-dogfood 墙钟 +65.5%、输出 token +87% 判红（单次采样，待复测）**。
 - pinned graph 四份与 F249 护栏两份资产受控再生（剥新字段深等 0 差异）；`f220` charter 快照受控 `-u`（9 处 `sourceTreeDirty` + 16 处 cache 行插入，0 删除）；`tests/**` 40 处 `@ts-expect-error`（TS2578）删除（`typecheck:tests:full` 1071 → 1031）。
 - 新增：`fix-compliance-f291a-per-target`（10）、`sync-merge-engine-m11c`（19）、`check-fr-matrix`（18）、`orchestrator-cli-m11c`（11）、`repo-sync-graph-freshness`（28）、MCP 返回面 / 词表 / tokenBudget / 确定性（unit 7 文件 + e2e 3 例）。
 

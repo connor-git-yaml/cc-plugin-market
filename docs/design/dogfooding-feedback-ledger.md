@@ -695,8 +695,8 @@
   ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录进模块头注释 + 畸形输入不抛属性测试（8 例）；结构性 try/catch 兜底未加（加了无法被变异证实，属「声称有守护」）。
 
 ### M11 第一批五卡（A/B/C/D/E）· 2026-09-15
-状态：待处理（9 条）
-来源：五卡实现 + 四路异构对抗（卡 B 两角 / 卡 C 两角）+ 卡 D / 卡 E 两轮 delta 审查；`/goal` 落地
+状态：待处理（10 条）
+来源：五卡实现 + 四路异构对抗（卡 B 两角 / 卡 C 两角）+ 卡 D / 卡 E 两轮 delta 审查 + 三目标基线重采；`/goal` 落地
 
 - [结果准确性][sync 引擎 · 缺与上一版的对拍] `--dry-run` 输出有 `totalConflicts` 这种强信号却没有基线机制，卡 C 的 C-1（49 条虚假冲突）靠审查者手工 `git archive HEAD` 双跑才暴露。建议引擎增 `--baseline <old.json>` 或 `repo:check` 钉 stats 快照（与 F249「数字产物必配重算器」同源）。
 - [流程顺畅度][sync 引擎 · 同编号多目录三套 tie-break] HEAD 引擎取 readdir 末个、`indexSpecDirectories` 取字典序首个、`parsedSpecs` 取遍历末个。本轮已统一为字典序首个并升 `duplicate-dirs` lint finding；「同编号唯一性」是否应阻断而非告警待拍板。
@@ -707,3 +707,4 @@
 - [信息完整性][Spectra MCP · 缺「变量的所有赋值点 + 各自守卫条件」形状的查询] 卡 B 审查者要追 `resolvedPath` 三条来源只能 `grep` + 读 200 行注释；`context` / `impact` 回答不了「哪条分支让它落回 null」。
 - [结果准确性][Spectra MCP · 未提交 diff 不可审 / 图在脏树上建] 卡 D / 卡 E 审查者都因工作树脏、图必然 stale 而放弃调 MCP。卡 D 已让 freshness 标 `builtFromDirtyTree`、`repo:sync` 脏树 skip；「审查未提交改动」这一使用场景仍无工具面。
 - [方法学][「改动前 / 后」类结论一律要求同一棵树只换受审文件] 卡 B 审查者纸面读码时把一条残余误判为新回归，受控 A/B（`git show HEAD:` 旧文件替换进同一棵树）才纠正；与 F259「图基线用陈旧 dist 建会造假回归信号」同源。
+- [结果准确性][无头隔离后 self-dogfood 墙钟 +65.5%、输出 token +87%] 卡 E 去掉 harness 开销后输入 token 如期下降（−48%），但 spec 输出 token 从 366,805 涨到 685,895、墙钟 3400s → 5628s（baseline:diff 判红）；micrograd / nanoGPT 同晚重采墙钟持平或下降。单次采样、未归因（候选：隔离后模型把轮次预算全花在正文 / 当晚 API 延迟）。须 N≥2 复测再定性，不得据此回滚隔离参数。

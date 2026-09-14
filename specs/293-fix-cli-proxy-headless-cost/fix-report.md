@@ -39,13 +39,20 @@
 - 冻结快照 `tests/e2e/__snapshots__/f220-decomposition-charter.e2e.test.ts.snap` 做了一次受控 `-u`：留 preimage，逐行审计 = 9 处
   `"sourceTreeDirty": <bool>,` 插入（卡 D）+ 16 处 `| 总 cache_(creation|read) tokens | 0 |` 插入（本卡），0 删除、0 意外行。
 
-## 验收证据（A/B：同一语料、同一 commit，只换 dist）
+## 验收证据（三目标 perf 基线在已提交树 `dc1aaabb` 上重采，schema 1.2；对照 4.6.0 fixture）
 
-| 语料 | tokensInput 4.6.0 → 本卡 | 变化 | reportedCostUsd | 图 / spec 产物 |
-|---|---|---|---|---|
-| micrograd | 358,476 → 16,804 | −95.3% | 0.493553（真值） | 逐字节相同 |
-| nanoGPT | 906,725 → 106,238 | −88.3%（墙钟 −23%） | 2.056362（真值） | 逐字节相同 |
-| self-dogfood | 待在已提交树上重采（本卡合入后单独 commit fixture） | — | — | — |
+| 语料 | tokens in+out 4.6.0 → 本批 | 变化 | 输出 token | 墙钟 | 成本（4.6.0 为公式估算，本批为 CLI 真值） |
+|---|---|---|---|---|---|
+| micrograd | 385,015 → 42,069 | −89.1% | 25,265 | 175.3s → 179.6s（+2.4%） | 1.47（估）→ 0.468893（真值） |
+| nanoGPT | 981,111 → 205,158 | −79.1% | 102,154 | 1913.7s → 1482.3s（−22.5%） | 3.84（估）→ 2.008907（真值） |
+| self-dogfood | 5,285,915 → 2,738,534 | −48.2% | 366,805 → 685,895（**+87%**） | 3400.0s → 5627.8s（**+65.5%，baseline:diff 判红**） | 20.26（估）→ 22.418848（真值） |
+
+图 / spec 产物：graph 节点 micrograd 37 / nanoGPT 76 / self-dogfood 8039（4.6.0 为 7928，+1.4%，随本批 src 增量），spec 成功率 100%。
+`--verify-artifacts` PASS（三份 fixture 均含 schema 1.2 四个新键）。
+
+**如实登记的红项**：self-dogfood 墙钟 +65.5%、输出 token +87%（单次采样；4.6.0 那次也是单次；pmset 无睡眠事件；同一时段 micrograd / nanoGPT 墙钟持平或下降）。
+输入 token 的目标（去掉 harness 开销）达成，但无头隔离后 self-dogfood 的 spec 输出明显变长——归因未做（候选：隔离后模型不再花轮次在工具 schema 上而写更长正文 / 当晚 API 延迟），
+作为待复测项登记进 ledger，不在本卡内追。cost 列的 4.6.0 数字是错单价公式的估算，本批是 `total_cost_usd` 真值，两者不可比。
 
 Stop payload 探针（2.1.270，裸探针插件）：`stop_hook_active=false` / `background_tasks=[]` 自然停机；`--safe-mode` 探针 tools 0 / mcp 0 / skills 0、`apiKeySource none`（OAuth 不变）。
 

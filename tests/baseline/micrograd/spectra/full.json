@@ -17,7 +17,7 @@
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-09-14T17:11:58.798Z",
+    "runTimestampUtc": "2026-09-14T20:50:56.271Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
@@ -40,39 +40,44 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-09-14T17:11:58.798Z",
+    "pinnedAt": "2026-09-14T20:50:56.271Z",
     "staleAfterDate": "2027-03-13",
     "upstreamVersion": "4.6.0",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 35534,
-    "actualTokens": 43713,
-    "biasRatio": 1.23
+    "actualTokens": 42069,
+    "biasRatio": 1.18
   },
   "perf": {
-    "totalWallMs": 200023,
+    "totalWallMs": 179564,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 117800,
-      "p95": 135400,
-      "min": 90700,
-      "max": 135400,
+      "p50": 107800,
+      "p95": 121200,
+      "min": 77300,
+      "max": 121200,
       "samplesCount": 4
     },
     "tokensInput": 16804,
-    "tokensOutput": 26909,
+    "tokensOutput": 25265,
     "tokensCacheCreation": 14885,
     "tokensCacheRead": 1907,
-    "reportedCostUsd": 0.493553,
-    "estimatedCostUsd": 0.493553,
-    "memoryPeakKb": 540352
+    "reportedCostUsd": 0.468893,
+    "reportedCostCoverage": {
+      "covered": null,
+      "total": null,
+      "full": true
+    },
+    "estimatedCostUsd": 0.468893,
+    "memoryPeakKb": 589952
   },
   "output": {
     "graphNodeCount": 37,
     "graphEdgeCount": 40,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 23677,
+    "graphSizeBytes": 26035,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -94,7 +99,7 @@
       "modulesWithDataModel": 4,
       "modulesWithAllFour": 4,
       "modulesWithInputsOutputs": 4,
-      "averageSpecLines": 291,
+      "averageSpecLines": 279,
       "shorterThan100Lines": 1,
       "longerThan1000Lines": 0,
       "outlierFiles": [

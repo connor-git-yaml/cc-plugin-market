@@ -184,6 +184,6 @@ P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec D
 | B · F291a per-target 阻断预算 | `specs/296-fix-per-target-block-budget/`（fix-report / verification）+ 设计稿证伪表 | 门禁类常设：两路异构（fail-open / 误伤）3C+5W / 4C+8W，全部处置 | 方案① → 方案①′（会话文件内分桶 + 改名链迁移 + 无目标桶 + 整份清零）；10 例判别语料 |
 | C · 簇④ 引擎 / CLI 小补 | `specs/295-engine-cli-small-fixes/`（spec / plan / tasks / verification） | 门禁类档位：两路异构 3C+6W+8I / 3C+11W+8I，CRITICAL 全处置 | 14/14 项；fix-report 通道双计（本仓 49 条假冲突）、fr-floor 同源自证、in-place 补丁守卫不对称三处 CRITICAL 已修 |
 | D · 簇⑦ 图新鲜度自动化 | `specs/294-fix-graph-freshness-automation/fix-report.md` | 门禁类档位：两轮 + delta | `sourceTreeDirty` / committed diff / `repo:sync graph-freshness` 步 |
-| E · cli-proxy 无头瘦身 + 成本口径 | `specs/293-fix-cli-proxy-headless-cost/fix-report.md` | 一般代码档位：两轮 + delta | 输入 token −95.3% / −88.3%；成本以 CLI 真值为准；self-dogfood fixture 待在已提交树上重采 |
+| E · cli-proxy 无头瘦身 + 成本口径 | `specs/293-fix-cli-proxy-headless-cost/fix-report.md` | 一般代码档位：两轮 + delta | tokens in+out micrograd −89.1% / nanoGPT −79.1% / self-dogfood −48.2%（三目标已在已提交树重采）；成本以 CLI 真值为准；**self-dogfood 墙钟 +65.5% / 输出 token +87% 判红，待复测** |
 
 §9 各卡 prompt 保留作派发记录；§6 未做 / 未验证盘点中由本批承接的条目按上表回填。第二批（P1-F 多语言 parity / 对抗审查纪律 story / P1-H 评测前置）不在本次交付。
