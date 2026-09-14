@@ -179,6 +179,10 @@ function scrubRuntimeNoise(text: string, root: string): string {
     .replace(/\b[0-9a-f]{40}\b/g, '<SHA>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<ISO-TS>')
     .replace(/\b\d{4}\/\d{1,2}\/\d{1,2}\b/g, '<DATE>') // toLocaleDateString('zh-CN') 本地化日期（F223）
+    // 版本串来自 package.json（4 个调用点：frontmatter.ts / index-generator.ts / spec-store.ts 的 generatedBy + batch-readme-generator.ts 的 README 首行，
+    // 两种文本形态），升版不是行为漂移。本规则须在 <MS>/<SEC> 之前：否则 `v1.2.3 s` 会被 <SEC> 啃成 `v1.<SEC>`：
+    // 归一化后冻结快照不再随 release bump 变动（4.6.0 升版实测：18 处字面值 + 25 处内容 hash 全部因此改动）
+    .replace(/\bspectra v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/g, 'spectra v<VERSION>')
     .replace(/("?durationMs"?\s*:\s*)\d+/g, '$1"<N>"')
     .replace(/\bbatch-\d{10,}\b/g, 'batch-<TS>')
     .replace(/\b\d+(?:\.\d+)?\s*ms\b/g, '<MS>')
@@ -563,6 +567,26 @@ describe(DESCRIBE_TITLE, { timeout: 180_000 }, () => {
       return title.startsWith('场景8') ? [`${base} 1`, `${base} 2`] : [`${base} 1`];
     });
     expect(actualKeys.sort()).toEqual(expectedKeys.sort());
+  });
+
+  it('场景10c（升版防线）：scrubRuntimeNoise 把任意 spectra 版本串归一化为 <VERSION>，与 package.json 当前版本无关', () => {
+    const samples = [
+      'generatedBy: spectra v4.6.0',
+      '> 由 spectra v4.5.0 自动生成 | 2026/9/14',
+      'generatedBy: spectra v10.20.30-beta.1',
+    ];
+    const cleaned = samples.map((s) => scrubRuntimeNoise(s, '/tmp/nonexistent-root'));
+    for (const line of cleaned) {
+      expect(line).toContain('spectra v<VERSION>');
+      expect(line).not.toMatch(/spectra v\d/);
+    }
+    // 负例：只归一化产物真实出口的形态（小写 `spectra v` + 三段 semver），以下都不得被改写
+    // （对抗审查实测：这三条分别杀死「去掉 spectra 锚 / 大小写不敏感」「段数放宽」「字符类放宽含 +」变异体）
+    for (const untouched of ['Spectra v4.6.0', 'spectra v4.6', 'typescript v5.9.2', 'version: v1 / spectra vNext']) {
+      expect(scrubRuntimeNoise(untouched, '/tmp/zzqq-scrub-root')).toBe(untouched);
+    }
+    // build metadata 不是本仓出口形态：规则只吃 semver 主体，`+build.5` 残留可见（升版若出现此形态会假红，属 fail-loud）
+    expect(scrubRuntimeNoise('spectra v4.6.0+build.5', '/tmp/zzqq-scrub-root')).toBe('spectra v<VERSION>+build.5');
   });
 
   it('场景10b（F223 守护）：scrubRuntimeNoise 对本地化日期的清洗与系统日期无关（时间旅行防线）', () => {
