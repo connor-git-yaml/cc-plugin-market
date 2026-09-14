@@ -301,8 +301,8 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 | 卡 | 类型 | 内容 | 来源 |
 |---|---|---|---|
 | **P1-I 诚实工具面** | feature · medium | 图边携带解析 stage / 策略标签并在 MCP callers / callees 暴露；confidence 双词汇收敛；`tokenBudget`（超预算按相关性收缩 + 顶部声明截断）；impact / context / graph_node top-N 与 `tools/list` 确定性回归 | §5 P1-I；主题欠账 |
-| **簇② charterPayload 版本归一化** | fix · small | 把 `generatedBy` 版本串归一化出被 hash 的内容，升版不再触 `f220-decomposition-charter` 冻结快照；同卡把「回代重建 + 逐字节零残差 + preimage」验收标准写进 F223 / F259 纪律 | 账本 09-13/14 ×3 |
-| **簇③ publish-gap 自证** | fix · small | 发布时把 commit 写进 tarball 可读位置（`dist/.spectra-build-meta.json` 已有），`release:check` 的 `publish-gap` 不再依赖 registry `gitHead` | 账本 09-13 |
+| **簇② charterPayload 版本归一化** ✅ 已落地 2026-09-14 | fix · small | 把 `generatedBy` 版本串归一化出被 hash 的内容，升版不再触 `f220-decomposition-charter` 冻结快照；同卡把「回代重建 + 逐字节零残差 + preimage」验收标准写进 F223 / F259 纪律 | 账本 09-13/14 ×3 |
+| **簇③ publish-gap 自证** ✅ 已落地 2026-09-14 | fix · small | 发布时把 commit 写进 tarball 可读位置（`dist/.spectra-build-meta.json` 已有），`release:check` 的 `publish-gap` 不再依赖 registry `gitHead` | 账本 09-13 |
 | **F291a per-target 阻断预算** | fix · medium · **门禁类·串行** | 按设计稿「下一轮执行要点」：先把 `T1-E4` / `T2-E6` 等用例改造成按 `stateKeyFor` 推导路径并显式断言「预置的是当前键的锁」，再上复合键。**前置**：publish 后本机判定器活体验证 + Claude Code 升级后 F245 基线重跑——在旧 harness 合同上改门禁状态模型是双重未知 | §12.4 + 设计稿 |
 
 **第二批**：
@@ -311,7 +311,13 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 - **P1-H 评测前置**：既有 33-run 坏题审计 + 重钉 GStack 锚；任何「c3 更有效」对外表述的前置。
 - ~~CI coverage 放行分支正向证据~~ **已由 F292 交付**（`766c6015`）。
 
-**后续**：P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec Drift adoption；P1-N Codex 运行时（Agent Plugins 1.0 spike）；§12.4 M11 架构债（**立卡前按 §12 证据复核，不照单开工**）。
+**第二批追加（2026-09-14 账本补流转 35 条聚出，来源 F277 ×29 + F292 ×6）**：
+- **簇④ spec-driver 引擎 / CLI 小补合集**（story · small~medium · P1-K 第二卡）：`get-phases` 补 `gates_before / gates_after`；scope 阶段 `agents-byte-budget` 候选集从 `AGENTS_CANDIDATES` 现取；Constitution Check 引用的 FR 须 ∈ 矩阵已认领集合（机械检测）；verify 补登由矩阵差集机械生成；`agents/plan.md` (ii) 门禁类升格条款改第 6 个共享块；`generate-template` phase id 字符串化（明确 bug）；verify.md 分层（定义层 / 流程层）；共享制品的类别判定规则。
+- **簇⑤ plan / tasks 模板与验收判据纪律**（doc · small）：验收期望值写「现取」；幂等验收标准写法；跨 Phase 依赖的「前置未执行处置」栏；代理判据不得与正文语义对撞；implementation-notes「当前状态区 + 偏差账本区」两段结构；守护项验收以当次实跑为准。
+- **簇⑥ repo 引擎**（fix · small）：`repo:sync --only wrappers`（或按 source 变更集裁剪，F277 三次再现）；`repo:check` 族声明期望断言条数、聚合层比对下界（断言集缩水可见化）。
+- **簇⑦ 图新鲜度自动化**（fix · small）：`repo:sync` 顺带 `batch --mode graph-only`（或 pre-push），消除 `graph-quality:freshness` 长期 warn 与「MCP 只能作旁证」的结构性成本（F270 / F275 / F277 三次再现，09-14 手动重建一次）。
+
+**后续**：P1-J 检索内核 v1 + 离线基准；P1-L brainstorm 轻量入口；P1-M Spec Drift adoption；P1-N Codex 运行时（Agent Plugins 1.0 spike）；§12.4 M11 架构债（**立卡前按 §12 证据复核，不照单开工**）；md / yaml 入图（散文与判定器类改动是 MCP 结构性空档，F270 / F275 / F277 / F292 四次再现）归 KB / Wiki 方向。
 
 **裁决不做 / 暂不做**：F291b（§11 09-14，重开条件见设计稿）；F288 R-6 保持登记；`codex/057` panoramic 组件视图不复活（`archive/` tag 留存）。
 

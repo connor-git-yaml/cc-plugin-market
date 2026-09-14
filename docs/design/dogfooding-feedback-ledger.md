@@ -24,7 +24,7 @@
 
 ## 待处理
 
-（F292 6 条待处理，见文末「### F292 · 2026-09-14」；其余——2026-09-14 milestone-next：F284 1 条 + F288–F290 / 4.6.0 发布准备 9 条全部流转，见下）
+（无——2026-09-14 两轮 milestone-next：F284 1 + F288–F290/4.6.0 9 + F277 29（补流转）+ F292 6 = 45 条全部流转，见下）
 
 ## 已处理
 
@@ -463,38 +463,67 @@
   卡 A / 卡 B 的设计资本与待调研项在 `handoff/README.md`，milestone 规划时从该处回收
 
 ### F277 · 2026-09-07
-状态：待处理
+状态：已处理（29 条：19 已分流 / 9 记录 / 1 已修复；2026-09-14 补流转）
 来源：specs/277-spec-driver-engine-hardening/（交付报告反馈节；暂存草稿 25 条 + Phase E 新增 2 条 = 27 条，单位：反馈条；按四维度分列 流程顺畅度 13 + 信息完整性 7 + 结果准确性 3 + MCP 可用性 2 + 环境 2 = 27）
 
 - [流程顺畅度][spec-driver agents] specify / plan / tasks 三份 agent frontmatter 缺 `Edit` 与 `Bash`，「先落盘骨架再逐节 Edit」与「取计数」在物理上不可执行；本卡 FR-015 已修，此条记录其暴露过程（长文档子代理只能一次性 Write）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已修复 → F277 FR-015（本条即其暴露过程）
 - [流程顺畅度][spec-driver 编排 · 子代理可靠性] 长任务子代理死亡率高：R2 首次三路并发（600 ~ 830 s、27 ~ 55 次工具调用）全部被 API 中断零产出；改「先 Write 骨架 → 边查边 Edit、每路 ≤ 3 方向」后零再现。再现：F276（`Connection lost mid-response`）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（对策「先 Write 骨架 → 边查边 Edit」已固化进 implement 纪律；再现：F276 / 4.6.0 发布准备 reviewer）
 - [流程顺畅度][spec-driver 编排 · 子代理可靠性] 后台长任务子代理 600 s watchdog 停摆（Phase B 两次、D-c、γ、BD fix 共五次），全部停在「读完再写」阶段、盘上零增量；对策已固化：首个动作落盘骨架、单段 ≤ 10 条、验证型任务由编排器亲自跑验收命令后勾选。另：「[Request interrupted by user for tool use]」并不等于子代理已停，工作常继续而回传通道丢失，重派前必须先读盘
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（对策已固化；再现：F289 verify / 4.6.0 reviewer——判停摆只认 ListAgents 状态与 watchdog，不认产物 mtime）
 - [流程顺畅度][spec-driver orchestrator-cli] `get-phases` 不输出 `gates_before / gates_after`，无法用它判断门挂载；本卡改用 `get-gate-behavior … --format json` 的 `mounted / mounting_violations` 面，未改 `get-phases` 输出
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：`get-phases` 补 `gates_before / gates_after`
 - [流程顺畅度][spec-driver plan/tasks] 同 Phase 内后落地的改动使先写死的验证预期失效（A1 D-4 / D-5、A3 T078 vs 裁定 I-1）：plan / tasks 无机制自动发现，只能实现者实跑撞上后手工登记；改进方向：验收命令的期望值写「现取」而非字面量（本卡 SC-002 / SC-014 已按此改）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：验收期望值写「现取」而非字面量
 - [流程顺畅度][repo:sync] `repo:sync` 是全量再生、无法只再生 wrapper（A3 D-13 / C D-18 / Phase E 三次再现）：改 SKILL 后 wrapper sha 门禁必红 → 跑 `repo:sync` → 顺带重刷 19 份无关产物（specs/products 时间戳 / adoption 计数 / suggestions）→ 每次须 `git show HEAD:` 逐份回退。改进方向：`repo:sync --only wrappers` 或按 source 变更集裁剪
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑥「repo 引擎：repo:sync 局部再生 + repo:check 断言集下界声明」（M10 §13.3）：`repo:sync --only wrappers` 或按 source 变更集裁剪
 - [流程顺畅度][spec-driver tasks 模板] 验收文案「`git diff --exit-code` 零输出」在有未提交改动的工作树里恒非零（A3 (c)）；可执行的幂等判据是「快照 → sync → 逐字节 diff 为空」，模板宜给幂等验收标准写法
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：模板给出幂等验收标准写法（快照 → sync → 逐字节 diff 为空）
 - [流程顺畅度][spec-driver tasks 模板] 跨 Phase 乱序执行时「先回 T0xx 补建」指令失效（裁定 I-2 把 C 提前于 B 后，T071 指向的 T054 ~ T056 尚不存在）；模板宜为跨 Phase 依赖增加「前置 Phase 未执行时的处置」栏
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：跨 Phase 依赖增加「前置 Phase 未执行时的处置」栏
 - [流程顺畅度][spec-driver 验收判据] FR-049 的代理判据（`git diff -G'暂停'` 为空）与 FR-060 正文语义结构性对撞：任何描述既有门停下行为的散文都被字面量匹配判红，块 3 整块被迫措辞避让；建议改为「新增门定义数」或「AskUserQuestion 调用点计数」
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：代理判据不得与正文语义对撞，改「新增门定义数 / AskUserQuestion 调用点计数」类可数判据
 - [流程顺畅度][spec-driver 编排 · 对抗修订] 编排器给出的修法本身可能引入不可证伪的守护项：我要求 FR-053 守护项改调 base 锚定谓词，实现方实证「resolver 已整份回退 base ⇒ 相对判据在强制 mode 上恒真」并拒绝照做（正确）。当前流程没有机制强制子代理对收到的修法做可证伪性核对，靠个体自觉
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）：修法本身列为可证伪性核对项（与「证据链本身受审」同条）
 - [流程顺畅度][spec-driver implementation-notes] 覆盖写约定与偏差账本追加需求冲突：文件已超千行，全量覆盖写的成本与丢失风险都在涨；建议定义「当前状态区（覆盖）+ 偏差账本区（追加）」两段结构
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：implementation-notes 定义「当前状态区（覆盖）+ 偏差账本区（追加）」两段结构
 - [流程顺畅度][spec-driver implement 纪律] 变异体必须能区分两道闸：12 组攻击构造全红时仍漏掉「截断前缀恰等于冻结快照」这条绕过，只有能区分「解析器 fail-loud」与「护栏逐字相等」的变异体才抓到；建议写进 implement 固定纪律
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）：写进 implement 固定纪律
 - [流程顺畅度][git · 显式路径提交] 显式路径 `git add` 整批被 `.gitignore` 目录（`.specify/templates/**` 内已跟踪文件）拒绝且整批零 stage，须对该三份用 `git add -f` 单独加。再现：F253（「被排除父目录内文件只能 `git add -f`」）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（再现 F253；已入 memory）
 - [信息完整性][spec-driver 编排 scope] `agents-byte-budget` 候选集不含 CLAUDE.md，编排器 scope 阶段误报口径并传入 spec（R2-SC-C03 抓出）；候选集应从守护项源码 `AGENTS_CANDIDATES` 现取
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：scope 阶段候选集从守护项源码 `AGENTS_CANDIDATES` 现取
 - [信息完整性][spec-driver 编排 scope] 「既有注入链恰两条且都硬编码」断言无穷举命令即写入 spec，被证伪（`scripts/sync-agent-docs.mjs` 通用表驱动引擎已存在），用户 Q4 裁定据此改判；教训：清单类断言必须附产生它的命令
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）：清单类断言必须附产生它的命令
 - [信息完整性][spec-driver plan] FR-053 守护项对照数写死会陈旧（plan 记「其余 90 / 92」，实测 80）：守护项验收须「以当次实跑为准」而非抄 plan 数字
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑤「plan / tasks 模板与验收判据纪律」（M10 §13.3）：守护项验收「以当次实跑为准」
 - [信息完整性][repo:check] 断言集「缩水」没有输出通道（β-C2）：`evidence.total` 12 → 9 时无字段表明射程比预期小；建议引擎级能力：族声明期望断言条数，聚合层比对下界
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇⑥「repo 引擎：repo:sync 局部再生 + repo:check 断言集下界声明」（M10 §13.3）：族声明期望断言条数，聚合层比对下界
 - [信息完整性][spec-driver plan · Constitution Check] plan 可用未认领的 FR 为宪法原则背书（D-1 回放：F270 plan `:37` 以 FR-031 背书原则 XI，而 FR-031 零认领）——可机械检测形态：Constitution Check 引用的 FR 必须 ∈ 矩阵已认领集合。后续卡候选
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：Constitution Check 引用的 FR 必须 ∈ 矩阵已认领集合（机械检测）
 - [信息完整性][spec-driver verify · 补登] 事后补登本身会收缩范围（D-1 回放：F270 §8 补登 8 条 vs 机械回放 12 条未认领，其中 FR-021 被 F270 自己的 T701 判 CRITICAL 却不在补登内）——补登须由矩阵差集机械生成而非人工列举；本卡 FR-004 口径已覆盖，此条登记为实证
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：补登由矩阵差集机械生成
 - [信息完整性][spec-driver prose 手写副本] `agents/plan.md` (ii) 门禁类升格条款在 4 份 SKILL 内是手写副本而非注入块，本卡两轮白名单扩容都靠 sha 抽检守同步（γ-C5 预警面）；候选后续卡：改为第 6 个共享块
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：改为第 6 个共享块
 - [结果准确性][spec-driver orchestrator-cli] `generate-template` 输出过不了自家 schema：phase id `0.5 / 3.5 / 5.5 / 6.5` 吐成数字（期望 string），原样存为 override 即 `schema-fallback`；预存 bug，本卡未修
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：phase id 字符串化（明确 bug，小修 + 回归用例）
 - [结果准确性][Spectra impact] `impact` 给 BFS 影响面，对「降级一个函数、确认它不再承重」这类审计不如 `grep` 直接（Phase A 对抗修订）：需要的是调用点 + 调用语境，而非可达集合
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 首批 P1-I 诚实工具面（callers / callees 带调用点与语境，M10 §13.3）
 - [结果准确性][Spectra graph-quality] 图 stale 与 reverse-census 主证源不匹配：`graph-quality:freshness` 全程 warn（sourceCommit 64b1d72f ≠ HEAD），plan 3.1 的 impact / context 只能作旁证、普查退回 `grep` 主证。再现：F270 / F275
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录；2026-09-14 已 `batch --mode graph-only` 重建、repo:check 转 pass；根治候选 → M11 簇⑦「图新鲜度自动化」（repo:sync 顺带 graph-only，M10 §13.3）
 - [MCP 可用性][Spectra] 散文与判定器类改动是工具面系统性空档：A1 / A3 / C / B / D / E 各段均未能用 MCP（对象是 md / yaml / prompt），图只覆盖 ts / mjs 符号面。再现：F270 / F275
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（结构性：图只覆盖 ts / mjs 符号面；md / yaml 入图属 M11 KB / Wiki 方向，不在本簇）
 - [MCP 可用性][Spectra] 本卡 Spectra MCP 仅 plan 阶段调用过 impact / context 作旁证（图 stale，未能当主证），specify / implement 各段 / verify / Phase E 均未调用（换算式：有效主证调用 0 ÷ 6 Phase = 0%，单位：Phase）——不是连接失败，是改动面（散文引擎 + 门守护脚本）与图覆盖面不相交；诚实登记而非省略
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（同上条）
 - [环境][grep] 本机 `grep` 是 `ugrep -G --ignore-files` 的 shell function：遵守 .gitignore、无 `./` 前缀，输入包里 `grep -v "^./…"` 排除管道全空；影响「命令原文可复现」（FR-027）——本卡产物一律写 `command grep`
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（已入 memory：脚本一律 `command grep`）
 - [环境][node --test 取数] `node --test` 汇总行用 `ℹ` 前缀，BSD grep 的 `.` 匹配不到多字节字符，脚本化取数会静默取空（三个变异体结果一度显示为空）；取数脚本须用固定字面前缀
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（已入 memory）
 - [结果准确性][spec-driver spec-review · 类别列抽检第二支笔] 本卡新加的「类别列取值抽检」在自身 Phase 5 首次真实命中：矩阵把 FR-016 标约束型，而新建守护代码注释自称实现 FR-016 (ii)，plan 的「承载制品已由别的 FR 认领 ⇒ 本条不新造」论证被从严判据否定 → 追加改判。说明「第二支笔」设计有效，也说明 plan 阶段的类别判定依据需要一条「共享制品」处理规则（候选后续卡）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（机制有效）；「共享制品的类别判定规则」→ 已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）
 - [流程顺畅度][spec-driver verify · 角色 prompt 体量] verify.md 已达 582 行，子代理「整读角色 prompt + 68 行对账」组合三次停摆于读完再写；最终靠编排器摘录判定态定义成 151 行简报 + 按行段拆三路 + 每 6 行落盘完成。改进方向：verify 角色 prompt 分层（定义层 / 流程层），或引擎级支持分段对账产物合并
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇④「spec-driver 引擎 / CLI 小补合集」（P1-K 第二卡，M10 §13.3）：verify 角色 prompt 分层（定义层 / 流程层）
 
 ### F284 · 2026-09-13
 状态：已处理（1 条：已分流）
@@ -519,25 +548,148 @@
   ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：记录；**再现：4.6.0 发布准备**——两路审查 reviewer 与全量 vitest 并发，我按产物文件大小/mtime 误判「停摆」错杀一路（其实正在做 gap-free 重建），恢复后才拿到报告。教训追加：**产物文件大小/mtime 不是子代理进度信号**，判停摆只认 ListAgents 状态与 watchdog
 
 - [结果准确性][冻结型快照 · 版本号诱发漂移] 版本号进入产物内容 ⇒ 每次升版都把 `f220-decomposition-charter` 的 25 处内容 hash 全部改掉，而本仓纪律禁止用 `vitest -u` 再生这类冻结快照（`-u` 会连真实行为漂移一起吸收）。结果是每次升版都必须手搓外科替换脚本 + 手工审计「零非版本诱发内容差异」，且工具面**不提供**任何区分「版本诱发」与「真实漂移」的信号。本轮实测成本：解析 vitest 失败 diff → 按 export 键定位块 → 块内定向替换 43 处（18 版本字面值 + 25 hash），首版脚本因假定「export 键以 `<场景名> 1` 结尾」在场景 8（两个快照、失配的是 ` 2`）上炸掉。改进方向：`charterPayload` 把版本字段排除出被 hash 的内容（或先归一化），升版即不触快照；或提供 `snapshot:rebase --version-only` 之类只允许版本字面值变动的受限再生器。再现：F223 / F259 / 4.6.0 升版
-  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇②「charterPayload 版本归一化」fix（M10 §13.3）：把 `generatedBy` 版本串归一化出被 hash 的内容，升版不再触快照
+  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇②「charterPayload 版本归一化」fix（M10 §13.3）：把 `generatedBy` 版本串归一化出被 hash 的内容，升版不再触快照 → **已修复（2026-09-14）**：`scrubRuntimeNoise` 增 `spectra v<semver>` → `spectra v<VERSION>` 规则 + 场景10c 守护；快照外科替换 18 版本行 + 25 hash，9 个 `full:` hash 由快照自身冻结全文重算全中
 - [结果准确性][冻结快照外科替换 · 替换器自身的两个结构性盲区] 上条那个一次性替换脚本经异构对抗复审判「本次产物无缺陷」（三重锁：从 HEAD 出发的字节级重建 sha256 与磁盘完全相同 / 9 个 `full:` hash 有脱离测试的独立算术校验——`moduleSpecs["_index.spec.md"] == "full:"+sha256(scrubRuntimeNoise(_index))` 而 `reporting.indexSpec` 就是同一份清洗全文，故可只用快照自身字节重算，OLD 9/9 + NEW 9/9 成立 / 「vitest 报告 ↔ 实际改动」四元组多重集双射 25≡25），但登记两个**未触发**的盲区，供下次复用前先堵：**(1) `-`/`+` 按 FIFO 配对 + 只断言「两侧键名相同」，在「同一块内同一键出现两次（两个不同旧值）」且 vitest 改为「先集中发 del 再集中发 add」时，键名断言恒真而两个新值互换落位，`c==1` 也挡不住（两处 needle 各自唯一）**——本次不可达仅因 11 个块的 hash 键全部互异；payload 一旦新增第二张以同名文件为键的 hash 表（如 per-file cache digest）该洞即回流，定位键应改为「块内第 N 次出现」或显式断言块内该键唯一。**(2) 切块只以 `Error: Snapshot` 为锚，此后所有 `±` 行都挂到最近一个块**：两个快照块之间若夹一个普通 assertion 失败，其 diff 正文会漏进上一块的替换计划，多数会被「非 hash 行」断言吵醒，但**恰好长得像 hash 行的会静默入计划**。另修正一条口径：25 条替换里 `old==new` 的是 **0** 条，去重后是 **19 个不同三元组**（6 条是跨块重复的同一三元组，语义自洽——场景 8 resume 终态应等于场景 1、场景 6 增量轮未重生成 py），我一度把「19」误读成「19 处变化 / 6 处未变」
   ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：记录（替换脚本未入库，盲区已写进 memory）；簇② 落地后升版不再需要替换器，此条随之失效
 - [信息完整性][release:check publish-gap] `publish-gap` 判定为 `indeterminate`——npm registry 返回体缺 `gitHead` 字段，门禁无法给出「仓库领先已发布 tarball 多少 commit」。后果：写 `[4.6.0]` CHANGELOG 时无法像 `[4.5.0]` 那样用 tarball 实际打包点校准区间起点，只能退回「写入版本号那次 commit」（`3d885d35`）作起点并在条目里显式声明该口径。改进方向：发布时把 commit 写进 tarball 自身可读位置（如 `package.json` 的自定义字段或 `dist/.spectra-build-meta.json`，后者已有），让 gap 判定不依赖 registry 是否回传 `gitHead`
-  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇③「publish-gap 自证」fix（M10 §13.3）：发布时把 commit 写进 tarball 可读位置，`release:check` 不再依赖 registry `gitHead`
+  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇③「publish-gap 自证」fix（M10 §13.3）：发布时把 commit 写进 tarball 可读位置，`release:check` 不再依赖 registry `gitHead` → **已修复（2026-09-14）**：`publish-gap-check` 在 registry 缺 `gitHead` 时 `npm pack` + `tar -xOzf` 读 tarball 内 `dist/.spectra-build-meta.json`（F176 盖章已在 tarball 里，无需改发布流程）；新增 c2–c5 用例 + 变异证红；活体：注入无 gitHead 的 npm view 后 677ms 内经 tarball 解析到 6fd45f76。**首版被异构对抗（fail-open / 注入角）判 3 CRITICAL**：白名单放行 `.` ⇒ `npm pack pkg@.` 打包**本地目录**、本地未发布盖章被当已发布锚点 ⇒ pass + 零 warning（C-1）；version 缺失静默回退 `latest` = 身份不明锚点、零留痕、偏 fail-open（C-2）；tar 缺成员抛错被归到 fetch-failed、`missing-build-meta` 的「缺文件」分支不可达而 (c3) 用例认证了生产代码做不出的映射（C-3）——共同病根：**默认实现零测试覆盖（探针证明整套用例从未执行它）**。修法：精确 semver + 首字符禁 `-` 的包名白名单、不回退 latest（`published-version-unknown`）、pack 跑在空临时目录并回验 name/version、env 剥 `npm_config_dry_run`/`npm_config_tag`、pack/tar 两类失败分流（`BuildMetaMissingError`）、`readBuildMetaFromTarball` 拆出用本地 tgz 走真实 tar 覆盖、`sourceDirty` 替代 `dirty`、`unreachable-commit-tarball` 独立文案、`killSignal: SIGKILL`。40 例 + 7 关键变异体全红；活体 4.6.0→解析 / 4.2.0→missing-build-meta / 4.5.0→领先 6 个 src commit warning。**教训：「注入替身把用例做绿」= 生产路径零覆盖的同义词；给外部 argv 的每个片段都要问它能否占据首字符。** 再现 F268（新 helper 回流反模式）
 - [流程顺畅度][对抗审查 · 假安全网是最高产的攻击面] F290 四个 CRITICAL **同属一类**：我声称「这条已被测试钉住」而实测没有（上限常量零覆盖、allowlist 双向对当前取值是死代码、剥注释只剥整行不剥行尾、形态③把「定义 + 表登记」两处纯声明性引用算作产出）。共性是**断言写在守护项旁边、但不覆盖守护项真正的失效方向**。改进：每处「已有守护」的声明都必须配一个变异体并实测变红才算成立（本卡 11 项应红 11 项真红）；派发对抗审查时把「找出所有声称有守护但变异不红的点」作为独立切入角。再现：F278（单角复审的「有守护」只覆盖半个变异空间）/ F279（每处修复单独做变异体检查）
   ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇①「对抗审查纪律」story（M10 §13.3）：「找出所有声称有守护但变异不红的点」列为固定独立切入角
 - [结果准确性][冻结快照验收方法论 · 「diff 过滤后为空集」是假绿灯] 我为 4.6.0 升版的快照替换给出三条论据，经两路异构对抗**全部被推翻**（结论本身成立，但不是靠这三条成立的），这三条正是最容易被复用的错误模板：**(1) 基线论据事实错误且循环**——我引「3596acee 门禁 8248 passed 所以升版是唯一 delta」，实测该日志是**升版后 + 快照替换后**那一跑；真正的替换前状态是同目录早 9 分钟的另一份日志「10 failed / 8238 passed」，而 8238+10=8248；`3596acee` 上**从未跑过清洁树门禁**（真正的 4.5.0 清洁基线在 `387a9635` / `5c3f0bbe`）。教训：引门禁数字必须核对该次跑的**盖章 commit + 工作树状态 + 日志 mtime**，否则会拿"修完之后"证明"修得对"。**(2) 「失败输出里除表头全是 hash 行」是循环论证**——因为 18 处版本字面值已在该次跑之前被替换掉了，替换脚本自身的 `assert not bad` 又保证了非 hash 行为零，所以这条对「有没有别的漂移」零信息量。**(3) 「`git diff` 两条 grep 过滤后为空集」实测会吞真实漂移**：`grep -vE '^[-+][[:space:]]+"[^"]+": "(full:)?[0-9a-f]{8,}",$'` 精确命中本 .snap 里真实存在的 `currentHash` / `previousHash`（64-hex，deltaReport 的源码骨架 hash，共 2 行），一次真实 AST 骨架漂移会被静默滤掉；`grep -vE 'v4\.[56]\.0'` 按整行丢弃，「同行既含版本号又含别的变化」也一起消失；构造的 6 行漂移喂进原管线残留 0 行。**正确验收标准（建议固化为此类外科替换的必经步骤）**：回代变更源 + 逐字节比对旧版本，零残差才算证完——(a) 捕获实跑产物（`TMPDIR` 重定向 + 轮询复制，绕过 `afterAll` 清理）现算 hash 自校验命中新快照，(b) 把版本串回代旧值后复算命中**旧** hash（sha256 preimage 匹配，64 bit 不可能偶然撞上），(c) 对新 .snap 做「版本串 + hash 双向回代」重建并与 `git show HEAD:` 逐字节比对零残差。本轮三步均通过（25/25 + 25/25 + rebuilt sha256 == HEAD sha256）。附带确认：每份 spec 里版本串恰好出现 1 次（故无「一份文件多处版本号漏替」风险面），代码面版本出口仅 `frontmatter.ts:102` / `index-generator.ts:140` / `spec-store.ts:81`（spec frontmatter `generatedBy`）与 `batch-readme-generator.ts:49`（README 首行），与 18 行一一对应。
-  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇②「charterPayload 版本归一化」fix（M10 §13.3）：「回代重建 + 逐字节零残差 + preimage」验收标准随该卡写进 F223/F259 纪律；mainline-focus 共享块措辞已同步改为该口径
+  ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇②「charterPayload 版本归一化」fix（M10 §13.3）：「回代重建 + 逐字节零残差 + preimage」验收标准随该卡写进 F223/F259 纪律；mainline-focus 共享块措辞已同步改为该口径 → **已修复（2026-09-14，随簇② 落地；此后升版不再触快照，该验收法退为历史方法）**
 - [流程顺畅度][对抗审查 · 证据链本身要接受审查] 本轮两路 reviewer 都没能推翻结论，但**一路把我的全部三条论据判为无效**并给出更强证法。价值不在「有没有 CRITICAL」，而在「你用来证明它的东西是否站得住」——纪律：派对抗审查时把**论据本身**列为独立攻击面（「假设我的证明方法有洞，构造一个它会给假绿灯的输入」），而不只是问「结论对不对」。再现：F278（「逐字节不变」判据禁钉快照须同时刻 A/B）/ F257（演绎证明把「进候选历史」当「usable」，穷举没覆盖破绽形态，二者互相背书出假结论）
   ↳ **处置（2026-09-14 milestone-next，主线程代用户判断·可翻案）**：已分流 → M11 roadmap 簇①「对抗审查纪律」story（M10 §13.3）：「假设我的证明方法有洞，构造一个它会给假绿灯的输入」作为固定攻击面写进对抗 prompt 模板
 
 ### F292 · 2026-09-14
-状态：待处理（6 条）
+状态：已处理（6 条：3 已分流 / 1 记录 / 2 已修复）
 来源：CI coverage 放行分支 fail-open 收口（另一 session 交付 766c6015；本 header 为 rebase 冲突解决时按账本约定补加，条目原文未动）
 
 - [结果准确性][门禁 · CI 日志判据] **CI 上的 vitest 输出带 ANSI**（tinyrainbow 的 `isColorSupported` 因 `"CI" in env` 为真而开色，与 TTY 无关），任何"对 CI 日志 grep 判定"的门禁若不先剥色就结构性失效：F285b 的 `Tests +[0-9]+ failed` 在真实 CI 上**永远匹配不到**彩色失败行（数字与 `failed` 之间夹着 `\e[39m\e[22m` 等序列）——即"测试真失败 + 一次 birpc 超时"会被一并放行。教训：判定对象是 CI 日志时，样本必须**从真实 CI 取**（`gh run view <id> --job <id> --log`）或在 `CI=true GITHUB_ACTIONS=true` 下采集，本地 TTY 采样会漏掉整条失效面。再现：F292
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已修复 → F292（判定器先剥色）；纪律「对 CI 日志 grep 的门禁必先剥色」→ 已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）
 - [信息完整性][门禁 · 语料与生产环境不一致] F292 首版 8 份样本只设了 `CI=true` 而没设 `GITHUB_ACTIONS=true`，于是 vitest 自动挂载的 `github-actions` reporter（把未处理错误原样复制成 `::error ...` 注解行，位置在汇总与覆盖率表之间）在整个守护面上零覆盖——两条 CRITICAL 因此同时逃过 8 份样本 + 变异隔离表 + 前一轮对抗审查。教训：**门禁类卡的样本采集环境必须逐项对齐生产环境的环境变量**，且默认取一次真实 CI run 日志入库对拍（F292 已把 F285 首跑日志裁剪入库为 `tests/fixtures/coverage-gate/ci-run-34710678418-birpc-pass.ansi.txt`）。再现：F292
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已修复 → F292（样本补 `GITHUB_ACTIONS=true`）；纪律「守护语料须复刻生产环境变量」→ 已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）
 - [流程顺畅度][变异实证 · 注入点必须先自证落位] F292 中我（主编排器）三次把变异注错位置却险些读成"守护有效"：(1)(2) 在**未剥色**的日志原文里 `replace("Test Files  549 passed", …)` / `replace(" % Coverage report", …)`——目标字面量被 ANSI 序列切开，`String.replace` 静默返回原串；(3) 在 `ci.yml` 上 `replace("          status=$?\n", …, 1)` 改到了上游 typecheck 步（同缩进同名行先出现），coverage 步毫发无损。三次的共同后果都是**"变异没生效"被读成"断言挡住了"**。教训：变异实证的第一步是**断言注入点**（改完先 diff/打印目标区段确认，再解读测试结果）；对含 ANSI 的语料，变异要在剥色后的文本上构造或用容忍转义的正则。再现：F292
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）：变异注入后先断言命中再看红绿
 - [流程顺畅度][对抗审查 · 修复本身会引入同类新洞，且「同文件语义不一致」是高产攻击面] F292 共四轮对抗（角 A fail-open / 角 B 误伤面 / delta-2 专攻新判据 / Phase 4b 质量审查），**每一轮都在上一轮刚写出的新判据里挖出 CRITICAL**：全文子串计签名 → 顶格标题行计数（被测试 stdout 伪造 + `Unknown Error:` 真错漏计）→ 分区锚定；`Errors` 正则无行锚被注解劫持；(c) 的三处 `.match()`（取第一处）与同文件其余检查统一的 `lastMatch`（取最后一处）**语义不一致**，同时开出 fail-open（诱饵完整表掩盖真实坍塌表）与镜像误伤（汇总前的相似表致误红）两个方向。教训：把「**同一文件内同类操作是否统一语义**」列为独立审查切入角；新判据落地后必须再审一轮（delta 轮不可省）。再现：F251/F259/F279（delta 轮连抓）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）：delta 轮专攻新判据 + 同文件多处判定的语义一致性核对
 - [结果准确性][对抗审查 · 审查结论本身要复核] 角 A 的 C-1 断言「真实 birpc 超时会被 `github-actions` reporter 复制成 2 条签名 ⇒ 该放行的永久判红」——我实跑证伪：真 birpc 错误的栈帧全在 `node_modules`，`GithubActionsReporter` 对拿不到源文件位置的错误**跳过注解**（真实 CI 日志 `::error` 计数为 0）。它用的是测试里手抛、消息恰好含签名的**假** birpc。但同一条发现里「子串计数与错误身份无绑定」的结构性判断成立且必须修。教训：审查结论要分离「构造出来了」与「生产环境会发生」，两者都要单独核，**采信半条、驳回半条**比整条采信或整条驳回更常见。再现：F278（论据被判无效但结论成立）
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：已分流 → M11 簇①「对抗审查 / implement 纪律」story（M10 §13.3）（与「证据链本身受审」合并为一条纪律）
 - [MCP 可用性][Spectra] F292 全程零 Spectra MCP 调用（换算式：有效调用 0 ÷ 5 阶段 = 0%，单位：阶段）：改动对象是 GitHub Actions YAML 步骤、新建的独立 .mjs 判定器与日志文本正则，与图覆盖的 ts/mjs 符号关系面不相交；主要成本在实跑 vitest 采样、构造变异语料、拉真实 CI 日志。不是工具故障，是改动面与工具能力面不相交——与 F270/F275 登记的「散文与判定器类改动是工具面系统性空档」同族。再现：F270/F275/F278/F279
+  ↳ **处置（2026-09-14 milestone-next 补流转，主线程代用户判断·可翻案）**：记录（同 F277 两条：改动面与图覆盖面不相交）
+
+### spec-driver-sync 补聚合 · 2026-09-14
+状态：已处理（5 条：4 已修复 / 1 已分流）
+来源：M10 收官盘点「产品活文档 5 个月未聚合」落地（主线程跑 `spec-driver-sync`，98 份未映射 spec）
+
+- [结果准确性][spec-driver sync-merge-engine · FR 抽取零命中] 引擎的 FR 正则要求 `- FR-001:` 形态，而本仓 spec 模板写成 `- **FR-001**: …`（加粗 ID），于是**自 4 月首次聚合起对 190 份 spec 抽出 0 条 FR**，`validation.fr-count` 却报 pass（「活跃 FR 0 ≥ INITIAL 0」——下界是从产物自身读的，空对空恒真）。已修：ID 两侧允许可选 `**`（前瞻同步放宽），新增 `sync-merge-engine-fr-extraction.test.mjs` 红先行 + 变异体证红；修后 spectra 36 / spec-driver 34（+19 superseded）。教训：**校验的下界若取自被校验产物自身，空产物必然自证通过**——`fr-count` 应有绝对下界或与 spec 原文条数对账。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（三轮对抗后终态：条目 = 列表位 / 行首粗体段落 / H3–H6 标题起始位；编号语法覆盖 `FR-1` / `FR-A-001` / `FR-A01` / `FR-1.1` / `FR-003A` / `FR-026-01`；「候选编号未抽取」warning 按编号集合差判定 + 无需求类 H2 时全文兜底）；`fr-count` 绝对下界未做（活跃 ≥ INITIAL 活跃仍恒真）→ M11 簇④。
+- [结果准确性][spec-driver sync-merge-engine · FR 按 ID 跨 spec 合并] 引擎把不同 spec 的同号 FR（spec 001 的 FR-001 与 spec 052 的 FR-001）当同一条需求，合并成「FR-001: … [增强 by 052] … [增强 by 053] …」，`supersededBy` 也按同号判定。但本仓 FR 编号是**每份 spec 内局部编号**，跨 spec 同号无语义关系，骨架第 5 章因此是「按编号分桶的拼接」而非按功能分组的需求清单；`no-contradiction` 检查也在错误的桶上跑。本轮聚合改用「逐 spec digest → 按 FR-GROUP 语义合并」绕过，引擎骨架只取 userStories / timeline。改进方向：引擎按 `sourceSpec` 分桶（产品级 FR 由聚合器重新编号），`supersedes` 只认 spec 显式声明。→ M11 簇④ 候选
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（身份键 = `(sourceSpec, id)` 三处同改；四类 handler 一律只追加本 spec 的 FR，同 spec 重复编号交冲突解决器首条胜出并可见登记；真实仓库仅 2 条冲突且都是 spec 157 自身重复）。簇④ 的「按 sourceSpec 分桶」条目由此闭合；产品级重新编号仍由聚合器承担。
+- [信息完整性][spec-driver sync · fix 模式产物不进聚合] `sync-merge-engine` 只扫 `spec.md`；本仓 300 个 feature 目录中 **94 个只有 `fix-report.md`**（fix 模式不产 spec.md），另 14 个 spec.md 仍是 `[FEATURE NAME]` 模板占位（F245/246/248/251/253/254/255 等真实交付过的修复卡）。这些行为变化只经 CHANGELOG 进入产品叙事，活文档结构性看不见 fix 卡。本轮把占位 14 份继续排除并在 product-mapping 头部登记。改进方向：sync 增加 fix-report 消费通道（取「修复摘要 / 行为变化」段进变更历史与已知限制），或 fix 模式在收口时生成最小 spec.md 存根。→ M11 簇④ 候选
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已分流 → M11 簇④（fix-report 消费通道），本轮未动。
+- [结果准确性][spec-driver sync-merge-engine · 非 dry-run 默认重写映射文件并剥掉注释] `sync-merge-engine.mjs` Phase 7 在非 `--dry-run` 下把「产品名修正」后的映射用 `stringifyYaml` 重新序列化写回 `product-mapping.yaml`——序列化不保留注释，文件头部的「可手动编辑覆盖 / 最后更新 / 未纳入正式映射 ×4」十行注释被**静默删光**（本轮首次跑 `--json` 即触发，`git diff` 才发现）。而 `agents/sync.md` 让子代理跑的正是不带 `--dry-run` 的命令。文件自述「手动添加的条目在重跑 sync 时不会被覆盖」只对条目成立，对注释不成立。改进方向：写回只在映射**语义**有变时执行，且保留原文件注释块（或改为只写条目、注释区独立文件）；sync.md 的命令加 `--dry-run`。→ M11 簇④
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（写回改为语义比对，只在产品名修正时执行，且保留原注释头，含 CRLF 空行）；`agents/sync.md` **不**加 `--dry-run`（引擎现在的写回是安全的，sync 子代理仍需非 dry-run 语义）。残余（记录）：写入时 `parseProductMapping` 仍丢 `name` / `owner` / 行内注释——只在触发写入的那次发生。
+- [结果准确性][HAS_LLM_E2E 门后的 4 个 batch 用例结构性跑不通] `feature-180-batch-repro` 的 T-010-1/2/4/5 用 MCP SDK 默认 60s 请求超时调 `batch`，而文件头注释自述「micrograd python-only 全量跑约 3-5 分钟」；本轮 `HAS_LLM_E2E=1` 实跑 4 例全部 `MCP error -32001: Request timed out`（60016ms）。vitest 层 `360_000` 超时对 SDK 请求超时无效——这四条 SC-007 的守护用例在订阅 CLI 路径上**从未可能通过**，只是 keyless CI 永远 skip 所以没人发现。本轮实跑与 8 路子代理并发（同订阅额度），须在安静窗口隔离重跑确认；若仍超时，修法 = `callTool(params, schema, { timeout })` 传 ≥ 360s。→ 本轮修
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`callTool(args, undefined, { timeout: 300_000 })`，it 330s / 720s；首次真跑结果与 T-010-4/5 前提问题见下节「feature-180 LLM e2e 首次真跑」）。
+
+### spec-driver-sync 引擎三轮对抗 · 2026-09-14
+状态：已处理（18 条：15 已修复 / 1 已分流 / 2 记录）
+来源：sync-merge-engine 身份键修复的第二、三轮异构 delta 审查（角 A 静默丢失 / 角 B 误抽污染）+ 主线程真实仓库对拍
+
+- [结果准确性][引擎 · 后标题覆盖前标题 + 护栏同步失明] 第二轮 delta 抓到：H2 路由是 `if (命中) result.requirements = extract(...)` 无累加，新增的 `需求` 关键词让 `## 非功能需求` / `## 需求模糊点说明` 这类**排在功能需求之后**的标题把已抽出的 FR 归零（20 份 spec / 301 条，含引擎自己的 spec 091 的全部 12 条），而候选计数写在同一个 if 块里被同一次覆盖抹成 0 → `候选 > 抽取` 恒 false，一条 warning 都不出。**护栏与被护对象共用同一条失效路径，护栏等于不存在。**
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（命中即累加；`isRequirementsHeading` 排除 `non-functional` / `nfr` / `非功能` / `模糊`）；纪律 → 簇①：**护栏的失效路径必须与被护对象独立**（同 F270「闸门判据被自家产物恒满足」家族）。
+- [结果准确性][引擎 · 子编号目录坍缩] 目录侧 `/^(\d{3})-/` 与 mapping 侧 `/^(\d{3})/` 各写一套，都把 `094-02` 截成 `094`：六份 094-0x 共用一个键，`parsedSpecs` 互相覆盖，最后一份（094-07）被合并六次、其余五份的需求整体消失，产生 75 条「094::FR-00x 多个 active 版本」假冲突。两轮审查和我都把「冲突多」读成 spec 写法问题而不是身份问题。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`extractSpecId` 单一口径 `^\d{3}(?:-\d{2}(?=-\D|$))?`，目录与 mapping 共用）；纪律 → 簇④：**同一标识符在两个解析点各写一套正则迟早分叉**，编号 / 路径类判据须共享 helper。
+- [结果准确性][引擎 · 编号语法的真实分布远超模板] 全仓 FR 条目写法：点分子编号 `FR-1.1` 60 行、`FR-N` / `FR-NN` 186 行、字母分组 `FR-A-001` / `FR-A01` 15 行、标题位 `### FR-016：…` 220 行、行首粗体段落 `**FR-001**: …` 214 行、区间标签 `#### FR-001 ~ FR-005:` 5 行。每放宽一档都激活一批此前静默丢失的 spec，也各自带来新撞号（`FR-1.1` 被截成 `FR-1`、区间标签成条目）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（编号语法 `FR-(?:[A-Z]-?)?\d{1,3}(?:\.\d+)*(?:[A-Za-z]|-[A-Za-z0-9]+)?`；标题位条目只认编号在标题起始；区间标签 / 标题中段引用不成条目；fenced code 内不成条目）；改进方向 → 簇④：spec 写法 lint（「候选编号未抽取」warning 已是第一层）。
+- [结果准确性][我方统计口径错误 · 自我更正] 本轮此前写进 memory 的「spectra 1232 / spec-driver 620 active，0 superseded，0 候选 warning」是在上两条缺陷存在时得到的：spectra 含 094-07 六倍重复、缺 301 条被覆盖的 FR。终态（第三轮后）：spectra 105 spec / 1586 FR（active 1584，含 170c/170d 32 条）、spec-driver 54 / 792，2 条冲突（157 自身重复）；0 候选 warning，另 15 条提示（8 份 spec 需求节之外的条目写法 / 6 份零 FR spec / 34 份未映射）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录（M11 §2 与 memory 已更正）；纪律：**对抗审查未收口前不把中间统计写进文档 / memory**。
+- [结果准确性][引擎 · 示例代码块与引用型标题造假条目] 第二轮 W-2 + 主线程实测：需求节里 fenced code 中的 `- **FR-901**: 示例` 会成为真条目（连闭合 fence 都吃进描述）；旧 H3 回退用 `.*?FR-` 懒匹配，`### 澄清 2: FR-006 …` / `### 状态矩阵（…FR-004/005 均引用本表）` 这 16 处引用型标题在 spec 零列表条目时会成条目。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（fence 状态机；标题位判据「编号在起始」）。
+- [流程顺畅度][sync 编排 · 派发前机械对拍] 合并子代理回报：编排指令里的「聚合数 103」、mapping 头部的「+46 spectra」、digest 对 `094-02` 的归属（unclassified）三者互不一致，只能由下游代理自行发现并回报。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已分流 → 簇④（sync 编排器派发前做 mapping 条目数 / digest 节数 / 归属判定的机械对拍；本轮按「重构归被重构产品」把 094-02 计入 spectra，活文档 106 = mapping 106）。
+- [信息完整性][引擎 · 残余清单] `level` 只在解析层存在、骨架不携带（无消费方）；`fr-count` 下界仍取自产物自身；写回时 parser 丢 `name` / `owner` / 行内注释；`splitByH2` 对 fenced code 内的 `## ` 与重名 H2 无防护；`cleanEntryFirstLine` 只剥首行粗体；`level` 的 `/i` 让 `may be null` 误判 MAY。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录 → 簇④ 候选。
+- [结果准确性][护栏 · 候选集与抽取集同源] 第三轮角 A C-1：候选编号只从**被路由到的需求节**收集，路由层的丢失对护栏结构性不可见——spec 032 在 `## Clarifications` 下写了 7 条 FR（4 条新增 + 3 条对已抽取条目的「修正」），零 warning；「修正」行的编号已在抽取集合里，按集合差原理上报不出。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（非需求节里的条目写法逐行登记为「需求类 H2 之外」warning，含 H2 位条目；真实仓库 8 份 spec 命中，032 的 7 条全部可见）；纪律 → 簇①：**护栏的取数路径必须独立于被护对象的取数路径**（与本节第 1 条同族，同一天第二次实证）。
+- [结果准确性][引擎 · 同名 H2 键冲突 + fenced code 里的 `## `] 第三轮角 A C-2/W-1：`splitByH2` 以标题作对象键，同名 H2 后者覆盖前者——与上一轮「后标题覆盖前标题」同构，但发生在路由之前，累加修法没覆盖到；全局正则不看代码围栏，一个 ```` ```md ```` 示例就把需求节后半段切给伪标题（真实仓 143 有 10 处，当前 unmapped）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（返回数组保留重名与出现序 + fence 感知，与抽取器同源）。
+- [结果准确性][引擎 · 字母后缀目录被扫描跳过] 第三轮角 A C-3：`170c-*` / `170d-*`（同族拆卡约定，32 条 FR，本仓在用）连 scannedSpecs 都不进，因此也进不了 unmappedSpecs，零 warning；缺陷早于本轮，但本轮重写了那一行并声称「编号口径统一」。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`extractSpecId` 认字母后缀；170c/170d 登记进 spectra 并补聚合进活文档）。
+- [结果准确性][validator · fr-count 基线取自被检对象] 第三轮角 A C-4：`fr-count` 的 INITIAL 基线从骨架自身读，抽取全丢时 0 ≥ 0 恒 pass；`no-contradiction` 跑在 resolver 之后恒真；`changelog-coverage` 与 FR 条数无关恒真——当初「190 份 spec 抽 0 条 FR 而 validation 自证通过」的那道闸门此前一个字没改，全靠新增单测挡复发。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`fr-count` 改为合并守恒：骨架 FR 总数 == 各 spec 抽取条数之和，基线取自合并**前**的解析结果，少了是 handler 吞条目、多了是重复合并）；另两项恒真检查记录 → 簇④。
+- [信息完整性][引擎 · 三条缺失的提示] 第三轮角 A W-5/W-6/I-3：映射到产品却抽不出任何 FR 的 spec（真实仓 6 份：100/130/177/221/082/136）此前全程无声；mapping 悬空编号无提示；spec 080 映射到两个产品、FR 双份写入。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：前两条已修复（零 FR 提示；悬空提示区分「无目录」与「有目录无 spec.md」，只有 blueprint.md 的目录豁免）；080 双映射记录（mapping 头部已声明跨产品条目）。
+- [结果准确性][引擎 · 我误删了英文 Scope Boundaries 的约束路由] 第三轮角 B C-B2：我以「Edge Cases（边界）不是约束」为由删掉 `boundary` 判据，但旧判据只认英文 `boundary`（`## Scope Boundaries` = In Scope / Out of Scope，是约束），从未认过中文 `边界`——注释里的理由与实际删掉的判据不是同一件事，007/008/009 三份已映射 spec 的约束整段归零。另：constraints 根本没被 strategy 转进骨架（无消费方），sync.md 要求的「Constraints→范围边界」从未有过数据源。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`isConstraintsHeading`：约束 / constraint / 英文 boundary / 范围边界 / 能力边界 / 约束与边界 路由，边界条件 / 边界情况 / 边界场景 / Edge Cases 排除）；constraints 未进骨架记录 → 簇④。纪律 → 簇①：**改判据前先用语料证明「被删的分支到底匹配什么」，不能凭词义推断**。
+- [结果准确性][引擎 · 「2 条冲突」是误抽，且语义反了] 第三轮角 B W-B1：157 的 L194/195 是 `**YAGNI-移除条件**：` 下的 `- FR-004（…）：… 标 [YAGNI-移除]` 决议行，被当成第二条 FR-004 → 冲突账说「157 重复编号」（假），移除决议被判 superseded 而被移除的需求仍 active（反）；158/187 的 `**FR-00N 验收信号**：…` 段落同型，一旦映射就多 13 条假冲突。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（同一 spec 内重复编号视为同一条需求的再次陈述：按出现顺序并入首条描述 + warning「N 个 FR 编号重复出现，已并入首条描述」；真实仓库冲突 2 → 0，157 FR-004 描述里可见 `[YAGNI-移除]`；handler 层对同 (spec, id) 仍一律追加、冲突解决器按身份跳过 winner——防御面用 executeMerge 直接单测）。
+- [结果准确性][引擎 · 行首注解剥除过宽] 第三轮角 B W-B2：`FR_LEADING_ANNOT` 把编号后任意括号 / 方括号 / 反引号组都当强度注解剥掉，98 处实质短标题被吞（46 处在已映射 spec）：`（离线重判）`、`（monorepo nearest-config 选择规则，C-3 修复）`、`[Story 1, 3]` 溯源标签、`\`[Non-goal]\`` 语义反转标记——而且我的形态测试把这个行为**正向锁死**了。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（只剥纯强度标记 `[必须]` / `\`[可选]\`` / `（MUST · [必须]）` / `[MUST NOT]`，其余保留为描述前缀；形态测试 E/K 期望改为保留括号短标题）。纪律 → 簇①：**测试锁住的行为要先问「这是需求还是实现巧合」**。
+- [结果准确性][引擎 · 写回 / 解析的手写形态损失] 第三轮角 B W-B4/W-B5：mapping 里不带引号的 `- 002` 被 YAML 读成数字后整条丢弃（读路径就丢，写回固化）；带 BOM 的文件整份解析成空映射（所有 spec 判未映射）；注释头正则不认 BOM 与 `---` 文档分隔符；CRLF 文件写回成混合行尾；写回仍丢 `name` / `owner` / 行内注释 / 顶层非 products 键（只在触发写入的那次）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：前四条已修复（数字条目补零成编号；解析前剥 BOM；注释头认 BOM / `---`；行尾跟随原文件）；`name` / `owner` / 行内注释 / 顶层键的丢失记录 → 簇④（写回改 in-place 补丁或改掉「可手动编辑」自述；`mergeUnmappedSpecs` 已导出但引擎从不调用，34 份未映射只能靠 agent 手写）。
+- [信息完整性][sync 契约 · agent prompt 与引擎裁决相反] 第三轮角 B W-B6：`agents/sync.md` 的「最新优先（冲突时编号更大的 spec 优先）」与引擎「跨 spec 同号各自保留」相反，`conflicts[].subject` 新格式也未写明。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（sync.md 约束改为 FR 身份 = (来源 spec, 编号) 的新口径）。
+- [结果准确性][引擎 · 三套 parseProductMapping + 编号口径不对称 + 同编号多目录] 第三轮角 B W-B7/W-B8：`sync-product-mapping` / `product-governance-helpers` / `generate-product-entity-catalog` 各有一份同名解析器，编号口径互不相同（catalog 只吃对象形态，真实文件是字符串形态 → `specCount: 0` 一直是假数）；mapping 侧此前缺「编号后须为 `-` 或结束」守卫（`"1234-foo"` → `123`）；同编号多目录（112×3 等）只靠「只有一个有 spec.md」侥幸不撞。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：口径守卫与同编号多目录 warning 已修复；三套解析器收敛记录 → 簇④（立卡：统一到 `sync-product-mapping.mjs`，catalog 的 `specCount: 0` 假数随之修）。
+
+### publish-gap 第二角（误伤 / 假红）· 2026-09-14
+状态：已处理（7 条：6 已修复 / 1 记录）
+来源：簇③ publish-gap 自证的第二角异构审查（第一角 fail-open 已在前一节流转）
+
+- [结果准确性][门禁文案 · 假的排除断言] 我在第一轮为了「两种病因两种药方」的对称性**推出**了「fetch-depth: 0 对 tarball 锚点根因无效」，并用 (c11) 把它锁死。审查者用 `--depth 1` 克隆端到端复现：tarball 里的 commit 就是普通仓库提交，浅克隆下同样不可达，`git fetch --unshallow` 后即 resolved——门禁会主动把最常见根因的解药删掉。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（文案 + (c11) 断言反转）；纪律 → 簇①：**排除性断言（「X 对此无效」）必须端到端实测，不得由分类对称性推出**。
+- [结果准确性][包名白名单误伤 + 文案说假话] 强制小写拒绝 `JSONStream` 类合法老包名，且复用「读不到 package.json 的 name」文案；白名单卡在 `npm view` 之前，整条判据在这类仓库上永久 indeterminate。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（放开大小写；`package-name-invalid` 与 `package-name-unreadable` 分开）。
+- [结果准确性][bare catch 归因] tar 缺失（distroless）/ 超时 / 包损坏全被归成「该版本发布于盖章之前」，运维读到「无事可做」而判据静默哑火。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（`TarballReadError` → `tarball-read-failed`；`Not found in archive` 才是 `missing-build-meta`）。
+- [信息完整性][生产实现零覆盖] 40 例单测一律注入替身，`defaultExecNpmPackMeta` 从未执行；两个安全方向的变异体存活，其中「临时目录改成 `process.cwd()`」那个若真执行会 `rmSync(cwd)`——**「变异体安全存活」恰恰证明这段代码在测试里一次都没跑过**。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（PATH 上的 npm shim 离线覆盖生产实现：cwd / argv / env 剥 dry-run / 唯一 tgz 枚举 / name-version 回验 / scoped filename）。
+- [结果准确性][空 cwd 绕过项目级 `.npmrc`] 私有源仓库上 tarball 回退要么 E404 假红、要么拉到公网同名包；而这道防线收益≈0（精确 semver + 白名单 + 回验已挡住本地打包）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（cwd = 项目根；本仓根实测 `npm pack spectra-cli@4.5.0` 拉到 6d4e8188 而非本地 dist 的 6fd45f76）。
+- [信息完整性][四条 INFO] npm 8 对 scoped 包报带 `/` 的 filename（改枚举唯一 tgz）；`+build` 放行但回验必败（入口拒绝）；registry `gitHead` 不校验 40-hex 而 tarball 侧校验（非 sha 视同缺席）；F265 spec / tasks 的 `missing-git-head` 契约已被实现反证（加换代注）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复。
+- [流程顺畅度][审查方法 · vitest alias] 审查者在「变异体跑既有测试但不改仓库文件」时踩到：vitest 3 的 `resolve.alias` 用 RegExp + `process.env` 取 replacement 静默不生效，须字面 specifier + 内联绝对路径 + 自带 config（顺带跳过 globalSetup，单文件 0.9s）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录（方法论进 memory）。
+
+### 4.6.0 perf 基线重跑（3 target，安静窗口）· 2026-09-14
+状态：待处理（1 条，须用户拍板：接受为新基线 / 立卡追因）
+来源：M10 §13.2 收官挂起项「4.6.0 发布后重跑基线」；`npm run baseline:collect -- --targets karpathy/micrograd,karpathy/nanoGPT,self-dogfood --mode full`，无并发负载；旧 fixture 为 4.3.0（2026-07-20，`709777d2`）
+
+- [结果准确性][spectra batch · 同模块数下 LLM 用量翻倍] `baseline:diff` 三档全 red：micrograd 墙钟 +20%（145.7s→175.3s）、输入+输出 token +128%（168k→385k）、估算成本 +130%；nanoGPT 墙钟 +121%（14.4→31.9 min）、token +154%、成本 +142%；self-dogfood 墙钟 +89%（29.9→56.7 min）、token +109%、节点 +38%（5748→7928，仓库自身变大，不可比）。**关键归因事实**（micrograd，同 5 个文件 / 37 节点 / 4 次 LLM 调用两版完全相同）：每次调用输入 token 157k→358k（×2.3）、输出 11k→27k（×2.4）、单次调用 p50 79s→138s、平均 spec 行数 182→270——不是多打了 LLM，是**每次调用的 prompt 与产出都长了一倍多**（4.3.0→4.6.0 之间的 callSites / 方法调用边 / lineRange 等上下文扩张与 spec 模板增长是候选，未定位到具体 commit）。`tokensCacheRead` 仍为 null，无法区分缓存命中。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：新 fixture 已生成但**未入库**（旧 fixture 备份在 scratchpad），按 CLAUDE.local.md 升版流程第 5 步交用户决定：A) 接受为 4.6.0 基线并把「每模块 token ×2」写进 CHANGELOG 已知变化；B) 先立卡追因（对 4.3.0→4.6.0 逐 minor 二分跑 micrograd，单次 ~3 min）。推荐 B 再 A：micrograd 三分钟一次，二分三轮即可定位到 minor 版本。
+
+### feature-180 LLM e2e 首次真跑 · 2026-09-14
+状态：已处理（2 条：2 已修复，产品侧观察已分流）
+来源：`HAS_LLM_E2E=1` 安静窗口复跑 T-010-1/2/4/5（SDK 请求超时补齐后首次真正执行）
+
+- [结果准确性][batch MCP · 两次 LLM full batch 不可能逐字节相同] T-010-4/5 的断言前提不成立：同一 tempRoot 上第二次 full batch 的输入包含第一次写出的 `specs/modules/*.spec.md`（`graph.inputHash` 必变），且 LLM 重生的 spec 文本让 `specs/nn.spec.md → engine.py` 这类 INFERRED `references` 边出现 / 消失。**这两条自 F180 立项起从未跑通过（60s SDK 默认超时），前提从未被检验**；写盘侧 byte-stable（F179）由 `graph-builder-bytestable` 单测与 feature-175 场景10 守护，与「跨 LLM 运行」是两件事。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（T-010-4 改断言代码派生子图跨运行 deepEqual；T-010-5 钉住差异边界只限 inputHash 与 spec 派生 INFERRED 边）。产品侧观察（记录 → M11 簇④/簇⑦候选）：full batch 的图是否含 spec→代码引用边取决于跑批前 specs 是否已存在，同一命令两次结果结构不同，值得让 batch 在建图前统一读取本次生成的 spec（或明确声明图只含代码派生边）。
+- [流程顺畅度][batch MCP · 请求预算] T-010-1（incremental）170s 超时而 T-010-2（full）128s 通过；batch 不发 progress 通知，`resetTimeoutOnProgress` 无用。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（单次 batch 统一 300s 绝对预算，it 330s / 720s）；安静窗口复跑 **5/5 通过**（T-010-1 146s / T-010-2 125s / T-010-4 237s / T-010-5 264s，共 12.9 分钟）——该文件自 F180 立项以来首次全绿。
+
+### sync 收尾 · 确定性 helper 链 · 2026-09-14
+状态：待处理（2 条）
+来源：`spec-driver-sync` 第 4 步六个 helper 在补聚合后的活文档上实跑（角 B 审查顺带发现 + 主线程复核）
+
+- [结果准确性][generator 与已入库 artifact 漂移] `generate-product-entity-catalog.mjs` 当前版本不产出 `qualityReportPath` / `scorecardStatus` / `scorecardScore`（HEAD 的脚本里根本没有这些字段），而已入库的 `catalog-index.yaml` / `entity.yaml` 有——它们是更早一版 generator 的产物；重跑即"字段脱落"，且 `warnings: []`。同时 catalog 自带的 mapping 解析器只吃对象形态条目，真实文件是字符串形态，`specCount: 0` 一直是假数。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：本轮按 helper 当前实现重生成并入库（入库产物应反映当前 generator，而不是保留旧版字段假装仍在产出）；两处漂移 → M11 簇④（三套 `parseProductMapping` 收敛后 `specCount` 自然修；「上轮 artifact 有、本轮产不出」的字段应发 warning）。
+- [流程顺畅度][sync 引擎与 helper 链的分母不可见] `--dry-run --json` 的 `validation.allPassed` 此前恒 true，`warnings` 是唯一诚实通道；消费方拿不到「本次抽取覆盖的 spec 数 / 零 FR 贡献的 spec 数」这类可核对分母（角 A 审查工具反馈）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：本轮已在 warnings 里补零 FR / 之外条目 / 重复编号三类提示，`fr-count` 改守恒；输出层加显式分母字段 → 簇④。
+
+### publish-gap 第三轮 delta（修法本身）· 2026-09-14
+状态：已处理（6 条：4 已修复 / 2 记录）
+来源：簇③ 二轮修法的 delta 审查（双向：假绿 / 假红），11 例恶意输入零抛出零假绿，cwd 声称三种攻法未打穿
+
+- [结果准确性][门禁 · 0 字节 tarball 被判「未盖章」] bsdtar 对空档案与「成员不存在」的 stderr 逐字相同（`Not found in archive`），只看 stderr 会把下载中断 / 磁盘满判成 `missing-build-meta`；重复成员被 `tar -xO` 拼接成非 JSON 也落同一桶。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（先看文件大小；非 JSON 归 `tarball-read-failed`；真实 tar 0 字节 / 重复成员两例）。
+- [结果准确性][门禁 · 两条事实源 cwd 不一致] `npm pack` 钉到项目根而 `npm view` 仍用进程 cwd：`--project-root` 与 cwd 不同时 view 打 A 源、pack 打 B 源，name/version 回验抓不到混源。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（view 同样以项目根为 cwd；不注入替身的全默认链路用 npm shim 断言两次调用 cwd 相同）。
+- [信息完整性][门禁 · 合取守卫单侧无测试] pack 回验砍掉包名半边 49 例全绿（F270「谓词不对称」形态再现）。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（包名错配 shim 用例；变异复核红）。
+- [信息完整性][门禁 · 字面断言锁不住语义] (c11) 用「不含『无效』」钉上一版 bug 的措辞，换个说法重新写进假排除断言测试抓不到。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录（用例注释写明残余空间；排除性文案的守护只能靠审查，不能靠字面断言）。
+- [信息完整性][门禁 · 死代码与内部文案] `execFileSync` 走 spawnSync 从不设 `killed`（超时只在 `signal`）；ENOBUFS 被报成「超时」。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（删 `killed`；信号分支文案改为「被 <signal> 终止（超时或输出超过缓冲区）」）。变异复核：删掉信号分支 53 例全绿——超时会落到通用「解压失败」分支，对外 reason 同为 `tarball-read-failed`，属等价变异（只差内部文案），如实登记而非记作守护。
+- [信息完整性][门禁 · 不变量靠调用点巧合] `checks/warnings` 不变量成立，但「不得抛出」只是每个外部调用恰好都在 try 里，消费方裸调。
+  ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录进模块头注释 + 畸形输入不抛属性测试（8 例）；结构性 try/catch 兜底未加（加了无法被变异证实，属「声称有守护」）。

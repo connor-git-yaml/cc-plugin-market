@@ -1,3 +1,9 @@
+---
+status: superseded-by-F289
+superseded_on: 2026-09-14
+note: "本设计已由 F289（7e53c3fc，Tier 2 续做合同：resume 提名 / 裸会话 fix-report 见证 / SubagentStop sidechain 三源绑定）承接落地；残余（sidechain 无提名不覆盖 = 诚实上限、per-target 阻断预算 → F291a）见 M10 §12.4 债务结账表。本文保留为设计考古，勿按其排期启动。"
+---
+
 # fix-compliance 续做/旁链入口收口 — 设计文档
 
 > 状态:**已定稿待实现(parked)**。实现**串行于 F270 合入 master 之后**(理由见 §6)。

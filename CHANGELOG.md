@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### Fixed — spec-driver
+
+- **sync-merge-engine FR 抽取与身份修复** — 自 4 月首次聚合起对 190 份 spec 抽出 0 条 FR（正则只认 `- FR-001:`），且按裸编号跨 spec 归并（91.3% 静默丢弃）。现在：FR 身份键 = `(sourceSpec, id)`；条目 = 列表位 / 行首粗体段落 / 标题起始位的 FR 编号，编号语法覆盖 `FR-1` / `FR-A-001` / `FR-A01` / `FR-1.1` / `FR-003A` / `FR-026-01`；需求类 H2 累加路由（`## 非功能需求` 不再覆盖前面的功能需求）；子编号 / 字母后缀目录（`094-02` / `170c`）与 `product-mapping.yaml` 同一口径不再坍缩或被扫描跳过；同名 H2 累加、fenced code 内的 `## ` 不切节；fenced code / 区间标签 / 引用型标题不成条目；「候选编号未抽取」与「需求类 H2 之外的条目写法」两条 warning 按独立取数路径判定，零 FR spec 与悬空映射条目有提示；`fr-count` 改为合并守恒（骨架 FR 总数 == 各 spec 抽取条数之和，基线不再取自骨架自身）；写回 `product-mapping.yaml` 只在语义变化时执行并保留注释头（含 CRLF）。真实仓库：spectra 1586 / spec-driver 792 条 FR，2 条冲突（均为 spec 自身重复）。
+- **产品活文档补聚合** — `specs/products/{spectra,spec-driver}/current-spec.md` 补入 4 月以来的增量 spec（spectra 108 / spec-driver 58 份登记；34 份明示排除，见 mapping 头部）。
+
+### 发布工程
+
+- **`release:check` publish-gap 判据加固（簇③ 二轮）** — registry 缺 `gitHead`（或非 40 位 sha）时以项目根为 cwd `npm pack <pkg>@<精确版本>` 到专属临时目录、枚举唯一 tgz、回验 name/version 后读 tarball `dist/.spectra-build-meta.json`；tar 缺失 / 超时 / 包损坏归 `tarball-read-failed`（不再冒充「未盖章」）；包名白名单放开大小写并区分 `package-name-invalid` 与 `package-name-unreadable`；`+build` 版本入口拒绝；两种锚点不可达的文案统一给出浅克隆处方（此前「fetch-depth: 0 对 tarball 根因无效」为错误指引）。生产实现由 PATH 上的 npm shim 单测覆盖。
+
+### 测试
+
+- `feature-180-batch-repro` 的 4 个 `HAS_LLM_E2E` batch 用例改为显式传 MCP SDK 请求超时（单次 300s），此前受 SDK 默认 60s 限制结构性不可能通过；T-010-4/5 的「两次 LLM full batch 逐字节相同」断言前提不成立（第二次运行的输入含第一次写出的 specs，且 LLM 重生文本改变 INFERRED 边），改为断言代码派生子图跨运行稳定并钉住差异边界。
+
 ## [4.6.0] — 2026-09-13
 
 > **Spectra v4.6.0 + Spec Driver v4.6.0 — 诚实的图与换证据源的门禁（M10 批次 1–3）**
