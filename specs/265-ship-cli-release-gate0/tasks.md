@@ -80,6 +80,7 @@
 - [x] T011 [US2] 新增 `scripts/lib/publish-gap-check.mjs`：导出 `checkPublishGap({ publishedRefOverride, execFileSyncImpl })`（依赖注入 `execFileSync` 便于离线测试）。内部逻辑：
   1. 若 `process.env.SPECTRA_PUBLISHED_REF`（或传入的 `publishedRefOverride`）存在，优先使用该值作为已发布 ref（`PublishedRefResolution.source='env-override'`）；否则 `execFileSync('npm', ['view', 'spectra-cli', '--json'], { timeout: 5000, encoding: 'utf8' })` 取 `gitHead` 字段（`source='npm-view'`）
   2. `npm view` 超时/失败 → `{ status: 'indeterminate', reason: 'network' }`（FR-011a）；返回结果无 `gitHead` 字段 → `reason: 'missing-git-head'`（FR-011b）
+     > 换代注（2026-09-14）：`missing-git-head` 已由 tarball build-meta 回退换代，见 spec.md `PublishedRefResolution` 实体下的换代注。
   3. 拿到 ref 后用 `execFileSync('git', ['cat-file', '-e', ref])` 校验该 commit 在本地仓存在；不存在 → `reason: 'unreachable-commit'`（FR-011c）
   4. 存在则 `execFileSync('git', ['rev-list', '--count', `${ref}..HEAD`, '--', 'src/'])` 得到 N；N≥5 → 产出 `ReleaseGapWarning`（`sourceStatus:'ok'`, `publishedCommitStatus:'resolved'`）；N<5 → 不产出
   5. 返回值类型 **不含 `errors` 字段**（只有 `checks`/`warnings`），这是结构性保证（架构决策 A）

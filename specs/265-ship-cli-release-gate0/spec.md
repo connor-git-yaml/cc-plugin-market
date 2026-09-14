@@ -144,6 +144,7 @@
 - **AdoptionCensusOutput**：`{ generatedAt: string(ISO), sourceDirs: string[], sourceStatus: 'found' | 'not-found' | 'empty', tools: Array<{ name: string, callCount: number }>, zeroCallTools: string[] }`；覆盖已知的 17 个 MCP 工具名，未识别的工具名归入独立"unknown"桶而非丢弃。
 - **GraphQualityRerunPlan**（口径文档，非代码实体）：以 `scripts/graph-accuracy.mjs` 的调用范式（钉死 `--source`/`--graph`/`--baseline-repo`/`--baseline-commit`/`--baseline-scope`）为主复用清单，F241 pilot 资产为次级参照；含如实转述的 `label-only`/method-function 不分两条局限声明 + "数字待发布后回收"的显式声明。
 - **PublishedRefResolution**（G0-2 内部逻辑契约，非持久化字段）：`resolve(): { ref: string, source: 'env-override' | 'npm-view' } | { status: 'indeterminate', reason: 'network' | 'missing-git-head' | 'unreachable-commit' }`；`SPECTRA_PUBLISHED_REF` 环境变量存在时优先于 `npm view` 查询（测试注入入口，见 FR-013）。
+  > **换代注（2026-09-14，M11 簇③ publish-gap 自证）**：`missing-git-head` 已被 tarball build-meta 回退换代——registry 缺 gitHead（或其值不是 40 位 commit sha）时改拉已发布 tarball 读 `dist/.spectra-build-meta.json`；现行 `reason` 枚举以 `scripts/lib/publish-gap-check.mjs` 的 `INDETERMINATE_REASON_TEXT` 为准（含 `published-version-unknown` / `tarball-fetch-failed` / `tarball-read-failed` / `missing-build-meta` / `unreachable-commit-tarball` / `package-name-invalid`）。
 
 ## Success Criteria *(mandatory)*
 
