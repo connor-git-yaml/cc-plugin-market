@@ -138,6 +138,13 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ## 11. 进展账（rolling）
 
+**2026-09-14 · 发布验收闭合（用户 publish + 重启后，主线程验收）**：
+- **4.6.0 已 publish**（registry latest = 4.6.0）。用户在本地 HEAD `6fd45f76`（收官 docs commit，当时未 push）上 publish ⇒ tarball 盖章 = `6fd45f76`；随后用户「确认 PUSH」，`766c6015..6fd45f76` ff 推送，**origin/master == tarball 盖章** ✅（G0-1 第二项）。本机 `claude plugin update spec-driver@cc-plugin-market` / `spectra@cc-plugin-market` 4.5.0→4.6.0（须 `name@marketplace` 形式）；`npm i -g spectra-cli@4.6.0` → `spectra v4.6.0 (6fd45f7)`。
+- **G0-1 第三项**：重启后 `.specify/.spec-driver-path` 由 SessionStart 重写指向 4.6.0 cache，`judge:doctor` **in-sync 12 match**——F270 之后的判定器改动**首次在本机活体生效**。`codex:doctor` fail→warning，唯一剩余 `hook-trust: untrusted`（4.6.0 hook 集哈希变更，须用户在 Codex `/hooks` 授信，agent 不可代做）。
+- **F245 headless 基线在 Claude Code 2.1.270 重跑（§13.2 第二项）✅**：`spike-fix-compliance-e2e.mjs --scenario collapsed`（插件副本 = 6fd45f76 的 4.6.0 代码，haiku，150s）——判定器状态文件 `blockCount: 2 / degradedRecorded: true / nonBlockStopCount: 1`，run summary 四次 Stop 评估：`gate-fingerprint-no-progress` → `stop-hook-reentry`（blockCount 1）→ `stop-hook-reentry`（blockCount 2，降级放行）→ 终态 `compliant: false, missing: [delegation:implement, noop:repro-output-mismatch], degraded: true`。即：Stop hook 每次收口都触发、两次 `exit 2` 阻断且理由回注驱动模型补齐制品（fix-report + verification-report + 复现命令）、重入经 `stop_hook_active` 识别、BLOCK_LIMIT=2 后有界降级——**F207 三条基线事实在新 harness 全部成立**。模型 stdout 自陈「可以通过流程依从性验证」而判定器记录 `compliant: false`：模型自陈零采信按设计工作。`--print` 单会话结构性无法委派子代理，故 collapsed 场景只能经降级出口，与 F208 设计一致。
+- **Stop payload 字段实录（2.1.270 headless，`claude --print --plugin-dir` 裸探针）**：keys = `background_tasks / cwd / hook_event_name / last_assistant_message / permission_mode / prompt_id / scratchpad_dir / session_crons / session_id / stop_hook_active / transcript_path`。门禁链读的 `background_tasks`（本次 `[]`）与 `last_assistant_message` 均在；`stop_hook_active` 自然收口为 `false`、阻断后重入为 `true`（spike 的 `stop-hook-reentry` 诊断）——**F291b 重开条件之「headless Stop payload 实录」已有 `--print` 一种模式的数据点（SDK 模式未测）**。新增字段 `prompt_id` / `scratchpad_dir` / `session_crons` 为 M11 候选证据源，暂未消费。
+- 未闭合：Codex hook 授信（用户动作）；4.6.0 发布满一周 adoption 复测（§13.2 第三项，时间门）。
+
 **2026-09-14（4.6.0 发布准备 push + M10 收官判定 + M11 种子）**：
 - **4.6.0 发布准备已 push**（`d0b0484d`，用户「确认 push」后 ff 推送 `3596acee..d0b0484d`）：contract 双产品 4.6.0 + CHANGELOG `[4.6.0]`（区间 `3d885d35..HEAD` 53 commit）+ 冻结快照外科替换（18 版本字面值 + 25 hash）+ §12.4 债务结账表。CI run 34769332914：`CI` / `fixture-isolation` success；**coverage job 走了 F285b birpc 放行分支**——本次非假绿（覆盖率表完整打印、其后无阈值失败行、同 run `test` job 干净通过），但放行前两道检查均为负向 grep，日志若截断在汇总之前会零证据放行且 warning 文案仍宣称全过 → **F292 已修并 push（`766c6015`，另一 session 交付）**：负向 grep 换正向证据（测试汇总通过行 + 覆盖率表完整）并把判定器抽成 `scripts/coverage-gate.mjs` + `lib/coverage-gate-core.mjs` 可单测（8 份 ANSI 语料 + 变异实证）；其账本 6 条待下轮 milestone-next 流转。**`npm publish` 仍待用户**（registry latest 4.5.0）。
 - **冻结快照验收方法论被两路异构对抗改写**：我原先三条论据（基线门禁数字 / 失败输出全 hash 行 / diff 过滤后空集）全部判无效——前两条循环引用（引的是「修完之后」那一跑；版本行在那次跑前已被替换），第三条**会吞真实漂移**（hash 行正则精确命中 `currentHash` / `previousHash` 骨架 hash）；结论靠「回代重建 + 逐字节零残差 + sha256 preimage 25/25」独立证成。纪律入账本 + mainline-focus 共享块。
@@ -283,8 +290,8 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ### 13.2 收官挂起（用户动作门，非代码工作）
 
-- `npm publish`（host shell）→ `claude plugin update` → 跑 G0-1 三项验收（`npm view spectra-cli version` = 4.6.0；全局 `spectra --version` commit == master；`npm run judge:doctor` / `codex:doctor` 零漂移）。
-- 升级 Claude Code 至 ≥2.1.241 → 重跑 F245 headless hook 基线；确认 Stop payload 含 `background_tasks` / `last_assistant_message`。**刚发布的门禁链读这些字段，而本机 2.1.215 之后 hooks 合同改过四版，未在新版验过**。
+- ✅ `npm publish` → `claude plugin update` → G0-1 三项：`npm view` 4.6.0 ✅ / 全局 `spectra --version` commit `6fd45f7` == origin/master ✅ / `judge:doctor` in-sync 12 match ✅；`codex:doctor` 剩 `hook-trust: untrusted`（**用户在 Codex `/hooks` 授信**，唯一未闭合项）。
+- ✅ Claude Code 已升 2.1.270；F245 headless 基线重跑成立（Stop hook 触发 / exit 2 阻断回注 / `stop_hook_active` 重入 / 有界降级）；Stop payload 实录含 `background_tasks` / `last_assistant_message` / `stop_hook_active`（详见 §11 09-14 验收条目）。
 - G0-4a adoption 复测：4.6.0 发布满一周后重跑 `scripts/adoption-census.mjs`，与 09-12 基线（42 次 / 17 工具 14 个零调用）对比，作 M11 首轮 milestone-next 的输入。
 
 ### 13.3 M11 候选清单（种子；正式排期须经 milestone-next 循环 + 用户拍板）

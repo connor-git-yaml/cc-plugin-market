@@ -60,6 +60,7 @@ card-a 21/0、tier2 25/0 ⟹ 失败确由本改动引入，非预存）。把测
 > 在未测前提上放松 fail-closed 门违反 F264「harness 字段行为须本机实测」纪律；(3) R-6 已有 `enforcement: warn` 逃生口，
 > 本提案是便利性放松而非修 live 漏洞。**重开条件**：R-6 出现真实用户投诉（harness 不回灌反馈的环境阻断到底），
 > 且先完成本机 + 至少一种 headless（`claude --print` / SDK）的 Stop payload 实录，确认 `stop_hook_active` 只在真实重入为 true。
+> **数据点（2026-09-14，Claude Code 2.1.270，`claude --print --plugin-dir` 裸探针 + F245 spike 重跑）**：自然收口 `stop_hook_active=false`；被 `exit 2` 阻断后的重入为 `true`（判定器记 `stop-hook-reentry`）。`--print` 模式满足「只在真实重入为 true」；SDK 模式未测。前置条件之一已部分满足，裁决仍为暂不实施（另两条理由不变）。
 
 
 F288 C-1 删掉「最早 fix 展开后 assistant entry ≥ 420」这条放行佐证腿（它落在被判方产出面：420 次工具调用即可 0 往返放行）。
