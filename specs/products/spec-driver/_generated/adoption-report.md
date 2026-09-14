@@ -1,13 +1,13 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-08-23T18:03:47.579Z
-- Status: attention
-- Total Runs: 6
+- Generated At: 2026-09-14T08:39:59.020Z
+- Status: healthy
+- Total Runs: 1
 - Active Workflows: 1
-- Overall Success Rate: 83.3%
-- Overall Failure Rate: 16.7%
+- Overall Success Rate: 100.0%
+- Overall Failure Rate: 0.0%
 - Overall Paused Rate: 0.0%
-- Most Used Workflow: `spec-driver-fix` (6 runs)
+- Most Used Workflow: `spec-driver-fix` (1 runs)
 
 ## Workflow Usage
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `spec-driver-doc` | 开源维护者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-feature` | 功能开发者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
-| `spec-driver-fix` | 修复者 | 6 | 83.3% | 16.7% | 0 | 0.0% | - | 2026-08-12T19:49:09.568Z |
+| `spec-driver-fix` | 修复者 | 1 | 100.0% | 0.0% | 0 | 0.0% | - | 2026-04-18T16:36:36.880Z |
 | `spec-driver-implement` | 实施负责人 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-resume` | 流程恢复者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-story` | 迭代开发者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
@@ -41,8 +41,8 @@
 
 ## Data Quality
 
-- Log Files: 1
-- Valid Runs: 6
+- Log Files: 3
+- Valid Runs: 1
 - Invalid Lines: 0
 - Runs With Phase Durations: 0
 

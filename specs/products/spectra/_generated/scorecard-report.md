@@ -2,7 +2,7 @@
 
 > **Product**: spectra
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-08-23T18:03:47.581Z
+> **Generated**: 2026-09-14T08:39:58.972Z
 > **Status**: WARN
 > **Score**: 90/100
 
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 60 个增量 spec。
+- current-spec 覆盖了全部 108 个增量 spec。
 
 ```json
 {
