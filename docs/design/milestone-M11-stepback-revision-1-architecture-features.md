@@ -12,7 +12,7 @@ sources:
 decisions:
   - 排期切分：小债先清、大拆分第三批（第二批 = 4 张 small 架构卡 + typecheck 三卡 + P1-F（先抽 mapper 骨架）+ 簇① 纪律 story；第三批 = runBatch 分阶段 + LLM 调用面收敛；其余 M12）
   - typecheck 燃尽：开专卡按错误类型分 3 批机械清理（TS2532 / TS2339 / TS18048），目标 ≤100 不变
-  - 版本：直接切 4.7.0 含第一批（4.6.0 未 publish，其内容并入；本文同批把 release contract 升到 4.7.0，`npm publish` 仍由用户执行）
+  - 版本：直接切 4.7.0 含第一批（4.6.0 已于 2026-09-14 发布并完成本机验收，本版是其后的下一个 minor；本文同批把 release contract 升到 4.7.0，`npm publish` 仍由用户执行。订正：首稿误写「4.6.0 未 publish」，源自陈旧的主线焦点块，已按 `npm view spectra-cli time` 核实）
   - self-dogfood 墙钟 +65% 红项：安静窗口复测 N=2 再定性（复现 ⇒ 立归因卡；不复现 ⇒ 记噪声关闭）→ 2026-09-15 复测：run1 一个模块 LLM 调用失败退出（exit 2），run2 +55.2% **复现** ⇒ 立 F308 归因卡（§5.9）
 workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路异构对抗已覆盖新代码，本轮改为主线程直接量测（≈0 token）；全量三轨 ≈ 4M token 属重复结论
 ---
@@ -32,7 +32,7 @@ workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路�
 ## 1. 待办总账（三来源合一，2026-09-15）
 
 ### 1.1 用户动作门（非代码工作，顺序固定）
-1. `npm publish` **4.7.0**（本修订稿同批把 release contract 升到 4.7.0；4.6.0 号不再单独发）→ `claude plugin update` → G0-1 三项验收（`npm view` 4.7.0 / 全局 `spectra --version` commit == master / `judge:doctor` + `codex:doctor` 零漂移）。
+1. `npm publish` **4.7.0**（本修订稿同批把 release contract 升到 4.7.0；4.6.0 已于 2026-09-14 发布并完成本机验收）→ `claude plugin update` → G0-1 三项验收（`npm view` 4.7.0 / 全局 `spectra --version` commit == master / `judge:doctor` + `codex:doctor` 零漂移）。
 2. Claude Code 已是 2.1.270（≥2.1.241）：F245 headless 基线可以复跑了——排进第二批「簇① 纪律 story」的验证项（Stop payload 键集本批已探针记录：`background_tasks cwd hook_event_name last_assistant_message permission_mode prompt_id scratchpad_dir session_crons session_id stop_hook_active transcript_path`）。
 3. 4.7.0 发布满一周：adoption census 复测（≈ 2026-09-22）。
 

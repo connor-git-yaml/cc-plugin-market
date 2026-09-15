@@ -11,7 +11,7 @@
 
 > **Spectra v4.7.0 + Spec Driver v4.7.0 — 诚实工具面、目标级门禁预算与引擎还债（M11 第一批）**
 >
-> 区间 `1d7c8b01..8a33a6bb`（8 commit）。**发布口径**：4.6.0 的条目已切好但从未 publish（npm registry latest 仍为 4.5.0）；用户 2026-09-15 拍板直接切 4.7.0，4.6.0 的内容随本版一并发布，4.6.0 这个号不再单独发。
+> 区间 `1d7c8b01..68de27a6`（10 commit，含 M11 修订稿 1 与 F308 归因卡两份文档）。**发布口径**：4.6.0 已于 2026-09-14 发布到 npm（`npm view spectra-cli time`），本版是其后的下一个 minor；用户 2026-09-15 拍板随 M11 第一批直接切 4.7.0。订正：本条 09-15 首稿误写「4.6.0 从未 publish、registry latest 仍 4.5.0」，来源是陈旧的主线焦点块，已按 registry 核实改正。
 > **breaking（MCP 返回面词表）**：`context.definition.confidence`→`confidenceLabel`、`fuzzyMatches[].confidence`→`matchScore`、`resolvedConfidence`→`resolvedMatchScore`（合同 `contracts/mcp-return-surface-contract.yaml`）。
 
 > **M11 第一批五卡（2026-09-15）**：卡 A P1-I 诚实工具面 / 卡 B F291a per-target 阻断预算 / 卡 C 簇④ 引擎-CLI 小补 / 卡 D 簇⑦ 图新鲜度自动化 / 卡 E cli-proxy 无头瘦身 + collector 成本口径。制品见 `specs/293-*`～`specs/297-*`。
