@@ -27,6 +27,6 @@ M11 §9.3 卡 C：簇④ 的 14 项小补（`docs/design/dogfooding-feedback-led
 
 ## 边界 / 已知限界（登记，不在本卡修）
 
-- 占位判据是三个字面量（`[FEATURE NAME]` / `[###-feature-name]` / `[specific capability`），模板改写超出这三处仍会被当真 spec。
+- 占位判据是三个模板字面量（H1 的 FEATURE NAME 占位、分支名占位、样板 FR 正文开头），模板改写超出这三处仍会被当真 spec；反过来，**正文里逐字引用这些字面量的文档也会被判成占位**（本文件首版就因此被引擎剔出活文档——判据须改为只看结构位置，见 M11 修订稿 A11）。
 - 同目录既有实质 spec.md 又有 fix-report.md 时，fix-report 的行为变化不进活文档（设计如此）。
 - `--lint` 不对占位目录产 finding（只在 preflight / stats 指名）。

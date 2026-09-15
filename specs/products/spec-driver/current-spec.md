@@ -1,7 +1,7 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **发布版本**: v4.6.0
+> **发布版本**: v4.7.0
 > **版本**: 聚合自 60 个增量 spec / blueprint（011–290；product-mapping 登记 58，含 062/067/070/076 四份 blueprint；200/278 两份跨产品 spec 只并入 spec-driver 部分；34 份按 product-mapping.yaml 头部登记排除）
 > **最后聚合**: 2026-09-14
 > **生成方式**: Spec Driver sync 聚合 + 人工校准

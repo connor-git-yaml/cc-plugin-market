@@ -4,6 +4,8 @@ status: active（2026-09-14 用户逐条拍板 §8 五点 + 三项追加决策�
 created: 2026-09-14
 parent_milestone: milestone-M10-ship-honest-graph-evidence-gate.md（2026-09-14 代码面收官；§13 收官账 + M11 种子）
 stepback_revision_of: milestone-M10-ship-honest-graph-evidence-gate.md §13.3「M11 候选清单（种子）」（本文件把种子立成可派发的批次，取代该节的排期；候选池保留）
+stepback_revisions:
+  - milestone-M11-stepback-revision-1-architecture-features.md（2026-09-15：待办总账 + 架构坏味道实测 + 架构 Feature A1–A12 + 第二批 F298–F307 派发；取代本文 §3 第二批 / 第三批与 §5 typecheck 行）
 planning_horizon: 单里程碑；Wiki / KB 消费面仍不进（md/yaml 入图仅作 P1-J 的可选延伸）
 sources:
   - milestone-M10 §12（三路架构审查 1C+29W，2026-09-12）与 §12.4 债务结账表 / §13 收官账
@@ -59,6 +61,9 @@ decisions:
 | **CLI-proxy 无头调用瘦身 + collector 成本口径** | fix · small | `src/auth/cli-proxy.ts` 的 spec 生成调用禁工具 / MCP（`--strict-mcp-config` + 空 `--mcp-config` 或等价）并 `--max-turns 1`；`scripts/baseline-collect.mjs` 与 batch-summary 把 cache_creation / cache_read 单列并按各自单价估算 `estimatedCostUsd` | 09-14 归因：一次单词回复 ≈ 67k input 侧 token，全是 harness 开销；验收 = micrograd 单次 batch 每模块 input 从 ~70k 降到 ~10k 量级，且 spec 产物结构不变 |
 
 ### 第二批
+
+> **2026-09-15 修订**：第二批 / 第三批排期已由 `milestone-M11-stepback-revision-1-architecture-features.md` §4 取代（用户拍板：小债先清、大拆分第三批；typecheck 三张专卡；版本切 4.7.0）。下列条目保留作来源记录。
+
 
 - **P1-F 多语言 parity**（图解析类，外部语料 A/B 必带）：Python import 双 kernel 收敛；Java caller recall 3.4% 病根；`stored-module-specs` sourceKind 分叉。
 - **簇① 对抗审查 / implement 纪律 story**：冻结 commit 进 prompt；「声称有守护但变异不红」固定切入角；「论据本身」列为攻击面；修法可证伪性核对；清单类断言附命令；变异注入先自证落位；守护语料复刻生产环境变量；CI 日志门禁先剥色；delta 轮专攻新判据；变异运行器骨架。

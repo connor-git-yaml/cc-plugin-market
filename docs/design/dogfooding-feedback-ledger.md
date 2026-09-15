@@ -669,7 +669,7 @@
   ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：已修复（单次 batch 统一 300s 绝对预算，it 330s / 720s）；安静窗口复跑 **5/5 通过**（T-010-1 146s / T-010-2 125s / T-010-4 237s / T-010-5 264s，共 12.9 分钟）——该文件自 F180 立项以来首次全绿。
 
 ### sync 收尾 · 确定性 helper 链 · 2026-09-14
-状态：待处理（2 条）
+状态：已处理（2 条：M11 卡 C 第 12 项 canonical 解析器 + 字段脱落 warning；第 10/11 项 preflight / stats 显式分母，2026-09-15 milestone-next 复核）
 来源：`spec-driver-sync` 第 4 步六个 helper 在补聚合后的活文档上实跑（角 B 审查顺带发现 + 主线程复核）
 
 - [结果准确性][generator 与已入库 artifact 漂移] `generate-product-entity-catalog.mjs` 当前版本不产出 `qualityReportPath` / `scorecardStatus` / `scorecardScore`（HEAD 的脚本里根本没有这些字段），而已入库的 `catalog-index.yaml` / `entity.yaml` 有——它们是更早一版 generator 的产物；重跑即"字段脱落"，且 `warnings: []`。同时 catalog 自带的 mapping 解析器只吃对象形态条目，真实文件是字符串形态，`specCount: 0` 一直是假数。
@@ -695,16 +695,26 @@
   ↳ **处置（2026-09-14 /goal 落地，主线程代用户判断·可翻案）**：记录进模块头注释 + 畸形输入不抛属性测试（8 例）；结构性 try/catch 兜底未加（加了无法被变异证实，属「声称有守护」）。
 
 ### M11 第一批五卡（A/B/C/D/E）· 2026-09-15
-状态：待处理（10 条）
+状态：已分流（10 条：3 已处理 / 7 分流，2026-09-15 milestone-next 拍板；去向见各条 ↳）
 来源：五卡实现 + 四路异构对抗（卡 B 两角 / 卡 C 两角）+ 卡 D / 卡 E 两轮 delta 审查 + 三目标基线重采；`/goal` 落地
 
 - [结果准确性][sync 引擎 · 缺与上一版的对拍] `--dry-run` 输出有 `totalConflicts` 这种强信号却没有基线机制，卡 C 的 C-1（49 条虚假冲突）靠审查者手工 `git archive HEAD` 双跑才暴露。建议引擎增 `--baseline <old.json>` 或 `repo:check` 钉 stats 快照（与 F249「数字产物必配重算器」同源）。
+  ↳ **分流**：M11 第二批 A11 卡（占位判据结构化 + spec 写法清扫）顺带加 `--baseline <old.json>` stats 对拍（阶跃即报）。
 - [流程顺畅度][sync 引擎 · 同编号多目录三套 tie-break] HEAD 引擎取 readdir 末个、`indexSpecDirectories` 取字典序首个、`parsedSpecs` 取遍历末个。本轮已统一为字典序首个并升 `duplicate-dirs` lint finding；「同编号唯一性」是否应阻断而非告警待拍板。
+  ↳ **已处理**：卡 C 统一为字典序首个 + `duplicate-dirs` lint finding；「同编号唯一性升为阻断」裁决不做（历史目录 112/115/135 是 fix-report 组，阻断会挡住活文档聚合）。
 - [信息完整性][对拍基准须与被对拍路径同源] `--preflight` 被设计成注入子代理 prompt 的对拍基准，却与 Phase 5 不同源（54 vs 56），每次 sync 必产一条假风险项。本轮已同源；原则性教训：凡给另一个代理当对拍基准的数字，取数路径必须与被对拍者相同。
+  ↳ **已处理**：卡 C W-1（preflight 与 Phase 5 同源）；原则写入 M11 修订稿「纪律」节。
 - [信息完整性][orchestrator-cli · get-phases 无 diagnostics] 程序化消费方只读 stdout 看不出 override 被拒。本轮已加 `diagnostics` 字段。
+  ↳ **已处理**：卡 C W-5。
 - [流程顺畅度][全局 · 多卡共享工作树时 global-setup 一损俱损] `tests/global-setup.ts` 按 dist 输入指纹重建，另一卡改一行 src 让所有卡的 vitest 卡在同一个 build 失败上（卡 C 审查期间 `graph-builder.ts` TS2339 令 integration project 无法启动）。与「global-setup 跨 worktree 假新鲜」同族的另一面（同 worktree 多会话）。
+  ↳ **分流**：M12 roadmap「测试基础设施」（build 失败时其它会话降级为「dist 陈旧 fail-loud + 单元测试照跑」，与 F274 sidecar 同族）；本批规避手段 = 派发 prompt 写明「独立 worktree」。
 - [结果准确性][fix-compliance · 改判定器自身的卡结构性失明] 卡 B 有实现 / 测试 / 承重注释却无 `specs/NNN-*` 制品（本轮补 `specs/296-*`），门禁对「改门禁自己」的形态不阻断。建议 milestone-next 把「改判定器自身的卡必须先有制品」列显式前置。
+  ↳ **分流**：M11 第二批 簇① 对抗审查 / implement 纪律 story（「改判定器自身的卡须先有 specs/NNN 制品」列为显式前置）。
 - [信息完整性][Spectra MCP · 缺「变量的所有赋值点 + 各自守卫条件」形状的查询] 卡 B 审查者要追 `resolvedPath` 三条来源只能 `grep` + 读 200 行注释；`context` / `impact` 回答不了「哪条分支让它落回 null」。
+  ↳ **分流**：M12 roadmap（P1-J 检索内核 / symbol 数据流切面），本里程碑不做。
 - [结果准确性][Spectra MCP · 未提交 diff 不可审 / 图在脏树上建] 卡 D / 卡 E 审查者都因工作树脏、图必然 stale 而放弃调 MCP。卡 D 已让 freshness 标 `builtFromDirtyTree`、`repo:sync` 脏树 skip；「审查未提交改动」这一使用场景仍无工具面。
+  ↳ **分流**：M11 第二批 A12 审查态图（脏树图可用、honesty 文案不劝退，与卡 D 的 `builtFromDirtyTree` 衔接），small。
 - [方法学][「改动前 / 后」类结论一律要求同一棵树只换受审文件] 卡 B 审查者纸面读码时把一条残余误判为新回归，受控 A/B（`git show HEAD:` 旧文件替换进同一棵树）才纠正；与 F259「图基线用陈旧 dist 建会造假回归信号」同源。
+  ↳ **分流**：簇① 纪律 story（受控 A/B 口径进对抗 prompt 模板）。
 - [结果准确性][无头隔离后 self-dogfood 墙钟 +65.5%、输出 token +87%] 卡 E 去掉 harness 开销后输入 token 如期下降（−48%），但 spec 输出 token 从 366,805 涨到 685,895、墙钟 3400s → 5628s（baseline:diff 判红）；micrograd / nanoGPT 同晚重采墙钟持平或下降。单次采样、未归因（候选：隔离后模型把轮次预算全花在正文 / 当晚 API 延迟）。须 N≥2 复测再定性，不得据此回滚隔离参数。
+  ↳ **分流**：用户 2026-09-15 拍板「安静窗口复测 N=2 再定性」；复现则立归因卡，不复现则关闭。
