@@ -13,7 +13,7 @@ decisions:
   - 排期切分：小债先清、大拆分第三批（第二批 = 4 张 small 架构卡 + typecheck 三卡 + P1-F（先抽 mapper 骨架）+ 簇① 纪律 story；第三批 = runBatch 分阶段 + LLM 调用面收敛；其余 M12）
   - typecheck 燃尽：开专卡按错误类型分 3 批机械清理（TS2532 / TS2339 / TS18048），目标 ≤100 不变
   - 版本：直接切 4.7.0 含第一批（4.6.0 未 publish，其内容并入；本文同批把 release contract 升到 4.7.0，`npm publish` 仍由用户执行）
-  - self-dogfood 墙钟 +65% 红项：安静窗口复测 N=2 再定性（复现 ⇒ 立归因卡；不复现 ⇒ 记噪声关闭）
+  - self-dogfood 墙钟 +65% 红项：安静窗口复测 N=2 再定性（复现 ⇒ 立归因卡；不复现 ⇒ 记噪声关闭）→ 2026-09-15 复测：run1 一个模块 LLM 调用失败退出（exit 2），run2 +55.2% **复现** ⇒ 立 F308 归因卡（§5.9）
 workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路异构对抗已覆盖新代码，本轮改为主线程直接量测（≈0 token）；全量三轨 ≈ 4M token 属重复结论
 ---
 
@@ -27,7 +27,7 @@ workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路�
 | B F291a | `npm run judge:doctor` | 3 mismatch / 9 match：本机 Stop hook 仍跑 4.6.0 缓存里的旧判定器——**publish + `claude plugin update` 之前，本机门禁不含 F291a** |
 | C 簇④ | 真仓 `--preflight` / `--lint` | 133 / 201 两个同编号 fix-report 目录被指名跳过，冲突 49 → **0**；lint 17 条真写法问题（zero-fr 6 / entries-outside 8 / duplicate-ids 1 / duplicate-dirs 2）。**自伤一例**：`specs/295` 的 spec 正文逐字引用了占位字面量，被判成模板占位剔出活文档（本轮已改写措辞；判据须改为只看结构位置，→ A11） |
 | D 图新鲜度 | 干净树 `repo:sync` | `graph-freshness → action=rebuild before=stale after=fresh`，首次自动收敛；但本机 MCP（全局旧构建）对同一张图仍报 `stale`（旧逻辑不认「只改文档的 commit」），同样等 publish |
-| E 无头瘦身 | 三目标基线重采 | tokens in+out −89.1% / −79.1% / −48.2%；self-dogfood 墙钟 +65.5%、输出 token +87% 判红（单次采样）→ 决策 4 |
+| E 无头瘦身 | 三目标基线重采 + 复测 N=2 | tokens in+out −89.1% / −79.1% / −48.2%；self-dogfood 墙钟 +65.5%、输出 token +87% 判红 → 复测 run2 墙钟 88.0 min（+55.2%）、输出 token +51% **复现**；run1 因 1/22 模块 LLM 失败被 `--require-llm` 判 exit 2。三次都是 22 次 LLM 调用，差异全在单次时长（p50 190.8s → 218.4s / 312.9s）与 spec 变长（平均 844 → 993 / 961 行）→ F308 |
 
 ## 1. 待办总账（三来源合一，2026-09-15）
 
@@ -39,7 +39,7 @@ workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路�
 ### 1.2 M11 §6 承接项状态
 | 项 | 状态 |
 |---|---|
-| 性能基线两个版本未跑 | **已跑**（三目标 schema 1.2，8a33a6bb）；红项按决策 4 复测 |
+| 性能基线两个版本未跑 | **已跑**（三目标 schema 1.2，8a33a6bb）；红项复测 N=2 **复现** → F308（复测 fixture 不入库，留 scratch） |
 | F170c SC-002/004、F170d SC-004 只在 `it.skip` | 仍并入 P1-H |
 | `HAS_LLM_E2E` 真实 e2e | 09-14 已首次真跑 5/5 |
 | typecheck:tests:full | 1042 → **1006**（第一批顺带 −36）；决策 2：三张专卡 |
@@ -48,14 +48,14 @@ workflow_ran: 否——M10 §12 三路架构审查（09-12）+ 第一批四路�
 | F277 FR-018 独立观察 | 窗口保持 |
 
 ### 1.3 卡级残余（五卡 fix-report 登记，未修）
-- E：`agents` / `memory_paths` 未在 init 校验；`baseline-collect` 硬编码 `claude-sonnet-4-6`；debt-intelligence 成本记录无 `reportedCostUsd`（→ A5）；长输出下 `--max-turns 1` 未实测。
+- E：`agents` / `memory_paths` 未在 init 校验；`baseline-collect` 硬编码 `claude-sonnet-4-6`；debt-intelligence 成本记录无 `reportedCostUsd`（→ A5）；长输出下 `--max-turns 1` 未实测；**无头隔离后 spec 输出变长、单次调用逼近 15 分钟超时**（→ F308）；collector 失败轮的 stdout / stderr 被下一轮「跑前清理」抹掉、`run.out` 只留 stderr 尾，失败模块不可考（→ F308）。
 - D：`.git/info/exclude` / 全局 excludesFile 不在判定面；建图前脏态采样窗口；`spawnSync` 超时不覆盖进程组（→ A2）；`repo:sync` 对 warn 步仍 exit 0。
 - B：非规范目录名共用无目标桶；状态文件无 GC；F291b 仍暂不实施。
 - C：占位判据是内容字面量（→ A11）；同目录既有实质 spec 又有 fix-report 时 fix-report 不进活文档（设计如此）；`--lint` 不对占位目录产 finding。
 - A：`graph_hyperedges` 改紧凑 JSON；`tokenBudget` 自身字节不计入；未单独派对抗子代理（档位缺席）。
 
 ### 1.4 反馈账本分流（12 条）
-3 条已由卡 C 处置（generator 漂移 / 分母不可见 / get-phases diagnostics）；2 条 sync 收尾条目已处理；其余 7 条分流：sync `--baseline` 对拍 → A11；审查态图 → A12；改判定器自身须先有制品 + 受控 A/B 口径 → 簇① 纪律 story；共享工作树 global-setup 隔离 → M12；赋值点 / 守卫查询 → M12（P1-J）；perf 红项 → 决策 4。
+3 条已由卡 C 处置（generator 漂移 / 分母不可见 / get-phases diagnostics）；2 条 sync 收尾条目已处理；其余 7 条分流：sync `--baseline` 对拍 → A11；审查态图 → A12；改判定器自身须先有制品 + 受控 A/B 口径 → 簇① 纪律 story；共享工作树 global-setup 隔离 → M12；赋值点 / 守卫查询 → M12（P1-J）；perf 红项 → 复测复现 → F308。
 
 ## 2. 架构问题与坏味道（2026-09-15 实测；命令可复跑）
 
@@ -107,8 +107,9 @@ M12 roadmap（本里程碑不做）：A9；共享工作树 global-setup 隔离�
 | F303 / F304 / F305 | A8 typecheck 燃尽 TS2532 / TS2339 / TS18048 | story ×3 | small ×3 | 测试 |
 | F306 | A6 mapper 共享骨架 + P1-F Java recall | feature | medium | 图解析类 · 外部语料 A/B 必带 |
 | F307 | 簇① 对抗审查 / implement 纪律 story（冻结 commit 进 prompt、「声称有守护但变异不红」固定切入角、「论据本身」攻击面、受控 A/B 口径、改判定器自身须先有制品、F245 headless 基线在 2.1.270 复跑） | story | small | 文档 + 一次 headless 验证 |
+| F308 | 卡 E 无头隔离后 spec 输出变长归因（墙钟 +55～65%）+ 单次调用 15 分钟超时口径 + collector 失败轮日志保全 | fix | small–medium | 一般代码 + 采集器 · perf 基线 A/B 必带 |
 | — | P1-H 评测前置 | feature | medium | 第二批 ship 后启动（09-14 决策 4） |
-| — | self-dogfood 墙钟复测 N=2 | 主线程 | 2 × ~95 min | 安静窗口，订阅配额 |
+| — | self-dogfood 墙钟复测 N=2 | 主线程 | 已完成（14:27–17:15，run1 失败 / run2 复现） | 结论进 F308 |
 
 第三批：A1（large）、A5（medium）、A7（small）。
 
@@ -124,8 +125,9 @@ M12 roadmap（本里程碑不做）：A9；共享工作树 global-setup 隔离�
 | F303–F305 | `tests/**`（按错误类型分文件集，三卡先各自 `tsc` 列出文件集并去重后再开工） | 三卡互相 disjoint；与其余卡只碰测试文件，rebase 即可 |
 | F306 | `src/core/query-mappers/**`、`src/knowledge-graph/call-resolver.ts`、`tests/unit/knowledge-graph/`、pinned 四份 | disjoint |
 | F307 | `plugins/spec-driver/skills/**`、`templates/**`、`docs/shared/**`、`.codex/skills/**`（再生） | disjoint（wrapper 再生只在本卡） |
+| F308 | `src/core/llm-client.ts`（系统提示篇幅约束 / 超时口径）、`src/auth/cli-proxy.ts`（仅当超时改 idle 口径）、`scripts/baseline-collect.mjs`（失败轮日志保全）、`tests/baseline/self-dogfood/spectra/full.json`（裁决后重采） | 与第二批其余卡 disjoint；与第三批 A5 同碰 `llm-client.ts` → F308 先于 A5 |
 
-可并行：F299 ∥ F300 ∥ F301 ∥ F303–F305 ∥ F306 ∥ F307；F298 在 F299 与 F300 之后；F302 在 F298 与 F299 之后。先 ship 先 push，后者 rebase 最新 master 重跑验证。
+可并行：F299 ∥ F300 ∥ F301 ∥ F303–F305 ∥ F306 ∥ F307 ∥ F308；F298 在 F299 与 F300 之后；F302 在 F298 与 F299 之后。先 ship 先 push，后者 rebase 最新 master 重跑验证。F308 的 perf 采集（每轮 ~90 min）不得与全量 vitest 或其它卡的 perf 采集并发。
 
 ## 5. 第二批派发 prompt
 
@@ -195,9 +197,26 @@ M12 roadmap（本里程碑不做）：A9；共享工作树 global-setup 隔离�
 🔴 护栏：`validateSharedAgentDocs` 第 7 块 + wrapper 再生（`repo:sync`）；`spec-drift-repo-check-regression` 清单同批更新；`agent-docs-sd-mode-guard` 计数。
 预算：small；headless 复跑走订阅。
 
+### 5.9 F308 · 无头隔离后 spec 输出变长归因 + 超时口径 + collector 失败日志保全（`/spec-driver:spec-driver-fix`，small–medium）
+问题（2026-09-15 复测实证，fixture 副本在主线程 scratch，未入库）：
+
+| 采样 | 墙钟 | 输出 token | 输入 token | LLM 调用 | 单次 p50 / p95 / max | 平均 spec 行数 |
+|---|---|---|---|---|---|---|
+| 4.6.0 基线（4b532488，卡 E 之前） | 56.7 min | 366,805 | 4,919,110 | 22 | 190.8s / 428.8s / 873.1s | 844 |
+| run0（8a33a6bb，卡 E 之后） | 93.8 min（+65.5%） | 685,895（+87%） | 2,052,639 | 22 | 218.4s / 932.3s / 1358.6s | 993 |
+| run2（a20fbb3d 复测） | 88.0 min（+55.2%） | 554,416（+51%） | 2,257,673 | 22 | 312.9s / 608.8s / 629.3s | 961 |
+
+三次调用数相同（22，每模块一次），差异全在单次时长与产出长度：`batch.spec.md` 1004 → 1609 / 1666 行，`core.spec.md` 1042 → 1712 / 1499 行，`panoramic.spec.md` 4171 → 4777 / 4645 行；输出 token 增幅（+51～87%）大于行数增幅（+14～18%），说明每行更密或代码块更多。run0 的 p95 932s / max 1359s 超过 `llm-client.ts` 单次调用 15 分钟上限（超时最多 2 次尝试），即至少 2 次调用超时后重试，把长产出的时间又算了一遍；run1 有 1/22 模块两次尝试都没产出（退化 AST-only，`--require-llm` 判 exit 2），但 collector 只保留 stderr 尾且下一轮「跑前自动清理」抹掉了它的 stdout / stderr，失败模块与错误不可考。**主嫌疑**：卡 E 用 `--system-prompt` 替换了 Claude Code 人设（其中有明确的简洁 / 少输出约束）并用 `--safe-mode` 卸掉了 CLAUDE.md，spectra 自己的系统提示只有相对篇幅（Section 2 占 30–40%）没有总量上限，产出因此漂长。次嫌疑：`--tools ''` 让模型把原本靠工具读取的内容改写进正文。
+方案：(1) 单模块受控 A/B 定性——取 `src/batch`（增幅最大）与 `src/panoramic`（绝对最长），三变体 × N=3：V0 现状 / V1 现状 + 系统提示加总量上限（如「全文 ≤ 1,000 行，Section 2 ≤ 400 行」）/ V2 旧形态（人设保留、spectra 提示走 stdin）对照；记录输出 token、行数、单次时长、四节完整性与 `spec-quality` 报告；(2) 按 A/B 结果二选一：接受更长产出并重采三目标基线入库（改 baseline 红线口径），或把篇幅上限写进系统提示并重采；(3) 超时口径改为「无输出活动 idle 超时」或按模块规模自适应上限，禁止把超时重试的时间静默记进 `llmCallDurationsMs`（分开记 `timedOutAttempts`）；(4) `baseline-collect` 失败轮把 `spectra-stdout.log` / `spectra-stderr.log` 改名保全（如 `*.failed-<ts>.log`）而不是被下一轮清掉，且 `run.out` 的 stderr 尾至少带失败模块名与错误类型。
+🔴 护栏：`HAS_LLM_E2E` 5 例；cli-proxy 单测（`HEADLESS_ISOLATION_ARGS` 形态不变，除非 A/B 证明 V2 才是对的）；baseline schema 1.2 `verify-artifacts` PASS；三目标 fixture 重采只在裁决后做，且与全量 vitest 不并发。
+验收：A/B 表落 fix-report（换算式：增幅 = (新 − 旧) ÷ 旧，单位：token / 行 / 秒）；裁决后 self-dogfood 墙钟相对当次裁决基线 ≤ +10%；失败轮日志保全用一次人为失败（如 `--model` 写错）实证；超时重试次数在 fixture 里可见。
+预算：A/B 6 变体组 × ~5 min ≈ 30–60 min 订阅；重采三目标 ≈ 2 h。
+
 ## 6. 纪律追加（进 F307 共享块；本文先登记）
 1. 给另一个代理当对拍基准的数字，取数路径必须与被对拍者同源（卡 C W-1）。
 2. 「改动前 / 后」类结论一律要求同一棵树只换受审文件；纸面读码不得下方向结论（卡 B 审查者实证）。
 3. 改判定器自身的卡必须先有 `specs/NNN` 制品，门禁对此结构性失明。
 4. 外部语料 A/B 的 A 侧 = 独立 worktree 构建的 master dist（dist 拷出仓库会失败或出空图）。
 5. 内容字面量判据会误伤讨论它的文档（`specs/295` 实证），结构位置判据优先。
+6. 墙钟 / token 类红项定性前先查 pmset 与调用数：本轮两次采样都在合盖 DarkWake 窗口、调用数恒 22，红项才归到单次时长与产出长度（F273 协议第 4 条的延伸）。
+7. 采集器对失败轮必须保全日志；「跑前自动清理」只能清成功轮的产物，否则失败根因随下一轮消失（run1 实证）。
