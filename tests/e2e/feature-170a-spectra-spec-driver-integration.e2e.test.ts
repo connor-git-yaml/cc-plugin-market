@@ -88,15 +88,16 @@ const EXPECTED_TOOLS: Record<string, string[]> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('US-1: spectra-cli 4.2.0 包含 agent-context tools', () => {
-  it('release-contract.yaml 中 spectra 版本应为 4.6.0（M10 批次 3 收官释出）', () => {
+  it('release-contract.yaml 中 spectra 版本应为 4.7.0（M11 第一批释出）', () => {
     expect(existsSync(RELEASE_CONTRACT)).toBe(true);
     const content = readFileSync(RELEASE_CONTRACT, 'utf-8');
-    // 断言 release-contract 包含 spectra section 且 version 已 bump 到 4.6.0
+    // 断言 release-contract 包含 spectra section 且 version 已 bump 到 4.7.0
     // YAML 结构：products.spectra.displayName 先于 version，故用独立行匹配
     // 版本钉死是刻意设计（F237「释出欠账检测器」）：每次发布必须有意识改这行，
     // 不要改成动态读 contract，否则检测器失效。
-    // F265 释出 4.5.0（spectra）/ 4.4.3（spec-driver）；M10 批次 3 收官释出 4.6.0（两产品 lockstep，F291 升版）
-    expect(content).toContain('version: "4.6.0"');
+    // F265 释出 4.5.0（spectra）/ 4.4.3（spec-driver）；M10 批次 3 收官释出 4.6.0（两产品 lockstep，F291 升版）；
+    // M11 第一批释出 4.7.0（2026-09-15，两产品 lockstep）。本行没同批改会让 prepublishOnly 在全量 vitest 处停下（4.7.0 首次 publish 实证）。
+    expect(content).toContain('version: "4.7.0"');
   });
 
   it('src/mcp/server.ts 应导入 registerAgentContextTools', () => {
